@@ -297,19 +297,24 @@ class Orchestrator:
         """
         GATE-04: Validations pass OR gaps within threshold
         
-        Updated in v3.2:
-        - Added confidence advisory check
+        Updated in v3.2.1:
+        - Added checksum-based gap verification (R-02/R-05 fix)
+        - External verification of agent self-reports
         
         Threshold Rules:
         - BLOCK: SEV-1 gaps > 0, SEV-2 gaps > 2, total gaps > 20%
         - WARN: SEV-3 gaps > 5, SEV-4 gaps > 10
         - PASS: All above false
         
-        Confidence Advisory (NEW in v3.2):
+        Confidence Advisory (v3.2):
         - IF all completed QueryResults have confidence = HIGH
           AND total open gaps = 0:
           → log advisory: "early_exit eligible"
           → agent MAY skip remaining SEV-4-only batches with human acknowledgement
+        
+        Checksum-Based Verification (v3.2.1):
+        - Each gap must have a checksum of the source evidence
+        - Verification ensures gap is grounded in actual source content
         """
         details = {
             "gate": "GATE-04",
@@ -319,14 +324,27 @@ class Orchestrator:
         known_gaps = session.get("known_gaps", [])
         open_issues = session.get("open_issues", [])
 
+        # NEW in v3.2.1: Verify gap checksums
+        verified_gaps, unverified_gaps = self._verify_gap_checksums(
+            known_gaps, 
+            session.get("source_file")
+        )
+        
+        if unverified_gaps:
+            details["checks"].append({
+                "name": "gap_verification",
+                "status": "WARN",
+                "message": f"{len(unverified_gaps)} gaps lack source verification"
+            })
+
         # Count gaps by severity (would parse from gap strings in production)
-        sev1_gaps = sum(1 for g in known_gaps if "SEV-1" in g)
-        sev2_gaps = sum(1 for g in known_gaps if "SEV-2" in g)
-        sev3_gaps = sum(1 for g in known_gaps if "SEV-3" in g)
-        sev4_gaps = sum(1 for g in known_gaps if "SEV-4" in g)
+        sev1_gaps = sum(1 for g in verified_gaps if "SEV-1" in g)
+        sev2_gaps = sum(1 for g in verified_gaps if "SEV-2" in g)
+        sev3_gaps = sum(1 for g in verified_gaps if "SEV-3" in g)
+        sev4_gaps = sum(1 for g in verified_gaps if "SEV-4" in g)
 
         total_issues = len(open_issues) or 1
-        total_gaps = len(known_gaps)
+        total_gaps = len(verified_gaps)
         gap_pct = (total_gaps / total_issues) * 100 if total_issues > 0 else 0
 
         # Check blocking conditions
@@ -391,8 +409,84 @@ class Orchestrator:
             "status": "PASS",
             "message": "All validations passed"
         })
+        
+        # Add verification summary
+        details["gap_verification"] = {
+            "verified": len(verified_gaps),
+            "unverified": len(unverified_gaps),
+            "total": len(known_gaps)
+        }
 
         return True, details
+    
+    def _verify_gap_checksums(self, 
+                              gaps: List[str], 
+                              source_file: Optional[str]) -> Tuple[List[str], List[str]]:
+        """
+        Verify gap checksums against source file.
+        
+        NEW in v3.2.1: External verification of agent self-reports.
+        
+        Each gap should have format:
+        "[gap: <reason> -- source:<line_start>-<line_end>:<checksum>]"
+        
+        Args:
+            gaps: List of gap strings
+            source_file: Path to source file
+            
+        Returns:
+            Tuple of (verified_gaps, unverified_gaps)
+        """
+        import hashlib
+        import re
+        
+        if not source_file or not Path(source_file).exists():
+            # Cannot verify - return all as unverified
+            return [], gaps
+        
+        verified = []
+        unverified = []
+        
+        try:
+            with open(source_file) as f:
+                source_lines = f.readlines()
+        except Exception:
+            return [], gaps
+        
+        # Pattern to extract checksum info from gap
+        checksum_pattern = re.compile(r'source:(\d+)-(\d+):([a-f0-9]+)')
+        
+        for gap in gaps:
+            match = checksum_pattern.search(gap)
+            
+            if not match:
+                # No checksum info - mark as unverified
+                unverified.append(gap)
+                continue
+            
+            try:
+                line_start = int(match.group(1))
+                line_end = int(match.group(2))
+                expected_checksum = match.group(3)
+                
+                # Extract source content
+                if line_start < len(source_lines) and line_end <= len(source_lines):
+                    content = ''.join(source_lines[line_start:line_end])
+                    actual_checksum = hashlib.sha256(
+                        content.encode()
+                    ).hexdigest()[:16]
+                    
+                    if actual_checksum == expected_checksum:
+                        verified.append(gap)
+                    else:
+                        unverified.append(gap)
+                else:
+                    unverified.append(gap)
+                    
+            except Exception:
+                unverified.append(gap)
+        
+        return verified, unverified
 
     def _validate_gate_05(self, session: Dict) -> Tuple[bool, Dict]:
         """

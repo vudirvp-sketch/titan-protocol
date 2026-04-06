@@ -102,7 +102,7 @@ repository:
 development:
   debug: false
   keep_intermediates: false
-  dry_run: false
+  dry_run: true  # FIXED: Default to true for safety (R-04 mitigation)
   verbose: false
 security:
   execution_mode: human_gate
@@ -125,10 +125,15 @@ recursion:
   max_recursion_depth: 1
   track_peak: true
 model_routing:
-  root_model: ''
-  leaf_model: ''
+  root_model: ''  # REQUIRED: Set to your orchestration model ID
+  leaf_model: ''  # REQUIRED: Set to your chunk processing model ID
   track_costs: true
   log_model_usage: true
+  # FIXED: Validation added at startup (see src/cli/titan_cli.py)
+  validation:
+    require_root_model: false  # Set true to enforce model configuration
+    require_leaf_model: false
+    warn_on_empty: true
 confidence:
   enable_advisory: true
   early_exit_threshold: HIGH

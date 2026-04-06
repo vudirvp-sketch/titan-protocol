@@ -412,7 +412,16 @@ MIT License - See LICENSE file for details.
 
 ---
 
-**Protocol Status**: Production-Ready
+**Protocol Status**: EARLY_ADOPTER
+
+> ⚠️ **Adoption Notice**: This protocol is in EARLY_ADOPTER stage. Architecture is sound but requires:
+> - Passing all Tier 1 fixes (see AUDIT_REPORT.md)
+> - Verified integration with target LLM platform
+> - Minimum one full checkpoint recovery test
+> - Independent audit or validation signals
+>
+> **Use when**: Files >5000 lines, deterministic output required, human-in-the-loop validation available.
+> **Use alternatives when**: Simple file processing (<1000 lines), rapid prototyping, automatic execution without gates.
 
 **Maintainer**: TITAN FUSE Team
 

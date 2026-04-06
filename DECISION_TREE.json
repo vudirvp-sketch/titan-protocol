@@ -146,9 +146,16 @@
     "ERROR_STATE": {
       "description": "Unrecoverable error",
       "entry_actions": ["log_error", "write_checkpoint", "await_instruction"],
+      "max_retries": 3,
+      "retry_count": 0,
       "transitions": {
         "RETRY": "INIT",
+        "RETRY_LIMIT_EXCEEDED": "ABORTED",
         "ABORT": "ABORTED"
+      },
+      "on_retry": {
+        "action": "increment_retry_count",
+        "check": "if retry_count >= max_retries then RETRY_LIMIT_EXCEEDED"
       }
     },
 

@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-04-06T06:53:57.594536Z",
-  "repo_root": "/home/z/my-project/repo_target",
+  "timestamp": "2026-04-06T20:21:43.072599Z",
+  "repo_root": "/home/z/my-project/titan-protocol",
   "summary": {
-    "passed": 11,
-    "failed": 0,
+    "passed": 10,
+    "failed": 1,
     "warnings": 0
   },
   "results": [
@@ -29,8 +29,8 @@
     },
     {
       "test": "nav_map.json valid",
-      "status": "PASS",
-      "message": ""
+      "status": "FAIL",
+      "message": "Missing fields: ['entry_points', 'semantic_index']"
     },
     {
       "test": "shortcuts.yaml valid",
