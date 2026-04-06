@@ -198,7 +198,7 @@ jobs:
             mv PROTOCOL.md.backup PROTOCOL.md
           fi
 
-validate-checkpoints:
+  validate-checkpoints:
     name: Validate Checkpoint Schema
     runs-on: ubuntu-latest
     needs: validate-scripts
@@ -206,10 +206,8 @@ validate-checkpoints:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # --- НАЧАЛО НОВОГО ШАГА ---
       - name: Reassemble PROTOCOL.md before validation
         run: ./scripts/assemble_protocol.sh
-      # --- КОНЕЦ НОВОГО ШАГА ---
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -224,6 +222,7 @@ validate-checkpoints:
         run: |
           echo "Validating checkpoint schema..."
           python3 << 'EOF'
+          import sys
           import json
           from jsonschema import validate, ValidationError
 
@@ -249,8 +248,9 @@ validate-checkpoints:
               print("✅ Checkpoint schema is valid")
           except ValidationError as e:
               print(f"❌ Schema validation failed: {e.message}")
-              exit(1)
+              sys.exit(1)
           EOF
+
   report-status:
     name: Report Validation Status
     runs-on: ubuntu-latest
