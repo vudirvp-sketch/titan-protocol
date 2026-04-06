@@ -8,6 +8,13 @@ consensus_score: 96
 optimized: production_grade
 input_languages: en
 trace_mode: true
+purpose: "Base protocol specification (TIER 0-6) for deterministic large-file processing"
+audience: ["agents", "developers"]
+when_to_read: "When understanding core protocol mechanics and invariants"
+related_files: ["PROTOCOL.ext.md", "SKILL.md", "config.yaml"]
+stable_sections: ["TIER 0 — INVARIANTS", "PRINCIPLE-05", "GATE-04 THRESHOLD RULES"]
+emotional_tone: "technical, precise, authoritative"
+ideal_reader_state: "implementing or debugging protocol behavior"
 changelog: v3.1 — fixes: EXECUTION_DIRECTIVE numbering, GATE-04 threshold, severity scale unification, llm_query spec, parallel_safe definition, double hygiene, checksum idempotency; additions: session persistence, tool matrix expansion, operation budget, idempotency guarantee
 ---
 

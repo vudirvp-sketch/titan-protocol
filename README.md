@@ -1,3 +1,13 @@
+---
+purpose: "Human-friendly overview and documentation for TITAN FUSE Protocol"
+audience: ["developers", "users", "agents"]
+when_to_read: "First document for human readers; after AGENTS.md for agents"
+related_files: ["AGENTS.md", "SKILL.md", "PROTOCOL.md", "config.yaml"]
+stable_sections: ["quick-start", "protocol-architecture", "verification-gates", "troubleshooting"]
+emotional_tone: "informative, welcoming, technical"
+ideal_reader_state: "learning about the protocol"
+---
+
 # TITAN FUSE Protocol
 
 **Production-Grade Large-File Agent Protocol v3.2.0**
@@ -52,36 +62,44 @@ cp your-large-file.md inputs/
 
 ```
 titan-protocol/
-├── PROTOCOL.md              # Assembled protocol (generated)
-├── PROTOCOL.base.md         # Base protocol (TIER 0-6)
-├── PROTOCOL.ext.md          # TIER -1 extension
-├── SKILL.md                 # Agent configuration
-├── README.md                # This file
-├── VERSION                  # Semantic version
-├── CHANGELOG.md             # Version history
-├── config.yaml              # Configurable defaults
-├── inputs/                  # Files to process
+├── AGENTS.md               # 🧭 Agent entry point (NEW)
+├── AI_MISSION.md           # System prompt bridge (NEW)
+├── PROTOCOL.md             # Assembled protocol (generated)
+├── PROTOCOL.base.md        # Base protocol (TIER 0-6)
+├── PROTOCOL.ext.md         # TIER -1 extension
+├── SKILL.md                # Agent configuration
+├── README.md               # This file
+├── VERSION                 # Semantic version
+├── CHANGELOG.md            # Version history
+├── config.yaml             # Configurable defaults
+├── inputs/                 # Files to process
 │   └── README.md
-├── outputs/                 # Generated artifacts
-├── checkpoints/             # Session persistence
+├── outputs/                # Generated artifacts
+├── checkpoints/            # Session persistence
 │   └── checkpoint.schema.json
 ├── skills/
-│   ├── validators/          # Custom validation rules
+│   ├── validators/         # Custom validation rules
 │   │   ├── no-todos.js
 │   │   ├── api-version.js
 │   │   └── security.js
-│   └── templates/           # Output templates
+│   └── templates/          # Output templates
 ├── examples/
-│   ├── small/               # <5000 line examples
-│   └── large/               # >5000 line examples
+│   ├── small/              # <5000 line examples
+│   └── large/              # >5000 line examples
 ├── scripts/
 │   ├── assemble_protocol.sh
 │   ├── validate_checkpoint.py
 │   ├── enhanced_llm_query.py
-│   └── generate_metrics.py
-└── .github/
-    └── workflows/
-        └── validate.yml     # CI/CD validation
+│   ├── generate_metrics.py
+│   └── test_navigation.py  # Navigation tests (NEW)
+├── .ai/                    # Agent navigation files (NEW)
+│   ├── nav_map.json
+│   ├── context_hints.md
+│   ├── shortcuts.yaml
+│   └── agent_interface.md
+├── .agentignore            # Files to skip (NEW)
+├── DECISION_TREE.json      # State machine (NEW)
+└── .titan_index.json       # Semantic index (NEW)
 ```
 
 ---
@@ -103,38 +121,96 @@ titan-protocol/
 
 ### Processing Pipeline
 
+```mermaid
+flowchart TD
+    subgraph Phase0["PHASE 0: INITIALIZATION"]
+        A1[Quick Orient Header]
+        A2[Environment Offload]
+        A3[Navigation Map]
+        A4[Workspace Isolation]
+        A5[Session Checkpoint]
+    end
+
+    subgraph Phase1["PHASE 1: SEARCH & DISCOVERY"]
+        B1[Pattern Detection]
+    end
+
+    subgraph Phase2["PHASE 2: ANALYSIS & CLASSIFICATION"]
+        C1[Issue Classification<br/>SEV-1..4]
+    end
+
+    subgraph Phase3["PHASE 3: PLANNING"]
+        D1[Execution Plan]
+        D2[Pathology Registry]
+        D3[Operation Budget]
+    end
+
+    subgraph Phase4["PHASE 4: EXECUTION & VALIDATION"]
+        E1[Surgical Patch Engine]
+        E2[Validation Loop]
+    end
+
+    subgraph Phase5["PHASE 5: DELIVERY & HYGIENE"]
+        F1[Document Hygiene]
+        F2[Artifact Generation]
+        F3[Optional Full Merge]
+    end
+
+    A5 -->|GATE-00 PASS| B1
+    B1 -->|GATE-01 PASS| C1
+    C1 -->|GATE-02 PASS| D1
+    D3 -->|GATE-03 PASS| E1
+    E2 -->|GATE-04 PASS/WARN| F1
+    F2 -->|GATE-05 PASS| F3
+
+    E2 -->|FAIL| E1
+    E2 -->|ROLLBACK| A4
 ```
-PHASE 0: INITIALIZATION
-    ├─ Quick Orient Header
-    ├─ Environment Offload (for >5000 lines)
-    ├─ Navigation Map
-    ├─ Workspace Isolation
-    └─ Session Checkpoint
 
-PHASE 1: SEARCH & DISCOVERY
-    └─ Pattern Detection
+### State Machine
 
-PHASE 2: ANALYSIS & CLASSIFICATION
-    └─ Issue Classification (SEV-1..4)
+```mermaid
+stateDiagram-v2
+    [*] --> INIT
+    INIT --> BOOTSTRAP: REPO_HOST
+    INIT --> PHASE_0: FILE_DIRECT
 
-PHASE 3: PLANNING
-    ├─ Execution Plan
-    ├─ Pathology Registry
-    └─ Operation Budget
+    BOOTSTRAP --> PHASE_0: GATE_REPO_01
+    PHASE_0 --> PHASE_1: GATE_00
+    PHASE_1 --> PHASE_2: GATE_01
+    PHASE_2 --> PHASE_3: GATE_02
+    PHASE_3 --> PHASE_4: GATE_03
+    PHASE_4 --> PHASE_5: GATE_04
+    PHASE_5 --> [*]: GATE_05
 
-PHASE 4: EXECUTION & VALIDATION
-    ├─ Surgical Patch Engine
-    └─ Deterministic Validation Loop
-
-PHASE 5: DELIVERY & HYGIENE
-    ├─ Document Hygiene
-    ├─ Artifact Generation
-    └─ Optional Full Merge
+    PHASE_4 --> ROLLBACK: VALIDATION_FAIL
+    ROLLBACK --> PHASE_4: RETRY
+    ROLLBACK --> [*]: ABORT
 ```
 
 ---
 
 ## Verification Gates
+
+```mermaid
+flowchart LR
+    subgraph Gates["VERIFICATION GATES"]
+        G00[GATE-00<br/>NAV_MAP]
+        G01[GATE-01<br/>Patterns]
+        G02[GATE-02<br/>Issues]
+        G03[GATE-03<br/>Plan]
+        G04[GATE-04<br/>Validation]
+        G05[GATE-05<br/>Artifacts]
+    end
+
+    G00 -->|PASS| G01
+    G01 -->|PASS| G02
+    G02 -->|PASS| G03
+    G03 -->|PASS| G04
+    G04 -->|PASS/WARN| G05
+
+    G04 -->|BLOCK| X[❌ STOP]
+```
 
 | Gate | Condition | On Fail |
 |------|-----------|---------|
@@ -150,6 +226,24 @@ PHASE 5: DELIVERY & HYGIENE
 - **BLOCK**: SEV-1 gaps > 0, SEV-2 gaps > 2, or total gaps > 20%
 - **WARN**: SEV-3 gaps > 5, SEV-4 gaps > 10
 - **PASS**: All above conditions false
+
+---
+
+## Agent Navigation (NEW)
+
+For LLM agents, the repository now includes navigation aids:
+
+| File | Purpose |
+|------|---------|
+| `AGENTS.md` | Entry point with navigation matrix |
+| `AI_MISSION.md` | System prompt for LLM context |
+| `.ai/nav_map.json` | Semantic index with aliases |
+| `.ai/context_hints.md` | STOP/PROCEED/GO signals |
+| `.ai/shortcuts.yaml` | Zero-click navigation shortcuts |
+| `.ai/agent_interface.md` | Command specification |
+| `DECISION_TREE.json` | State machine definition |
+
+**For agents:** Start with `AGENTS.md`, then read `SKILL.md`.
 
 ---
 
@@ -229,6 +323,17 @@ python scripts/validate_checkpoint.py checkpoints/checkpoint.json
 
 ---
 
+## Navigation Tests
+
+Run navigation integrity tests:
+
+```bash
+python scripts/test_navigation.py
+# Tests: AGENTS.md, nav_map.json, shortcuts.yaml, internal links
+```
+
+---
+
 ## Metrics Integration
 
 The protocol generates `metrics.json` for monitoring:
@@ -267,6 +372,7 @@ The protocol generates `metrics.json` for monitoring:
 | Circular dependency | Files reference each other | Process in queue order |
 | gh CLI not found | Not installed | Use git manually or install gh |
 | Version mismatch | Protocol > agent version | Update agent or use older protocol |
+| Navigation test fails | Missing AGENTS.md | Run from repo root |
 
 ---
 
@@ -275,7 +381,8 @@ The protocol generates `metrics.json` for monitoring:
 1. Fork the repository
 2. Create a feature branch
 3. Run validation: `./scripts/assemble_protocol.sh && python scripts/validate_checkpoint.py`
-4. Submit a pull request
+4. Run navigation tests: `python scripts/test_navigation.py`
+5. Submit a pull request
 
 ---
 
@@ -302,3 +409,5 @@ MIT License - See LICENSE file for details.
 **Maintainer**: TITAN FUSE Team
 
 **Documentation**: Full protocol specification in `PROTOCOL.md`
+
+**Agent Entry Point**: `AGENTS.md`

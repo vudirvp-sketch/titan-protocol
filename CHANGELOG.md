@@ -1,3 +1,13 @@
+---
+purpose: "Version history and migration guide for TITAN FUSE Protocol"
+audience: ["developers", "users"]
+when_to_read: "When upgrading protocol version or understanding feature history"
+related_files: ["VERSION", "README.md", "PROTOCOL.md"]
+stable_sections: ["Version History Summary", "Migration Guide"]
+emotional_tone: "informative, historical, practical"
+ideal_reader_state: "upgrading or reviewing protocol changes"
+---
+
 # Changelog
 
 All notable changes to the TITAN FUSE Protocol will be documented in this file.

@@ -4,6 +4,13 @@ extends: Large-File Agent Protocol v3.1
 tier: -1
 domain: repo_bootstrap; self_initialization; repo_navigation
 status: DRAFT — append to main protocol before TIER 0
+purpose: "TIER -1 Bootstrap extension for repository navigation and self-initialization"
+audience: ["agents"]
+when_to_read: "When agent enters repository or needs to self-initialize"
+related_files: ["PROTOCOL.base.md", "SKILL.md", "AGENTS.md"]
+stable_sections: ["PHASE -1 — ENTRY DETECTION", "Step -1.2: Bootstrap Sequence"]
+emotional_tone: "directive, bootstrapping, initialization"
+ideal_reader_state: "starting a new session or entering a repository"
 changelog: v1.0 — initial bootstrap phase; repo navigation patterns; repo-as-host model; .gitignore; multi-file coordination stub
 ---
 

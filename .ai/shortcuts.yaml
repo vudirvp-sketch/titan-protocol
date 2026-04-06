@@ -1,0 +1,259 @@
+# Shortcuts — TITAN FUSE Protocol
+# Zero-click shortcuts for instant access to frequent operations
+# Version: 1.0.0
+
+# =============================================================================
+# NAVIGATION SHORTCUTS
+# =============================================================================
+
+shortcuts:
+  # --- Entry Points ---
+  "start":
+    description: "Start processing a file"
+    action: "jump_to_quick_start"
+    files:
+      - "AGENTS.md#quick-start"
+      - "README.md#quick-start"
+    first_command: "./scripts/assemble_protocol.sh"
+
+  "new_session":
+    description: "Begin a new processing session"
+    action: "initialize_session"
+    files:
+      - "SKILL.md"
+      - "config.yaml"
+      - "inputs/"
+    first_command: "Check inputs/ for files"
+
+  # --- Configuration ---
+  "config":
+    description: "Open configuration files"
+    action: "open_configuration"
+    files:
+      - "SKILL.md"
+      - "config.yaml"
+    sections:
+      - "session:"
+      - "chunking:"
+      - "validation:"
+
+  "limits":
+    description: "View session limits"
+    action: "show_limits"
+    files:
+      - "config.yaml#session"
+      - "SKILL.md#constraints"
+    display:
+      - "max_tokens: 100000"
+      - "max_time_minutes: 60"
+      - "max_files_per_session: 3"
+
+  # --- Verification Gates ---
+  "gates":
+    description: "Show all verification gates"
+    action: "show_verification_gates"
+    files:
+      - "PROTOCOL.md#verification-gates"
+      - ".ai/context_hints.md#stop-signals"
+    summary:
+      - "GATE-00: NAV_MAP exists"
+      - "GATE-01: Patterns scanned"
+      - "GATE-02: Issues classified"
+      - "GATE-03: Plan validated"
+      - "GATE-04: Validations pass"
+      - "GATE-05: Artifacts ready"
+
+  "gate_00":
+    description: "Check GATE-00 status"
+    action: "check_gate_00"
+    condition: "NAV_MAP exists AND all chunks indexed"
+    files:
+      - "PROTOCOL.md#GATE-00"
+
+  "gate_04":
+    description: "Check GATE-04 threshold"
+    action: "check_gate_04"
+    condition: "SEV-1 gaps = 0, SEV-2 gaps ≤ 2, total gaps ≤ 20%"
+    files:
+      - "PROTOCOL.md#GATE-04"
+      - ".ai/context_hints.md#gate-04-threshold-reference"
+
+  # --- Troubleshooting ---
+  "debug":
+    description: "Open troubleshooting guide"
+    action: "open_troubleshooting"
+    files:
+      - "README.md#troubleshooting"
+      - ".ai/context_hints.md#stop-signals"
+
+  "error":
+    description: "Find error in pathology registry"
+    action: "search_pathology"
+    files:
+      - "outputs/pathology_registry.json"
+      - "checkpoints/checkpoint.json"
+
+  # --- Session Management ---
+  "resume":
+    description: "Resume interrupted session"
+    action: "check_checkpoint"
+    files:
+      - "checkpoints/checkpoint.json"
+    command: "python scripts/validate_checkpoint.py checkpoints/checkpoint.json"
+
+  "status":
+    description: "Show current session status"
+    action: "show_state_snapshot"
+    files:
+      - "checkpoints/checkpoint.json"
+    display:
+      - "session_id"
+      - "gates_passed"
+      - "completed_batches"
+      - "chunk_cursor"
+
+  "metrics":
+    description: "View session metrics"
+    action: "show_metrics"
+    files:
+      - "outputs/metrics.json"
+    command: "python scripts/generate_metrics.py"
+
+  # --- Protocol Reference ---
+  "invariants":
+    description: "View TIER 0 invariants"
+    action: "open_invariants"
+    files:
+      - "PROTOCOL.base.md#TIER-0"
+    concepts:
+      - "INVAR-01: Anti-Fabrication"
+      - "INVAR-02: S-5 Veto"
+      - "INVAR-03: Zero-Drift"
+      - "INVAR-04: Idempotency"
+
+  "severity":
+    description: "View severity scale"
+    action: "show_severity_scale"
+    files:
+      - "PROTOCOL.base.md#PRINCIPLE-05"
+    display:
+      - "SEV-1: CRITICAL"
+      - "SEV-2: HIGH"
+      - "SEV-3: MEDIUM"
+      - "SEV-4: LOW"
+
+  "phases":
+    description: "Show processing phases"
+    action: "show_phases"
+    files:
+      - "PROTOCOL.md#processing-pipeline"
+    display:
+      - "PHASE 0: INITIALIZATION"
+      - "PHASE 1: SEARCH & DISCOVERY"
+      - "PHASE 2: ANALYSIS & CLASSIFICATION"
+      - "PHASE 3: PLANNING"
+      - "PHASE 4: EXECUTION & VALIDATION"
+      - "PHASE 5: DELIVERY & HYGIENE"
+
+  # --- Extension ---
+  "extend":
+    description: "Add custom validator or extension"
+    action: "open_extension_docs"
+    files:
+      - "README.md#custom-validators"
+      - "skills/validators/"
+    template: "skills/validators/security.js"
+
+  "add_validator":
+    description: "Create new validator"
+    action: "create_validator"
+    files:
+      - "skills/validators/"
+    template: |
+      // skills/validators/my-validator.js
+      module.exports = {
+        name: 'my-validator',
+        version: '1.0.0',
+        validate(content, context) {
+          return { valid: true, violations: [] };
+        }
+      };
+
+# =============================================================================
+# COMMAND SHORTCUTS
+# =============================================================================
+
+commands:
+  "assemble":
+    description: "Assemble protocol from components"
+    command: "./scripts/assemble_protocol.sh"
+    produces: "PROTOCOL.md"
+
+  "validate_checkpoint":
+    description: "Validate checkpoint file"
+    command: "python scripts/validate_checkpoint.py checkpoints/checkpoint.json"
+    produces: "VALID/PARTIAL/INVALID status"
+
+  "generate_metrics":
+    description: "Generate session metrics"
+    command: "python scripts/generate_metrics.py"
+    produces: "outputs/metrics.json"
+
+  "test_navigation":
+    description: "Run navigation tests"
+    command: "python scripts/test_navigation.py"
+    produces: "PASS/FAIL status"
+
+# =============================================================================
+# SEMANTIC LOOKUP
+# =============================================================================
+
+semantic_shortcuts:
+  # Aliases that map to canonical concepts
+  "validation": "gates"
+  "checks": "gates"
+  "verification": "gates"
+  "chunks": "chunking"
+  "split": "chunking"
+  "rollback": "invariants"
+  "restore": "invariants"
+  "backup": "invariants"
+  "error": "debug"
+  "problem": "debug"
+  "issue": "debug"
+  "settings": "config"
+  "options": "config"
+  "start": "start"
+  "begin": "start"
+  "init": "start"
+
+# =============================================================================
+# CONTEXT-AWARE HINTS
+# =============================================================================
+
+context_hints:
+  # Hints triggered by file size
+  large_file:
+    condition: "file_size > 30000"
+    hint: "Reduce chunk size to 500-800 lines"
+    action: "update config.yaml chunking.large_file_size"
+
+  # Hints triggered by budget
+  budget_warning:
+    condition: "token_usage > 0.9 * max_tokens"
+    hint: "Budget at 90% — suspend SEV-3/4 batches"
+    action: "Request approval or suspend"
+
+  # Hints triggered by gaps
+  critical_gaps:
+    condition: "sev1_gaps > 0"
+    hint: "SEV-1 gaps found — STOP and resolve"
+    action: "Request human review"
+
+# =============================================================================
+# VERSION INFO
+# =============================================================================
+
+version: "1.0.0"
+protocol_version: "3.2.0"
+generated: "2026-04-06"
