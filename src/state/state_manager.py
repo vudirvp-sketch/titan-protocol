@@ -98,6 +98,25 @@ class SessionState:
     
     # FIX 06: Budget state for policy context
     budget_state: str = "NORMAL"  # NORMAL | BUDGET_WARNING | BUDGET_EXCEEDED
+    
+    # NEW in v3.2: Recursion control
+    recursion_depth: int = 0
+    max_recursion_depth: int = 1
+    recursion_depth_peak: int = 0
+    
+    # NEW in v3.2: Token telemetry for p50/p95
+    token_history: List[int] = field(default_factory=list)
+    latency_history: List[int] = field(default_factory=list)  # in milliseconds
+    
+    # NEW in v3.2: Model routing tracking
+    root_model_calls: int = 0
+    leaf_model_calls: int = 0
+    root_model_tokens: int = 0
+    leaf_model_tokens: int = 0
+    
+    # NEW in v3.2: Confidence tracking
+    confidence_scores: List[str] = field(default_factory=list)
+    all_high_confidence: bool = True
 
 
 class StateManager:
@@ -369,6 +388,222 @@ class StateManager:
             "tokens_remaining": self.current_session.max_tokens - self.current_session.tokens_used,
             "tokens_used": self.current_session.tokens_used,
             "max_tokens": self.current_session.max_tokens
+        }
+
+    # =========================================================================
+    # NEW in v3.2: RECURSION CONTROL
+    # =========================================================================
+
+    def increment_recursion_depth(self) -> bool:
+        """
+        Increment recursion depth.
+        
+        Returns:
+            True if within limit, False if limit reached
+        """
+        if not self.current_session:
+            return False
+        
+        if self.current_session.recursion_depth >= self.current_session.max_recursion_depth:
+            return False
+        
+        self.current_session.recursion_depth += 1
+        
+        # Track peak
+        if self.current_session.recursion_depth > self.current_session.recursion_depth_peak:
+            self.current_session.recursion_depth_peak = self.current_session.recursion_depth
+        
+        self._save_current_session()
+        return True
+    
+    def decrement_recursion_depth(self) -> None:
+        """Decrement recursion depth."""
+        if not self.current_session:
+            return
+        
+        if self.current_session.recursion_depth > 0:
+            self.current_session.recursion_depth -= 1
+            self._save_current_session()
+    
+    def check_recursion_limit(self) -> Dict:
+        """
+        Check if recursion limit is reached.
+        
+        Returns:
+            Dict with status and details
+        """
+        if not self.current_session:
+            return {"allowed": False, "reason": "No active session"}
+        
+        if self.current_session.recursion_depth >= self.current_session.max_recursion_depth:
+            return {
+                "allowed": False,
+                "reason": "recursion_limit_reached",
+                "current_depth": self.current_session.recursion_depth,
+                "max_depth": self.current_session.max_recursion_depth,
+                "message": "[gap: recursion_limit_reached — flatten or defer]"
+            }
+        
+        return {
+            "allowed": True,
+            "current_depth": self.current_session.recursion_depth,
+            "max_depth": self.current_session.max_recursion_depth
+        }
+
+    # =========================================================================
+    # NEW in v3.2: TOKEN AND LATENCY TELEMETRY
+    # =========================================================================
+
+    def record_query_metrics(self, 
+                            tokens: int, 
+                            latency_ms: int,
+                            model_type: str = "leaf") -> None:
+        """
+        Record token and latency metrics for a query.
+        
+        Args:
+            tokens: Tokens used in this query
+            latency_ms: Latency in milliseconds
+            model_type: "root" or "leaf" for model routing
+        """
+        if not self.current_session:
+            return
+        
+        # Record token history for p50/p95 calculation
+        self.current_session.token_history.append(tokens)
+        self.current_session.latency_history.append(latency_ms)
+        
+        # Track model-specific usage
+        if model_type == "root":
+            self.current_session.root_model_calls += 1
+            self.current_session.root_model_tokens += tokens
+        else:
+            self.current_session.leaf_model_calls += 1
+            self.current_session.leaf_model_tokens += tokens
+        
+        self._save_current_session()
+    
+    def get_token_percentiles(self) -> Dict:
+        """
+        Calculate p50 and p95 percentiles for token distribution.
+        
+        Returns:
+            Dict with p50, p95, and other statistics
+        """
+        if not self.current_session or not self.current_session.token_history:
+            return {
+                "p50": 0,
+                "p95": 0,
+                "total_queries": 0,
+                "total_tokens": 0,
+                "min": 0,
+                "max": 0
+            }
+        
+        import statistics
+        
+        tokens = sorted(self.current_session.token_history)
+        n = len(tokens)
+        
+        return {
+            "p50": int(statistics.median(tokens)),
+            "p95": int(tokens[int(n * 0.95)] if n >= 20 else tokens[-1]),
+            "total_queries": n,
+            "total_tokens": sum(tokens),
+            "min": tokens[0],
+            "max": tokens[-1],
+            "mean": int(statistics.mean(tokens))
+        }
+    
+    def get_latency_percentiles(self) -> Dict:
+        """
+        Calculate p50 and p95 percentiles for latency distribution.
+        
+        Returns:
+            Dict with latency statistics
+        """
+        if not self.current_session or not self.current_session.latency_history:
+            return {
+                "p50_ms": 0,
+                "p95_ms": 0,
+                "total_queries": 0
+            }
+        
+        import statistics
+        
+        latencies = sorted(self.current_session.latency_history)
+        n = len(latencies)
+        
+        return {
+            "p50_ms": int(statistics.median(latencies)),
+            "p95_ms": int(latencies[int(n * 0.95)] if n >= 20 else latencies[-1]),
+            "total_queries": n,
+            "mean_ms": int(statistics.mean(latencies))
+        }
+
+    # =========================================================================
+    # NEW in v3.2: CONFIDENCE TRACKING
+    # =========================================================================
+
+    def record_confidence(self, confidence: str) -> None:
+        """
+        Record confidence score from a query result.
+        
+        Args:
+            confidence: LOW | MED | HIGH
+        """
+        if not self.current_session:
+            return
+        
+        self.current_session.confidence_scores.append(confidence)
+        
+        # Track if all are HIGH
+        if confidence != "HIGH":
+            self.current_session.all_high_confidence = False
+        
+        self._save_current_session()
+    
+    def get_confidence_summary(self) -> Dict:
+        """
+        Get confidence summary for the session.
+        
+        Returns:
+            Dict with confidence statistics
+        """
+        if not self.current_session:
+            return {"all_high": False, "total": 0}
+        
+        scores = self.current_session.confidence_scores
+        
+        return {
+            "all_high": self.current_session.all_high_confidence,
+            "total": len(scores),
+            "high_count": scores.count("HIGH"),
+            "med_count": scores.count("MED"),
+            "low_count": scores.count("LOW")
+        }
+
+    # =========================================================================
+    # NEW in v3.2: MODEL ROUTING SUMMARY
+    # =========================================================================
+
+    def get_model_routing_summary(self) -> Dict:
+        """
+        Get model routing summary for the session.
+        
+        Returns:
+            Dict with model usage statistics
+        """
+        if not self.current_session:
+            return {"root_calls": 0, "leaf_calls": 0}
+        
+        return {
+            "root_model_calls": self.current_session.root_model_calls,
+            "leaf_model_calls": self.current_session.leaf_model_calls,
+            "root_model_tokens": self.current_session.root_model_tokens,
+            "leaf_model_tokens": self.current_session.leaf_model_tokens,
+            "total_tokens": (self.current_session.root_model_tokens + 
+                           self.current_session.leaf_model_tokens)
         }
 
     def add_issue(self, issue_id: str) -> None:

@@ -2,6 +2,62 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.2.0] - 2026-04-07
+
+### Added - NEW in v3.2 (Protocol Implementation)
+
+#### Security (INVAR-05)
+- **LLM Code Execution Gate**: New security invariant preventing LLM-generated code execution
+  - Execution modes: `sandbox`, `human_gate`, `disabled`
+  - Sandbox types: `docker`, `venv`, `restricted_subprocess`
+  - Approval token system for human gate mode
+  - `src/security/execution_gate.py` module
+
+#### Chunking (PRINCIPLE-04)
+- **Secondary Chunk Limits**: Hard caps to prevent context overflow
+  - `max_chars_per_chunk: 150000` characters
+  - `max_tokens_per_chunk: 30000` tokens
+  - Override primary line limit if exceeded
+
+#### Recursion Control
+- **Recursion Depth Tracking**: Prevent exponential token growth
+  - `recursion_depth` field in STATE_SNAPSHOT
+  - `max_recursion_depth` configurable (default: 1)
+  - `recursion_depth_peak` for reporting
+  - Methods: `increment_recursion_depth()`, `check_recursion_limit()`
+
+#### Model Routing (PRINCIPLE-06)
+- **Cost Optimization**: Route calls by model type
+  - `root_model`: orchestration, gates, planning (Phase 0-3, 5)
+  - `leaf_model`: llm_query chunk calls (Phase 1-4)
+  - Model usage tracking in session state
+
+#### GATE-04 Enhancement
+- **Confidence Advisory**: Informational early exit signal
+  - Check if all QueryResults have `confidence = HIGH`
+  - Log advisory when zero gaps
+  - Requires human acknowledgement (not auto-exit)
+
+#### Telemetry
+- **Token Distribution Metrics**: p50/p95 percentiles
+  - Per-query token tracking
+  - Latency tracking in milliseconds
+  - Model-specific token counters
+  - Enhanced `metrics.json` output
+
+### Changed
+- Updated `config.yaml` with new v3.2 sections
+- Updated `SessionState` dataclass with new fields
+- Enhanced `metrics.json` generation in Phase 5
+- Updated `_validate_gate_04()` for confidence advisory
+
+### Tests Added
+- `TestRecursionControl`: 3 tests for recursion depth
+- `TestTokenTelemetry`: 2 tests for p50/p95
+- `TestConfidenceTracking`: 3 tests for confidence
+- `TestExecutionGate`: 3 tests for INVAR-05
+- `TestGate04ConfidenceAdvisory`: 2 tests for advisory
+
 ## [3.2.1] - 2026-04-07
 
 ### Added

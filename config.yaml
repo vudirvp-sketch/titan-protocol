@@ -266,3 +266,113 @@ development:
   # Verbose output
   verbose: false
 
+# =============================================================================
+# SECURITY CONFIGURATION (INVAR-05) - NEW in v3.2
+# =============================================================================
+
+security:
+  # Execution mode for LLM-generated code
+  # Options: sandbox | human_gate | disabled
+  execution_mode: human_gate
+  
+  # Sandbox type (only used if execution_mode = sandbox)
+  # Options: docker | venv | restricted_subprocess | none
+  sandbox_type: none
+  
+  # Allow list of permitted operations
+  permitted_operations:
+    - file_read
+    - file_write
+    - grep
+    - sed
+  
+  # Blocked operations (always blocked regardless of mode)
+  blocked_operations:
+    - rm_rf
+    - sudo
+    - chmod
+    - chown
+
+# =============================================================================
+# CHUNKING SECONDARY LIMITS (PRINCIPLE-04) - NEW in v3.2
+# =============================================================================
+
+chunking_limits:
+  # Maximum characters per chunk (hard limit)
+  max_chars_per_chunk: 150000
+  
+  # Maximum tokens per chunk (hard limit, approx)
+  max_tokens_per_chunk: 30000
+  
+  # Enforce secondary limits (override primary line limit if exceeded)
+  enforce_secondary_limits: true
+
+# =============================================================================
+# RECURSION CONTROL - NEW in v3.2
+# =============================================================================
+
+recursion:
+  # Maximum recursion depth for nested sub-tasks
+  # 0 = no sub-tasks allowed
+  # 1 = one level of nesting (recommended)
+  max_recursion_depth: 1
+  
+  # Track recursion peak for reporting
+  track_peak: true
+
+# =============================================================================
+# MODEL ROUTING (PRINCIPLE-06) - NEW in v3.2
+# =============================================================================
+
+# Remove this section entirely to use single model for all operations.
+# When configured, routes calls according to model type:
+# - root_model: used for orchestration, gate decisions, planning (Phase 0-3, 5)
+# - leaf_model: used for llm_query calls on chunks (Phase 1-4)
+
+model_routing:
+  # Root model for orchestration (frontier model recommended)
+  root_model: ""
+  
+  # Leaf model for chunk processing (cheaper model recommended)
+  leaf_model: ""
+  
+  # Enable cost tracking
+  track_costs: true
+  
+  # Log model used per query
+  log_model_usage: true
+
+# =============================================================================
+# CONFIDENCE ADVISORY (GATE-04) - NEW in v3.2
+# =============================================================================
+
+confidence:
+  # Enable confidence advisory in GATE-04
+  enable_advisory: true
+  
+  # Confidence threshold for early exit advisory
+  early_exit_threshold: HIGH
+  
+  # Require human acknowledgement for early exit
+  require_acknowledgement: true
+  
+  # Log confidence scores for analysis
+  log_confidence: true
+
+# =============================================================================
+# TELEMETRY (metrics.json) - NEW in v3.2
+# =============================================================================
+
+telemetry:
+  # Enable token distribution tracking
+  enable_token_tracking: true
+  
+  # Calculate p50/p95 percentiles
+  calculate_percentiles: true
+  
+  # Track latency per query
+  track_latency: true
+  
+  # Include model usage breakdown
+  include_model_breakdown: true
+

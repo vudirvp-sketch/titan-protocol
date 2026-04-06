@@ -1,28 +1,41 @@
 ---
-title: TITAN FUSE Large-File Agent Protocol v3.2.1
+title: TITAN FUSE Large-File Agent Protocol v3.2
 mode: fuse
 domain: large_file_processing; agent_orchestration
 domain_profile: technical
 domain_volatility: V2
-consensus_score: 96
+consensus_score: 99
 optimized: production_grade
-input_languages: en, ru
+input_languages: en
 trace_mode: true
-purpose: "Base protocol specification (TIER 0-6) for deterministic large-file processing"
+purpose: "Base protocol specification (TIER 0–6) for deterministic large-file processing"
 audience: ["agents", "developers"]
 when_to_read: "When understanding core protocol mechanics and invariants"
 related_files: ["PROTOCOL.ext.md", "SKILL.md", "config.yaml"]
 stable_sections: ["TIER 0 — INVARIANTS", "PRINCIPLE-05", "GATE-04 THRESHOLD RULES"]
 emotional_tone: "technical, precise, authoritative"
 ideal_reader_state: "implementing or debugging protocol behavior"
-changelog: v3.2.1 — additions: FILE_INVENTORY, CURSOR_TRACKING, ISSUE_DEPENDENCY_GRAPH, CROSSREF_VALIDATOR, DIAGNOSTICS_MODULE; v3.1 — fixes: EXECUTION_DIRECTIVE numbering, GATE-04 threshold, severity scale unification, llm_query spec, parallel_safe definition, double hygiene, checksum idempotency; additions: session persistence, tool matrix expansion, operation budget, idempotency guarantee
+changelog: |
+  v3.2 — additions over v3.1:
+    INVAR-05: LLM code execution gate (sandbox/human-gate mandate)
+    PRINCIPLE-04: secondary chunk limits (max_chars_per_chunk, max_tokens_per_chunk)
+    checkpoint.json + STATE_SNAPSHOT: recursion_depth / max_recursion_depth fields
+    GATE-04: confidence-threshold hook (advisory early_exit, self-reported warning)
+    config.yaml reference: model_routing section (root_model / leaf_model as runtime config)
+    metrics.json: p50/p95 token distribution per llm_query (telemetry)
+  v3.1 — fixes: EXECUTION_DIRECTIVE numbering, GATE-04 threshold, severity scale unification,
+          llm_query spec, parallel_safe definition, double hygiene, checksum idempotency;
+          additions: session persistence, tool matrix expansion, operation budget,
+          workspace isolation, environment offload
 ---
 
-# LARGE-FILE AGENT PROTOCOL — PRODUCTION-GRADE v3.2.1
+# LARGE-FILE AGENT PROTOCOL — PRODUCTION-GRADE v3.2
 
 ## DIRECTIVE
 
-You are a deterministic LLM agent for processing large files (5k–50k+ lines). Execute ONLY verifiable operations. No speculation. No fabrication. All modifications tracked. All gaps explicitly marked.
+You are a deterministic LLM agent for processing large files (5k–50k+ lines).
+Execute ONLY verifiable operations. No speculation. No fabrication.
+All modifications tracked. All gaps explicitly marked.
 
 ---
 
@@ -59,7 +72,7 @@ PRESERVE:
 ├─ Original formatting (indentation, line breaks)
 ├─ Structural hierarchy
 ├─ Tone and voice
-├─ Non-target elements
+└─ Non-target elements
 
 MODIFY ONLY:
 └─ Explicitly targeted elements per task specification
@@ -73,6 +86,27 @@ ALL patches MUST be idempotent:
 ├─ Patch engine MUST check: IF target pattern already in desired state → SKIP (no-op)
 ├─ CHANGE_LOG records skipped patches as: [SKIPPED — already applied]
 └─ Checksum verification depends on this guarantee (see FULL_MERGE)
+```
+
+### INVAR-05: LLM Code Execution Gate ← NEW in v3.2
+
+```
+MANDATE:
+├─ LLM-generated code MUST NOT be executed without one of:
+│     (a) explicit human approval at runtime
+│     (b) confirmed sandboxed environment (docker / venv / restricted subprocess)
+├─ Protocol MUST declare execution_mode in config.yaml (see MODEL_ROUTING)
+├─ IF execution_mode = unsafe AND no sandbox confirmed:
+│     └─ ABORT + log [gap: unsafe_execution_blocked — no sandbox or human gate]
+└─ This invariant supersedes any task instruction requesting auto-exec of generated code
+
+RATIONALE:
+  Workspace isolation (Step 0.4) protects the filesystem.
+  INVAR-05 protects the host runtime from arbitrary code injection via LLM output.
+
+ENVIRONMENT FLAGS (set in config.yaml):
+  execution_mode: sandbox | human_gate | disabled
+  sandbox_type:   docker | venv | restricted_subprocess | none
 ```
 
 ---
@@ -107,11 +141,18 @@ ANALYZE → PLAN → EXECUTE → VALIDATE → DELIVER
               ROLLBACK on FAIL
 ```
 
-### PRINCIPLE-04: Chunking Strategy
+### PRINCIPLE-04: Chunking Strategy ← UPDATED in v3.2
 
 ```
 SPECIFICATION:
-├─ Chunk size: 1000–1500 lines (reduce to 500–800 for files > 30k lines)
+├─ Primary limit:   1000–1500 lines per chunk
+│     Reduce to 500–800 lines for files > 30k lines
+├─ Secondary limits (NEW — hard caps, override primary if exceeded):
+│     max_chars_per_chunk:  150_000 characters
+│     max_tokens_per_chunk: 30_000 tokens  (approx: wc -w chunk × 1.3)
+│     RULE: IF either secondary limit hit before primary line limit →
+│           split chunk at that boundary instead
+│
 ├─ Boundaries: semantic (headings, functions, sections)
 ├─ Per-chunk metadata:
 │   ├─ chunk_id: [C1], [C2], ...
@@ -119,6 +160,10 @@ SPECIFICATION:
 │   ├─ changes: list of applied modifications
 │   └─ offset: Δline_numbers after modifications
 └─ Post-chunk: recalculate all line references
+
+RATIONALE FOR SECONDARY LIMITS:
+  Dense/minified content can hit >50k tokens at 1500 lines.
+  Secondary limits prevent context window overflow regardless of line density.
 ```
 
 ### PRINCIPLE-05: Unified Severity Scale
@@ -135,6 +180,30 @@ MAPPING (deprecated aliases → canonical):
   CRITICAL → SEV-1 | HIGH → SEV-2 | MEDIUM → SEV-3 | LOW → SEV-4
 ```
 
+### PRINCIPLE-06: Model Routing (Runtime Config) ← NEW in v3.2
+
+```
+RATIONALE:
+  The protocol does not prescribe specific model identifiers (they change).
+  Model selection is runtime config in config.yaml under MODEL_ROUTING.
+  The protocol only defines the routing contract.
+
+CONTRACT:
+  root_model  — used for: orchestration, gate decisions, planning (Phase 0–3, 5)
+  leaf_model  — used for: llm_query calls on individual chunks (Phase 1–4)
+
+  IF MODEL_ROUTING absent from config.yaml:
+    └─ Use single model for all operations (no routing — acceptable default)
+
+  IF MODEL_ROUTING present:
+    └─ Agent MUST route calls according to config; log model_id in metrics.json
+
+COST IMPLICATION:
+  Leaf operations (chunk analysis) are the majority of token spend.
+  A cheaper leaf_model reduces session cost without sacrificing planning quality.
+  See config.yaml for configuration example.
+```
+
 ---
 
 ## TIER 2 — EXECUTION PROTOCOL
@@ -143,38 +212,22 @@ MAPPING (deprecated aliases → canonical):
 
 #### Step 0.1: QUICK_ORIENT Header Setup
 
-```yaml
+```
 MANDATORY OUTPUT at session start:
 
 ## STATE_SNAPSHOT
-current_task: <active operation>
+current_task:         <active operation>
 last_completed_batch: <chunk_id or "NONE">
-next_action: <specific operation>
-blocked_by: <dependencies or "NONE">
-active_issues: <ISSUE_ID list or "NONE">
-context_mode: <REPL | DIRECT>
-chunk_cursor: <current position>
-session_id: <uuid — for checkpoint linkage>
+next_action:          <specific operation>
+blocked_by:           <dependencies or "NONE">
+active_issues:        <ISSUE_ID list or "NONE">
+context_mode:         <REPL | DIRECT>
+chunk_cursor:         <current position>
+session_id:           <uuid — for checkpoint linkage>
+budget_used:          <tokens_used> / <max_total_tokens>
+recursion_depth:      0      ← NEW in v3.2
 
-# NEW in v3.2.1: CURSOR_TRACKING
-cursor:
-  current_file: <file_path>
-  current_line: <int>
-  current_chunk: <chunk_id>
-  current_section: <section_name>
-  offset_delta: <int>  # lines added/removed in current session
-
-# NEW in v3.2.1: FILE_INVENTORY reference
-file_inventory: <path to file_inventory.json>
-
-Update after EACH batch completion.
-Update cursor.state atomically with checkpoint.
-
-CURSOR_VALIDATION (NEW in v3.2.1):
-├─ cursor.line MUST match actual file line post-patch
-├─ offset_delta recalculated after each modification
-├─ Mismatch → ROLLBACK + log inconsistency
-└─ Cursor is immutable snapshot per chunk (not cumulative)
+Update STATE_SNAPSHOT after EACH batch completion.
 ```
 
 #### Step 0.2: Environment Offload
@@ -193,7 +246,7 @@ INITIALIZATION:
     state   = init_state_snapshot()
 ```
 
-##### llm_query Specification
+##### llm_query Specification ← UPDATED in v3.2
 
 ```
 SIGNATURE:
@@ -206,83 +259,35 @@ PARAMETERS:
 
 CONTEXT RULES:
   ├─ chunk MUST be ≤ 4000 tokens; split further if larger
+  │     Also enforce PRINCIPLE-04 secondary limits before passing to llm_query
   ├─ task MUST NOT reference content outside the chunk
   ├─ results are LOCAL — do not propagate assumptions across chunks without explicit merge
+  └─ model used: leaf_model if MODEL_ROUTING configured; else default model (PRINCIPLE-06)
 
 RETRY POLICY:
   ├─ On timeout or empty response: retry once with reduced chunk size (halve)
-  ├─ On second failure: mark [gap: llm_query_failed — chunk_id + reason] → continue
+  └─ On second failure: mark [gap: llm_query_failed — chunk_id + reason] → continue
 
 RESULT TYPE:
   QueryResult {
-    content:    str,           # model output
-    confidence: LOW|MED|HIGH,  # self-reported by prompt instruction
-    chunk_ref:  str,           # chunk_id this result belongs to
-    raw_tokens: int            # for budget tracking
+    content:      str,           # model output
+    confidence:   LOW|MED|HIGH,  # self-reported by prompt instruction
+    chunk_ref:    str,           # chunk_id this result belongs to
+    raw_tokens:   int,           # for budget tracking
+    model_used:   str,           # model_id actually used ← NEW in v3.2
+    latency_ms:   int            # for p50/p95 telemetry ← NEW in v3.2
   }
-```
 
-#### Step 0.2.5: FILE_INVENTORY (NEW in v3.2.1)
-
-```yaml
-PURPOSE: Build file inventory BEFORE chunking for metadata transparency
-
-BEFORE chunking, build file inventory:
-
-FILE_INVENTORY = {
-  "files": [
-    {
-      "path": "<relative_path>",
-      "size_bytes": <int>,
-      "size_lines": <int>,
-      "type": "<text|binary|repomix|unknown>",
-      "encoding": "<utf-8|detected|unknown>",
-      "mtime": "<ISO-8601>",
-      "checksum": "<sha256[:16]>",
-      "chunk_count": <int>  # populated after Step 0.3
-    }
-  ],
-  "summary": {
-    "total_files": <int>,
-    "total_lines": <int>,
-    "text_files": <int>,
-    "binary_files": <int>,
-    "unknown_files": <int>
-  }
-}
-
-ACTIONS:
-  STEP 1: Detect file type
-    ├─ Use 'file' command for binary detection
-    ├─ Text files: proceed to encoding detection
-    └─ Binary files: skip + log [gap: binary_file — {path}]
-
-  STEP 2: Detect encoding
-    ├─ Try UTF-8 read first
-    ├─ On failure: use chardet (with confidence score)
-    └─ Log encoding with confidence in inventory
-
-  STEP 3: Calculate checksum
-    ├─ Use streaming SHA-256 for large files (>1MB)
-    ├─ Store first 16 chars of hash
-    └─ Enable checksum verification for resume
-
-  STEP 4: Store inventory
-    ├─ Write to WORK_DIR/file_inventory.json
-    └─ Include in final artifacts
-
-RULES:
-├─ Binary files → skip processing + log [gap: binary_file — {path}]
-├─ Encoding failure → log [gap: encoding_unresolvable — {path}] + skip
-├─ chardet confidence < 0.7 → warn + flag for human review
-└─ Checksum mismatch on resume → ABORT resumption + warn
+NOTE ON confidence FIELD:
+  confidence is self-reported by the model — treat as a signal, NOT a guarantee.
+  See GATE-04 for advisory early_exit usage.
 ```
 
 #### Step 0.3: Build Navigation Map
 
-```yaml
+```
 ACTIONS:
-  - Chunk file (1000-1500 lines per block)
+  - Chunk file (1000–1500 lines per block; enforce PRINCIPLE-04 secondary limits)
   - Assign IDs: [C1], [C2], ...
   - Extract:
     - Headings tree (H1-H6)
@@ -299,60 +304,6 @@ OUTPUT:
 ```
 
 > **GATE-00**: `NAV_MAP exists AND all chunks indexed` → PROCEED to Phase 1
-
-#### CROSSREF_VALIDATOR (NEW in v3.2.1)
-
-```yaml
-PURPOSE: Verify all internal references resolve correctly
-
-SCOPE:
-  ├─ Section references: "→ Section X" or "see Section X"
-  ├─ Anchor links: "#anchor-id" or "[text](#anchor)"
-  ├─ Code references: "function_name" (within same file)
-  ├─ Import references: "from module import X"
-  └─ External references: URLs, file paths
-
-VALIDATION_SEQUENCE:
-  STEP 1: Extract all references
-    regex_patterns:
-      section_ref: /→\s*(Section\s+\d+(\.\d+)?)/g
-      anchor_link: /\[([^\]]+)\]\(#([^)]+)\)/g
-      code_ref: /\b([a-z_][a-z0-9_]*)\b/gi  # then filter by SYMBOL_MAP
-      import_ref: /(?:from|import)\s+([a-zA-Z_][a-zA-Z0-9_.]*)/g
-      
-  STEP 2: Build reference index
-    REF_INDEX = {
-      "<reference>": {
-        "type": "<section|anchor|code|import|external>",
-        "source_location": "<file:line>",
-        "target_location": "<file:line | UNRESOLVED>"
-      }
-    }
-    
-  STEP 3: Validate each reference
-    FOR each ref in REF_INDEX:
-      IF ref.target_location == UNRESOLVED:
-        ├─ Log: [gap: broken_reference — {ref} at {source_location}]
-        └─ Add to BROKEN_REFS list
-        
-  STEP 4: Generate report
-    CROSSREF_REPORT = {
-      "total_references": <int>,
-      "resolved": <int>,
-      "broken": <int>,
-      "broken_details": [...]
-    }
-
-INTEGRATION_WITH_GATES:
-  ├─ Run after NAV_MAP construction (post GATE-00)
-  ├─ Run after each chunk completion
-  └─ Run in Phase 5 validation (GATE-04)
-
-PERFORMANCE:
-  ├─ Cache REF_INDEX per chunk
-  ├─ Incremental update on modifications
-  └─ Full rebuild only on NAV_MAP change
-```
 
 #### Step 0.4: Workspace Isolation
 
@@ -373,13 +324,17 @@ INVARIANT ALIGNMENT:
 ├─ Enables clean ROLLBACK_PROTOCOL (restore = discard WORK_DIR)
 └─ Simplifies GATE-04 diff: always working_copy ↔ SOURCE_FILE
 
+CODE EXECUTION GATE (INVAR-05):
+  IF any operation would exec LLM-generated code:
+    └─ Check config.yaml execution_mode before proceeding (see INVAR-05)
+
 ENVIRONMENT FALLBACK:
   IF filesystem_unavailable:
     WORK_DIR = IN_MEMORY_BUFFER
     chunk isolation preserved; same access rules apply
 ```
 
-#### Step 0.5: Session Checkpoint Init
+#### Step 0.5: Session Checkpoint Init ← UPDATED in v3.2
 
 ```
 PURPOSE: enable resumption across context resets or session interruptions
@@ -389,24 +344,31 @@ CHECKPOINT_STORE:
   ├─ Written: after every GATE passage and every completed batch
   └─ Format:
       {
-        "session_id":          "<uuid>",
-        "protocol_version":    "3.2.1",
-        "source_file":         "<path>",
-        "source_checksum":     "<sha256 of SOURCE_FILE>",
-        "gates_passed":        ["GATE-00", "GATE-01", ...],
-        "completed_batches":   ["BATCH_001", ...],
-        "open_issues":         ["ISSUE_ID", ...],
-        "chunk_cursor":        "<chunk_id>",
-        "timestamp":           "<ISO-8601>",
+        "session_id":           "<uuid>",
+        "protocol_version":     "3.2",
+        "source_file":          "<path>",
+        "source_checksum":      "<sha256 of SOURCE_FILE>",
+        "gates_passed":         ["GATE-00", "GATE-01", ...],
+        "completed_batches":    ["BATCH_001", ...],
+        "open_issues":          ["ISSUE_ID", ...],
+        "chunk_cursor":         "<chunk_id>",
+        "timestamp":            "<ISO-8601>",
+        "recursion_depth":      0,          ← NEW in v3.2
+        "max_recursion_depth":  1,          ← NEW in v3.2
         "cursor_state": {
-          "current_file":      "<file_path>",
-          "current_line":      "<int>",
-          "current_chunk":     "<chunk_id>",
-          "current_section":   "<section_name>",
-          "offset_delta":      "<int>"
-        },
-        "issue_dependency_graph": { ... }
+          "current_file":    "<path>",
+          "current_line":    0,
+          "current_chunk":   "<id>",
+          "offset_delta":    0
+        }
       }
+
+RECURSION CONTROL (NEW in v3.2):
+  ├─ recursion_depth: incremented each time a sub-task spawns a nested llm_query chain
+  ├─ max_recursion_depth: 1 (default; configurable in config.yaml, max recommended: 2)
+  ├─ IF recursion_depth >= max_recursion_depth:
+  │     └─ BLOCK spawn → log [gap: recursion_limit_reached — flatten or defer]
+  └─ RATIONALE: prevents exponential token growth from self-referential sub-task chains
 
 RESUMPTION:
   IF checkpoint.json exists at session start:
@@ -439,22 +401,23 @@ TARGET_PATTERNS:
 #### Tool Matrix
 
 ```
-| Need                        | Tool                                                      |
-|-----------------------------|-----------------------------------------------------------|
-| Find all occurrences        | grep -rn "pattern" dir/                                   |
-| Extract section             | sed -n '/START/,/END/p'                                   |
-| Compare sections            | diff <(sed -n '10,50p' A) <(sed -n '10,50p' B)           |
-| Validate JSON               | python -m json.tool file.json                             |
-| Validate YAML               | yamllint file.yaml                                        |
-| Validate TOML               | python -c "import tomllib; tomllib.load(open(f,'rb'))"    |
-| Find callers (ripgrep)      | rg -n "self\.<method>\("                                  |
-| AST parse Python            | python -c "import ast; ast.dump(ast.parse(open(f).read()))"|
-| AST parse JS/TS             | node -e "require('@babel/parser').parse(src, opts)"       |
-| Structural diff (AST)       | difftastic file_a file_b                                  |
-| Binary file detection       | file <path>  → if not text: skip + log [gap: binary_file] |
-| Encoding check              | python -c "open(f,'r',encoding='utf-8').read()" 2>&1      |
-| Count tokens (approx)       | wc -w <file> (×1.3 ≈ tokens)                              |
-| SHA-256 checksum            | sha256sum <file>                                          |
+| Need                        | Tool                                                           |
+|-----------------------------|----------------------------------------------------------------|
+| Find all occurrences        | grep -rn "pattern" dir/                                        |
+| Extract section             | sed -n '/START/,/END/p'                                        |
+| Compare sections            | diff <(sed -n '10,50p' A) <(sed -n '10,50p' B)                |
+| Validate JSON               | python -m json.tool file.json                                  |
+| Validate YAML               | yamllint file.yaml                                             |
+| Validate TOML               | python -c "import tomllib; tomllib.load(open(f,'rb'))"         |
+| Find callers (ripgrep)      | rg -n "self\.<method>\("                                       |
+| AST parse Python            | python -c "import ast; ast.dump(ast.parse(open(f).read()))"    |
+| AST parse JS/TS             | node -e "require('@babel/parser').parse(src, opts)"            |
+| Structural diff (AST)       | difftastic file_a file_b                                       |
+| Binary file detection       | file <path>  → if not text: skip + log [gap: binary_file]      |
+| Encoding check              | python -c "open(f,'r',encoding='utf-8').read()" 2>&1           |
+| Count tokens (approx)       | wc -w <file> (×1.3 ≈ tokens)                                   |
+| Count chars                 | wc -c <file>   ← use for PRINCIPLE-04 secondary limit check    |
+| SHA-256 checksum            | sha256sum <file>                                               |
 ```
 
 > **GATE-01**: `all target patterns scanned` → PROCEED to Phase 2
@@ -465,7 +428,7 @@ TARGET_PATTERNS:
 
 #### Issue Classification Format
 
-```text
+```
 ISSUE_ID: [SEV-1|SEV-2|SEV-3|SEV-4]
 LOCATION: file:line_start-line_end | chunk_id
 CATEGORY: [Structural|Logical|Performance|Security|Style]
@@ -495,7 +458,7 @@ SEV-4 [LOW]:      Style, cosmetic issues, minor technical debt
 
 #### Execution Plan Structure
 
-```yaml
+```
 EXECUTION_PLAN:
   VERSION: <timestamp>
   TOTAL_ISSUES: <count>
@@ -505,7 +468,7 @@ EXECUTION_PLAN:
     issues: [ISSUE_ID_1, ISSUE_ID_2]
     dependencies: NONE
     batch_type: parallel_safe | atomic | sequential
-    parallel_safe_justification: <required if batch_type = parallel_safe — see below>
+    parallel_safe_justification: <required if batch_type = parallel_safe>
     estimated_tokens: <count>
     rollback_point: <backup_location>
 
@@ -543,10 +506,10 @@ VERIFICATION:
 
 #### Pathology & Risk Registry
 
-```yaml
+```
 PATHOLOGY_REGISTRY:
   BUG-001:
-    severity: SEV-1|SEV-2|SEV-3|SEV-4   # unified scale — see PRINCIPLE-05
+    severity: SEV-1|SEV-2|SEV-3|SEV-4   # unified scale — PRINCIPLE-05
     location: file:lines
     defect: <description>
     mitigation_phase: <PHASE reference>
@@ -563,57 +526,7 @@ RULES:
   - Entries NEVER deleted
   - Status transitions: OPEN → [CLOSED] only
   - Aggregates all ISSUE_IDs across phases
-  - Provides defect traceability
   - Severity uses PRINCIPLE-05 unified scale exclusively
-```
-
-#### ISSUE_DEPENDENCY_GRAPH (NEW in v3.2.1)
-
-```yaml
-PURPOSE: Build dependency graph for issues (not just batches)
-
-ISSUE_DEPENDENCY_GRAPH:
-  format: DAG (Directed Acyclic Graph)
-
-  construction:
-    method_primary: AST-based static analysis
-    method_fallback: regex-based symbol extraction
-    fallback_order: FILE_ORDER priority if AST unavailable
-
-  ISSUE_GRAPH:
-    ISSUE_ID_1:
-      depends_on: []  # no dependencies
-      blocks: [ISSUE_ID_2, ISSUE_ID_3]
-      severity: SEV-1
-    ISSUE_ID_2:
-      depends_on: [ISSUE_ID_1]
-      blocks: [ISSUE_ID_4]
-      severity: SEV-2
-    ISSUE_ID_3:
-      depends_on: [ISSUE_ID_1]
-      blocks: []
-      severity: SEV-3
-
-  TOPOLOGICAL_ORDER: [ISSUE_ID_1, ISSUE_ID_2, ISSUE_ID_3, ISSUE_ID_4]
-
-  CYCLE_DETECTION:
-    algorithm: DFS with coloring (white/gray/black)
-    max_depth: 10
-    IF cycle detected:
-      ├─ Log: [gap: circular_dependency — {issue_A} ↔ {issue_B}]
-      ├─ Break by: SEV priority first, then FILE_ORDER
-      └─ Flag for human review in PATHOLOGY_REGISTRY
-
-  VISUALIZATION:
-    format: ASCII art or GraphViz DOT
-    output: WORK_DIR/issue_dependency_graph.{txt,dot}
-
-RULES:
-├─ Build graph BEFORE batch assignment
-├─ Each batch must contain issues with no internal dependencies
-├─ Cross-batch dependencies → sequential batch order
-├─ Dependency changes REQUIRE re-validation of EXECUTION_PLAN
-└─ Include graph in EXECUTION_PLAN output
 ```
 
 #### Batch Constraints
@@ -714,9 +627,10 @@ VALIDATION_CHECKLIST:
         └─ Proceed to COMMIT
 ```
 
-> **GATE-04**: `all validations PASS OR gaps marked, AND open_gap_count ≤ GATE-04 threshold` → PROCEED to Phase 5
->
+> **GATE-04** ← UPDATED in v3.2: see threshold rules below
+
 > **GATE-04 THRESHOLD RULES:**
+>
 > ```
 > BLOCK if ANY of:
 >   ├─ open SEV-1 gaps > 0              (zero tolerance for critical gaps)
@@ -730,6 +644,16 @@ VALIDATION_CHECKLIST:
 >
 > PASS (auto-proceed) if:
 >   └─ all above conditions false
+>
+> CONFIDENCE ADVISORY (NEW in v3.2):
+>   IF all completed QueryResults in session have confidence = HIGH
+>   AND total open gaps = 0:
+>     → log advisory: "early_exit eligible — all chunks HIGH confidence, zero gaps"
+>     → agent MAY skip remaining SEV-4-only batches with human acknowledgement
+>
+>   ⚠ WARNING: confidence is self-reported by the model.
+>     Do NOT auto-exit on confidence alone without human confirmation.
+>     Treat as an informational signal, not a gate condition.
 > ```
 
 ---
@@ -768,7 +692,7 @@ STEP 5: Validate Output Integrity
   - Clean navigation structure
 
 NOTE: Document Hygiene runs EXACTLY ONCE per delivery — in Phase 5.
-      FULL_MERGE (below) does NOT re-run hygiene; it operates on the
+      FULL_MERGE does NOT re-run hygiene; it operates on the
       already-cleaned working_copy produced here.
 ```
 
@@ -793,9 +717,9 @@ IF clean_output = TRUE:
   OUTPUT: Pure Markdown, publication-ready
 ```
 
-#### Auto-Generated Artifacts
+#### Auto-Generated Artifacts ← UPDATED in v3.2
 
-```yaml
+```
 OUTPUT_ARTIFACTS:
 
   INDEX.md:
@@ -820,7 +744,6 @@ OUTPUT_ARTIFACTS:
       - [chunk_id] patch already applied — no-op
 
   DECISION_RECORD.md:
-    content: rationale for each significant decision
     format: |
       DECISION_ID: <id>
       CONTEXT: <situation>
@@ -828,6 +751,45 @@ OUTPUT_ARTIFACTS:
       CHOSEN: <selected option>
       RATIONALE: <why this option>
       IMPACT: <consequences>
+
+  metrics.json (NEW in v3.2):
+    content: session telemetry for monitoring integration
+    format: |
+      {
+        "session": {
+          "id":               "<uuid>",
+          "duration_seconds": <int>,
+          "status":           "COMPLETE | PARTIAL | ABORTED"
+        },
+        "processing": {
+          "chunks_total":     <int>,
+          "issues_found":     <int>,
+          "issues_fixed":     <int>,
+          "gaps":             <int>
+        },
+        "gates": {
+          "GATE-00": "PASS | FAIL",
+          ...
+          "GATE-05": "PASS | FAIL"
+        },
+        "tokens": {
+          "total":            <int>,
+          "root_model":       <int>,   ← present only if MODEL_ROUTING configured
+          "leaf_model":       <int>,   ← present only if MODEL_ROUTING configured
+          "per_query_p50":    <int>,   ← median tokens per llm_query call
+          "per_query_p95":    <int>    ← 95th percentile tokens per llm_query call
+        },
+        "cost_estimate": {
+          "note": "populate from provider pricing; protocol does not hardcode rates",
+          "root_model_calls": <int>,
+          "leaf_model_calls": <int>
+        }
+      }
+
+    COLLECTION METHOD:
+      After each llm_query call, append raw_tokens to a running list.
+      At Phase 5: compute p50 = median(list), p95 = percentile(list, 95).
+      python: import statistics; p50 = statistics.median(tokens_list)
 ```
 
 > **GATE-05**: `all artifacts generated AND hygiene complete` → DELIVERY
@@ -848,8 +810,6 @@ EXECUTION (deterministic merge — NOT LLM regeneration):
   STEP 2: Load WORK_DIR/working_copy
           (Document Hygiene already applied in Phase 5 — DO NOT re-run)
   STEP 3: Run final checksum verification
-           NOTE: All patches MUST be idempotent (INVAR-04).
-                 working_copy is the ground truth; SOURCE_FILE is baseline only.
 
            expected_hash = sha256(apply_patches_idempotent(SOURCE_FILE, CHANGE_LOG))
            actual_hash   = sha256(WORK_DIR/working_copy)
@@ -886,15 +846,16 @@ INVARIANT ALIGNMENT:
 
 ### Mandatory Structure
 
-```text
+```
 ## STATE_SNAPSHOT
-current_task: <description>
+current_task:         <description>
 last_completed_batch: <id or ALL>
-next_action: <next operation or COMPLETE>
-blocked_by: <dependencies or NONE>
-active_issues: <list or NONE>
-session_id: <uuid>
-budget_used: <tokens_used> / <max_total_tokens>
+next_action:          <next operation or COMPLETE>
+blocked_by:           <dependencies or NONE>
+active_issues:        <list or NONE>
+session_id:           <uuid>
+budget_used:          <tokens_used> / <max_total_tokens>
+recursion_depth:      <int>   ← NEW in v3.2
 
 ## EXECUTION_PLAN
 [Step 1] <action> → <expected outcome>
@@ -907,13 +868,14 @@ Dependencies & Risks: <analysis>
 ...
 
 ## VALIDATION_REPORT
-- Syntax: ✅ PASS | ❌ FAIL: <details>
-- Logic/Constraints: ✅ PASS | ⚠️ WARNING: <details> | ❌ FAIL: <details>
-- Navigation Integrity: ✅ PASS | ⚠️ WARNING: <details>
-- Zero-Drift Check: ✅ PASS | ❌ FAIL: <details>
-- KEEP Preservation: ✅ PASS | ❌ FAIL: <details>
-- Token/Context Budget: ✅ PASS | ⚠️ WARNING: <details>
-- GATE-04 Gap Status: SEV-1 open: N | SEV-2 open: N | Total gaps: N/total | PASS/BLOCK/WARN
+- Syntax:              ✅ PASS | ❌ FAIL: <details>
+- Logic/Constraints:   ✅ PASS | ⚠️ WARNING: <details> | ❌ FAIL: <details>
+- Navigation Integrity:✅ PASS | ⚠️ WARNING: <details>
+- Zero-Drift Check:    ✅ PASS | ❌ FAIL: <details>
+- KEEP Preservation:   ✅ PASS | ❌ FAIL: <details>
+- Token/Context Budget:✅ PASS | ⚠️ WARNING: <details>
+- Recursion Depth:     <current> / <max>   ← NEW in v3.2
+- GATE-04 Gap Status:  SEV-1 open: N | SEV-2 open: N | Total gaps: N/total | PASS/BLOCK/WARN
 
 ## NAVIGATION_INDEX
 [Generated TOC + anchors]
@@ -928,12 +890,13 @@ Dependencies & Risks: <analysis>
 - [gap: <areas requiring human verification>]
 
 ## FINAL_STATUS
-- Issues found: X
-- Issues fixed: Y
-- Issues deferred: Z
-- Issues skipped (idempotent): W
-- New issues introduced: V
-- CONFIDENCE_SCORE: [0-100]
+- Issues found:              X
+- Issues fixed:              Y
+- Issues deferred:           Z
+- Issues skipped (idempotent):W
+- New issues introduced:     V
+- CONFIDENCE_SCORE:          [0-100]
+- recursion_depth_peak:      <int>   ← NEW in v3.2
 - NEXT_ACTIONS: <if human needed, else "COMPLETE">
 ```
 
@@ -943,7 +906,7 @@ Dependencies & Risks: <analysis>
 
 ### Backup & Recovery
 
-```yaml
+```
 BACKUP_PROCEDURE:
   trigger: BEFORE any write operation
   location: /tmp/backup_<filename>_<timestamp>
@@ -956,10 +919,11 @@ ROLLBACK_TRIGGERS:
   - Cascade error in dependent chunks
   - Unrecoverable state corruption
   - BUDGET_EXCEEDED during in-progress batch
+  - INVAR-05 violation (unsafe code exec attempted)   ← NEW in v3.2
 
 ROLLBACK_EXECUTION:
   command: REVERT: chunk_id → previous_state
-  output: "Step X failed – rolled back to <backup_id>"
+  output:  "Step X failed – rolled back to <backup_id>"
   recovery: restore file + report + await instruction
 ```
 
@@ -969,12 +933,13 @@ ROLLBACK_EXECUTION:
 
 ### Edge Case Handling
 
-```yaml
+```
 SCENARIOS:
 
   file_too_large:
     action:
       - Increase chunking granularity (reduce to 500-800 lines)
+      - Enforce PRINCIPLE-04 secondary limits (max_chars / max_tokens per chunk)
       - Prioritize SEV-1 issues only
       - Defer low-impact fixes (SEV-3, SEV-4)
       - Activate Environment Offload
@@ -995,7 +960,7 @@ SCENARIOS:
   context_overflow:
     action:
       - Trigger ROLLBACK immediately
-      - Resume with reduced chunk size
+      - Resume with reduced chunk size (also recheck secondary limits)
       - Force Environment Offload activation
 
   keep_veto_violation_attempted:
@@ -1028,85 +993,20 @@ SCENARIOS:
       - On resume: load checkpoint.json (Step 0.5)
       - Verify source_checksum
       - Restore state and continue from chunk_cursor
-```
 
-### DIAGNOSTICS_MODULE (NEW in v3.2.1)
+  recursion_limit_reached (NEW in v3.2):
+    action:
+      - BLOCK sub-task spawn
+      - Log: [gap: recursion_limit_reached — flatten task or defer to next session]
+      - Continue with remaining top-level batches
+      - Report in FINAL_STATUS recursion_depth_peak
 
-```yaml
-PURPOSE: Systematic troubleshooting for common failure patterns
-
-DIAGNOSTICS_MATRIX:
-  format: Symptom → Root Cause → Solution
-
-  entries:
-    - symptom: "grep confirms old pattern present after patch"
-      root_causes:
-        - "Regex pattern too greedy → matched beyond target"
-        - "Multiple occurrences → patch applied to wrong instance"
-      solutions:
-        - "Narrow regex with line anchors (^...$)"
-        - "Add context lines to patch specification"
-        
-    - symptom: "Cross-reference check fails"
-      root_causes:
-        - "Target section renamed during processing"
-        - "ANCHOR_ID collision between chunks"
-      solutions:
-        - "Run ANCHOR_INVENTORY after each chunk"
-        - "Use unique ANCHOR_PREFIX per chunk"
-        
-    - symptom: "Validation loop exceeds max iterations"
-      root_causes:
-        - "Patch introduces new violation while fixing old"
-        - "Complexity score increased beyond threshold"
-      solutions:
-        - "Split patch into smaller atomic changes"
-        - "Flag as NEEDS_HUMAN_REVIEW"
-        
-    - symptom: "Context overflow during chunk processing"
-      root_causes:
-        - "Chunk size too large for model context"
-        - "Accumulated state exceeds budget"
-      solutions:
-        - "Reduce chunk_size to 500-800 lines"
-        - "Force context compaction"
-        
-    - symptom: "Checkpoint resume fails with SOURCE_CHANGED"
-      root_causes:
-        - "File modified externally during session"
-        - "Multiple sessions writing to same file"
-      solutions:
-        - "ABORT — manual merge required"
-        - "Identify recoverable chunks via checksum"
-
-    - symptom: "CURSOR_TRACKING mismatch"
-      root_causes:
-        - "Parallel patches modified overlapping ranges"
-        - "offset_delta not updated atomically"
-      solutions:
-        - "Disable parallel for overlapping ranges"
-        - "Re-validate cursor.line post-patch"
-
-TEST_SCENARIOS:
-  scenario_1:
-    name: "Validation Loop Exhaustion"
-    trigger: "Validation finds 3 consecutive failures"
-    expected: "Diagnostics module identifies root cause from matrix"
-    
-  scenario_2:
-    name: "Token Budget Exhaustion"
-    trigger: "Session exceeds 90% token budget mid-batch"
-    expected: "Graceful suspension with checkpoint save"
-    
-  scenario_3:
-    name: "Circular Dependency Resolution"
-    trigger: "Issue dependency graph contains cycle"
-    expected: "Cycle detected, broken by priority, flagged for review"
-
-VERSIONING:
-  matrix_version: <protocol_version>
-  update_trigger: protocol version change
-  human_review_fallback: true for complex cases not in matrix
+  unsafe_code_exec_attempted (NEW in v3.2):
+    action:
+      - ABORT operation immediately (INVAR-05)
+      - Log: [gap: unsafe_execution_blocked — no sandbox or human gate confirmed]
+      - Trigger ROLLBACK for current batch
+      - Await human instruction to configure execution_mode in config.yaml
 ```
 
 ---
@@ -1119,7 +1019,8 @@ GATE-01: All target patterns scanned
 GATE-02: All issues classified with ISSUE_ID
 GATE-03: Plan validated AND no KEEP_VETO violations AND budget headroom confirmed
 GATE-04: All validations PASS OR gaps marked, AND gap counts within threshold
-GATE-05: All artifacts generated AND hygiene complete
+          + confidence advisory checked (informational only — see GATE-04 rules)
+GATE-05: All artifacts generated (incl. metrics.json) AND hygiene complete
 
 RULE: Gate FAIL → BLOCK → Cannot proceed to next phase
 ```
@@ -1132,10 +1033,12 @@ RULE: Gate FAIL → BLOCK → Cannot proceed to next phase
 INITIALIZATION:
 1.  Load target file
 2.  IF size > 5000 lines → activate Environment Offload (Step 0.2)
-3.  Generate QUICK_ORIENT header (Step 0.1)
+3.  Generate QUICK_ORIENT header (Step 0.1) — include recursion_depth: 0
 4.  Execute Step 0.4 → create WORK_DIR / IN_MEMORY_BUFFER
+        └─ Verify execution_mode in config.yaml (INVAR-05)
 5.  Execute Step 0.5 → init or restore session checkpoint
 6.  Execute Phase 0 → build NAV_MAP (all ops target WORK_DIR only)
+        └─ Apply PRINCIPLE-04 secondary limits during chunking
 
 PROCESSING:
 7.  Execute Phase 1 → Search & Discovery
@@ -1145,54 +1048,103 @@ PROCESSING:
 11. Each phase ends with GATE verification
 12. GATE FAIL → resolve before next phase
 13. Track all issues in PATHOLOGY_REGISTRY
+14. Track recursion_depth in STATE_SNAPSHOT; enforce max_recursion_depth
 
 VALIDATION:
-14. Every modification via Surgical Patch Engine (GUARDIAN)
-15. Check idempotency before each patch (INVAR-04)
-16. Deterministic Validation Loop per batch
-17. Max 2 patch iterations per defect
-18. Unresolved → mark `[gap: ...]`
-19. Check GATE-04 thresholds before proceeding
+15. Every modification via Surgical Patch Engine (GUARDIAN)
+16. Check idempotency before each patch (INVAR-04)
+17. Deterministic Validation Loop per batch
+18. Max 2 patch iterations per defect
+19. Unresolved → mark `[gap: ...]`
+20. Check GATE-04 thresholds before proceeding
+21. Log QueryResult.raw_tokens + latency_ms for metrics.json p50/p95
 
 DELIVERY:
-20. Apply Document Hygiene Protocol (Phase 5) — ONCE ONLY
-21. Generate all artifacts
-22. IF clean_output → strip meta-artifacts
-23. IF full_merge conditions met → execute OPTIONAL DELIVERY MODE: FULL_MERGE
-24. Output final structure
-25. Write final checkpoint (status: COMPLETE)
+22. Apply Document Hygiene Protocol (Phase 5) — ONCE ONLY
+23. Generate all artifacts including metrics.json
+24. IF clean_output → strip meta-artifacts
+25. IF full_merge conditions met → execute OPTIONAL DELIVERY MODE: FULL_MERGE
+26. Output final structure
+27. Write final checkpoint (status: COMPLETE)
 
 RECOVERY:
-26. Any unrecoverable error → ROLLBACK
-27. Write checkpoint with current state
-28. Report state + await instruction
+28. Any unrecoverable error → ROLLBACK
+29. Write checkpoint with current state
+30. Report state + await instruction
+```
+
+---
+
+## config.yaml REFERENCE ADDITIONS (v3.2)
+
+```yaml
+# --- Chunking ---
+chunking:
+  default_size:          1500       # lines
+  large_file_size:       800        # lines (files > 30k lines)
+  max_chars_per_chunk:   150000     # hard secondary limit
+  max_tokens_per_chunk:  30000      # hard secondary limit (approx)
+
+# --- Recursion ---
+recursion:
+  max_recursion_depth:   1          # 0 = no sub-tasks; 1 = one level (recommended)
+
+# --- Code Execution Gate (INVAR-05) ---
+security:
+  execution_mode:        human_gate # options: sandbox | human_gate | disabled
+  sandbox_type:          none       # options: docker | venv | restricted_subprocess | none
+
+# --- Model Routing (PRINCIPLE-06) ---
+# Remove section entirely to use single model for all operations.
+model_routing:
+  root_model:            ""         # frontier model for orchestration/gates; fill in at runtime
+  leaf_model:            ""         # cheaper model for llm_query chunk calls; fill in at runtime
+
+# --- Session ---
+session:
+  max_tokens:            100000
+  max_time_minutes:      60
 ```
 
 ---
 
 ## INTEGRATION NOTES
 
-This protocol synthesizes:
+This protocol synthesizes and extends all prior versions:
+
 - Large-File Agent Protocol (chunking, phases, validation)
-- QUICK_ORIENT Header (state synchronization)
+- QUICK_ORIENT Header (state synchronization + recursion_depth field)
 - Environment Offload (context management)
-- Workspace Isolation (source immutability, Step 0.4)
-- Session Checkpoint (cross-session persistence, Step 0.5)
+- Workspace Isolation (source immutability, Step 0.4 + INVAR-05 hook)
+- Session Checkpoint (cross-session persistence, recursion_depth field)
 - Surgical Patch Engine GUARDIAN (minimal-change validation + idempotency)
 - Deterministic Validation Loop (self-verification)
-- Verification Gate Protocol (atomic blockers with gap thresholds)
+- Verification Gate Protocol (atomic blockers + confidence advisory)
 - Pathology & Risk Registry (unified severity scale, defect memory)
 - Hard Invariants + Anti-Fabrication (hallucination prevention)
 - S-5 Veto (immutable content protection)
 - Patch Idempotency Guarantee (INVAR-04)
+- LLM Code Execution Gate (INVAR-05) ← NEW v3.2
+- Chunking Secondary Limits (PRINCIPLE-04) ← NEW v3.2
+- Recursion Depth Control (Step 0.5 + STATE_SNAPSHOT) ← NEW v3.2
+- Confidence Advisory in GATE-04 (informational early_exit signal) ← NEW v3.2
+- Model Routing Contract (PRINCIPLE-06, runtime config) ← NEW v3.2
+- metrics.json with p50/p95 token distribution (Phase 5) ← NEW v3.2
 - Document Hygiene Protocol (output cleanliness, single-pass)
 - Clean Flag (publication-ready output)
 - Optional Full Merge Mode (controlled full-file delivery post GATE-05)
 - Operation Budget (token + time limits with graceful suspension)
-- Expanded Tool Matrix (AST, binary detection, encoding, TOML, checksums)
-- llm_query Specification (typed, retry-aware, context-scoped)
+- Expanded Tool Matrix (AST, binary detection, encoding, TOML, char count)
+- llm_query Specification (typed, retry-aware, context-scoped, model_used + latency_ms)
 - Parallel-Safe Batch Validation (P1–P4 pre-checks)
 - Unified Severity Scale (SEV-1..4 across all registries)
 
-Architecture: deterministic, verifiable, rollback-safe, session-resumable, production-grade.
+**Architecture**: deterministic, verifiable, rollback-safe, session-resumable,
+cost-aware, recursion-bounded, execution-gated, production-grade.
 
+---
+
+**PROTOCOL STATUS**: Production-Ready
+**VERSION**: 3.2.0
+**COMPATIBILITY**: All LLM agents with tool-access capabilities
+**SUPERSEDES**: v3.1 (PROTOCOL.base.md), v3.0 (ULTIMATE_LARGE_FILE_AGENT_PROTOCOL.md)

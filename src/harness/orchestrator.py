@@ -3,13 +3,21 @@ TITAN FUSE Protocol - Orchestrator
 
 Execution layer that coordinates the processing pipeline.
 Implements the TIER structure and GATE validation.
+
+Updated for v3.2:
+- INVAR-05: LLM Code Execution Gate integration
+- PRINCIPLE-04: Secondary chunk limits
+- GATE-04: Confidence advisory
+- metrics.json: p50/p95 token distribution
 """
 
 import json
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
 from enum import Enum
+import statistics
 
 
 class Phase(Enum):
@@ -288,11 +296,20 @@ class Orchestrator:
     def _validate_gate_04(self, session: Dict) -> Tuple[bool, Dict]:
         """
         GATE-04: Validations pass OR gaps within threshold
-
+        
+        Updated in v3.2:
+        - Added confidence advisory check
+        
         Threshold Rules:
         - BLOCK: SEV-1 gaps > 0, SEV-2 gaps > 2, total gaps > 20%
         - WARN: SEV-3 gaps > 5, SEV-4 gaps > 10
         - PASS: All above false
+        
+        Confidence Advisory (NEW in v3.2):
+        - IF all completed QueryResults have confidence = HIGH
+          AND total open gaps = 0:
+          → log advisory: "early_exit eligible"
+          → agent MAY skip remaining SEV-4-only batches with human acknowledgement
         """
         details = {
             "gate": "GATE-04",
@@ -346,6 +363,20 @@ class Orchestrator:
 
         if sev4_gaps > 10:
             warnings.append(f"SEV-4 gaps: {sev4_gaps} (max: 10)")
+
+        # NEW in v3.2: Confidence advisory check
+        confidence_summary = session.get("confidence_summary", {})
+        all_high_confidence = confidence_summary.get("all_high", False)
+        
+        if all_high_confidence and total_gaps == 0:
+            details["checks"].append({
+                "name": "confidence_advisory",
+                "status": "ADVISORY",
+                "message": "early_exit eligible — all chunks HIGH confidence, zero gaps"
+            })
+            details["early_exit_eligible"] = True
+            # Note: This is advisory only, does NOT auto-exit
+            # Requires human acknowledgement to skip SEV-4 batches
 
         if blocked:
             return False, details
@@ -668,6 +699,11 @@ class Orchestrator:
 
         - Document Hygiene
         - Artifact Generation
+        
+        Updated in v3.2:
+        - metrics.json includes p50/p95 token distribution
+        - Model routing breakdown
+        - Confidence summary
         """
         artifacts = []
 
@@ -688,19 +724,65 @@ class Orchestrator:
             f.write(f"Session: {session.get('id', 'unknown')}\n\n")
         artifacts.append(str(change_log_path))
 
+        # NEW in v3.2: Enhanced metrics with p50/p95
         metrics_path = self.outputs_dir / "metrics.json"
+        
+        # Get token and latency metrics from session
+        token_history = session.get("token_history", [])
+        latency_history = session.get("latency_history", [])
+        
+        # Calculate percentiles
+        token_metrics = self._calculate_percentiles(token_history)
+        latency_metrics = self._calculate_percentiles(latency_history)
+        
+        # Get model routing info
+        model_routing = session.get("model_routing", {})
+        
+        # Get confidence summary
+        confidence = session.get("confidence_summary", {})
+        
+        metrics_data = {
+            "session": {
+                "id": session.get("id"),
+                "status": "COMPLETE",
+                "recursion_depth_peak": session.get("recursion_depth_peak", 0)
+            },
+            "processing": {
+                "chunks_total": len(session.get("chunks", {})),
+                "issues_found": len(session.get("open_issues", [])),
+                "gaps": len(session.get("known_gaps", []))
+            },
+            "tokens": {
+                "total": session.get("tokens_used", 0),
+                "max": session.get("max_tokens", 100000),
+                "per_query_p50": token_metrics.get("p50", 0),
+                "per_query_p95": token_metrics.get("p95", 0),
+                "total_queries": token_metrics.get("count", 0)
+            },
+            "latency": {
+                "p50_ms": latency_metrics.get("p50", 0),
+                "p95_ms": latency_metrics.get("p95", 0),
+                "mean_ms": latency_metrics.get("mean", 0)
+            },
+            "model_routing": {
+                "root_model_calls": model_routing.get("root_calls", 0),
+                "leaf_model_calls": model_routing.get("leaf_calls", 0),
+                "root_model_tokens": model_routing.get("root_tokens", 0),
+                "leaf_model_tokens": model_routing.get("leaf_tokens", 0)
+            },
+            "confidence": {
+                "all_high": confidence.get("all_high", False),
+                "high_count": confidence.get("high_count", 0),
+                "med_count": confidence.get("med_count", 0),
+                "low_count": confidence.get("low_count", 0)
+            },
+            "gates": {
+                g: s.get("status") for g, s in session.get("gates", {}).items()
+            }
+        }
+        
         with open(metrics_path, "w") as f:
-            json.dump({
-                "session": {
-                    "id": session.get("id"),
-                    "status": "COMPLETE"
-                },
-                "processing": {
-                    "chunks_total": len(session.get("chunks", {})),
-                    "issues_found": len(session.get("open_issues", [])),
-                    "gaps": len(session.get("known_gaps", []))
-                }
-            }, f, indent=2)
+            json.dump(metrics_data, f, indent=2)
         artifacts.append(str(metrics_path))
 
         return {
@@ -708,4 +790,29 @@ class Orchestrator:
             "phase": "delivery_hygiene",
             "artifacts": artifacts,
             "message": "Delivery and hygiene complete"
+        }
+    
+    def _calculate_percentiles(self, values: List[int]) -> Dict:
+        """
+        Calculate p50, p95, mean for a list of values.
+        
+        Args:
+            values: List of numeric values
+            
+        Returns:
+            Dict with p50, p95, mean, count
+        """
+        if not values:
+            return {"p50": 0, "p95": 0, "mean": 0, "count": 0}
+        
+        sorted_vals = sorted(values)
+        n = len(sorted_vals)
+        
+        return {
+            "p50": int(statistics.median(sorted_vals)),
+            "p95": int(sorted_vals[int(n * 0.95)]) if n >= 20 else int(sorted_vals[-1]),
+            "mean": int(statistics.mean(sorted_vals)),
+            "min": int(sorted_vals[0]),
+            "max": int(sorted_vals[-1]),
+            "count": n
         }

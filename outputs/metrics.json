@@ -1,60 +1,11 @@
 {
   "session": {
-    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "start_time": "2024-01-15T10:30:00Z",
-    "end_time": "2024-01-15T11:00:47Z",
-    "duration_seconds": 1847,
+    "id": "2358ff3b-ce92-48db-a8de-ba47a94e7d22",
     "status": "COMPLETE"
   },
-  "source": {
-    "file": "example.md",
-    "lines": 25430,
-    "chunks": 18,
-    "size_bytes": 524288
-  },
   "processing": {
-    "issues_found": 47,
-    "issues_fixed": 42,
-    "issues_deferred": 3,
-    "issues_skipped": 2,
-    "gaps": 2,
-    "gap_severity": {
-      "SEV-1": 0,
-      "SEV-2": 1,
-      "SEV-3": 1,
-      "SEV-4": 0
-    },
-    "chunks_processed": 18,
-    "chunks_failed": 0,
-    "batches_completed": 12
-  },
-  "budget": {
-    "tokens_used": 78432,
-    "tokens_max": 100000,
-    "utilization_pct": 78.4,
-    "llm_query_calls": 24,
-    "avg_chunk_tokens": 3268
-  },
-  "gates": {
-    "GATE-00": "PASS",
-    "GATE-01": "PASS",
-    "GATE-02": "PASS",
-    "GATE-03": "PASS",
-    "GATE-04": "WARN",
-    "GATE-05": "PASS"
-  },
-  "quality": {
-    "confidence_score": 94,
-    "zero_drift_violations": 0,
-    "keep_preserved": true,
-    "idempotency_verified": true
-  },
-  "artifacts": {
-    "index": "outputs/INDEX.md",
-    "symbol_map": "outputs/SYMBOL_MAP.json",
-    "change_log": "outputs/CHANGE_LOG.md",
-    "decision_record": null,
-    "merged_output": "outputs/example_merged.md"
-  },
-  "errors": []
+    "chunks_total": 0,
+    "issues_found": 0,
+    "gaps": 0
+  }
 }
