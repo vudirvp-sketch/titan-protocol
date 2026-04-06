@@ -235,17 +235,26 @@ jobs:
           with open('checkpoints/checkpoint.schema.json', 'r') as f:
               schema = json.load(f)
 
-          # Test with example data
+          # Test with example data - FIXED: Added all required fields
+          # Required fields per schema: session_id, protocol_version, source_file,
+          # source_checksum, gates_passed, completed_batches, open_issues,
+          # chunk_cursor, timestamp, cursor_state
           example_checkpoint = {
               "session_id": "db4c1630-33e7-4b08-aa3f-a2721270f9ae",
-              "protocol_version": "3.2.0",
+              "protocol_version": "3.2.1",
               "source_file": "test.md",
               "source_checksum": "a" * 64,
               "gates_passed": ["GATE-00", "GATE-01"],
               "completed_batches": ["BATCH_001"],
+              "open_issues": [],  # FIXED: Added required field
+              "chunk_cursor": "C1",  # FIXED: Added required field
               "timestamp": "2024-01-15T10:30:00Z",
-              "resumable": True,
-              "resumption_type": "FULL"
+              "cursor_state": {  # FIXED: Added required field with nested required fields
+                  "current_file": "test.md",
+                  "current_line": 100,
+                  "current_chunk": "C1",
+                  "offset_delta": 0
+              }
           }
 
           try:

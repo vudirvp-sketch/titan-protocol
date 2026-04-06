@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 TITAN FUSE Protocol - Checkpoint Validation Tool
-Version: 1.0.0
+Version: 1.1.0
 Purpose: Validates checkpoint.json files for integrity and resumability
 """
 
@@ -67,7 +67,8 @@ def load_checkpoint(checkpoint_path: str) -> Optional[Dict]:
 
 
 def validate_checkpoint_schema(checkpoint: Dict) -> Tuple[bool, List[str]]:
-    """Validate checkpoint has required fields."""
+    """Validate checkpoint has required fields per checkpoint.schema.json v3.2.1."""
+    # FIXED: Complete list of required fields matching checkpoint.schema.json
     required_fields = [
         "session_id",
         "protocol_version",
@@ -75,7 +76,10 @@ def validate_checkpoint_schema(checkpoint: Dict) -> Tuple[bool, List[str]]:
         "source_checksum",
         "gates_passed",
         "completed_batches",
-        "timestamp"
+        "open_issues",      # FIXED: Added - was missing
+        "chunk_cursor",     # FIXED: Added - was missing
+        "timestamp",
+        "cursor_state"      # FIXED: Added - was missing
     ]
 
     issues = []
@@ -89,6 +93,21 @@ def validate_checkpoint_schema(checkpoint: Dict) -> Tuple[bool, List[str]]:
 
     if "completed_batches" in checkpoint and not isinstance(checkpoint["completed_batches"], list):
         issues.append("completed_batches must be a list")
+
+    # FIXED: Validate open_issues is a list
+    if "open_issues" in checkpoint and not isinstance(checkpoint["open_issues"], list):
+        issues.append("open_issues must be a list")
+
+    # FIXED: Validate cursor_state is an object with required nested fields
+    if "cursor_state" in checkpoint:
+        cursor_state = checkpoint["cursor_state"]
+        if not isinstance(cursor_state, dict):
+            issues.append("cursor_state must be an object")
+        else:
+            cursor_required = ["current_file", "current_line", "current_chunk", "offset_delta"]
+            for field in cursor_required:
+                if field not in cursor_state:
+                    issues.append(f"cursor_state missing required field: {field}")
 
     return len(issues) == 0, issues
 
