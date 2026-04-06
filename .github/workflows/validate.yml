@@ -198,13 +198,18 @@ jobs:
             mv PROTOCOL.md.backup PROTOCOL.md
           fi
 
-  validate-checkpoints:
+validate-checkpoints:
     name: Validate Checkpoint Schema
     runs-on: ubuntu-latest
     needs: validate-scripts
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # --- НАЧАЛО НОВОГО ШАГА ---
+      - name: Reassemble PROTOCOL.md before validation
+        run: ./scripts/assemble_protocol.sh
+      # --- КОНЕЦ НОВОГО ШАГА ---
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -228,7 +233,7 @@ jobs:
 
           # Test with example data
           example_checkpoint = {
-              "session_id": "test-1234-5678-90ab-cdef",
+              "session_id": "db4c1630-33e7-4b08-aa3f-a2721270f9ae",
               "protocol_version": "3.2.0",
               "source_file": "test.md",
               "source_checksum": "a" * 64,

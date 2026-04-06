@@ -184,11 +184,14 @@ verify_assembly() {
     fi
 
     # Verify no broken markdown syntax
-    if grep -E '^\s*```[^`]*$' "$OUTPUT_FILE" | wc -l | awk '{if($1%2!=0)exit 1}'; then
-        log_info "Code blocks balanced"
-    else
-        log_warn "Unbalanced code blocks detected"
-    fi
+    local open_count=$(grep -c '^```' "$OUTPUT_FILE")
+local close_count=$(grep -c '^```$' "$OUTPUT_FILE")  # только строки с тремя бэктиками в конце
+
+if [ "$open_count" -eq "$close_count" ]; then
+    log_info "Code blocks balanced ($open_count pairs)"
+else
+    log_warn "Unbalanced code blocks detected! Open: $open_count, Close: $close_count"
+fi
 
     log_info "Verification complete"
     return 0
