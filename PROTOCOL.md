@@ -1,6 +1,6 @@
 # TITAN FUSE PROTOCOL - ASSEMBLED
 
-<!-- Generated: 2026-04-06T06:28:50Z -->
+<!-- Generated: 2026-04-06T08:40:37Z -->
 <!-- Version: 3.2.0 -->
 <!-- Components: PROTOCOL.ext.md + PROTOCOL.base.md -->
 
@@ -10,6 +10,13 @@ extends: Large-File Agent Protocol v3.1
 tier: -1
 domain: repo_bootstrap; self_initialization; repo_navigation
 status: DRAFT — append to main protocol before TIER 0
+purpose: "TIER -1 Bootstrap extension for repository navigation and self-initialization"
+audience: ["agents"]
+when_to_read: "When agent enters repository or needs to self-initialize"
+related_files: ["PROTOCOL.base.md", "SKILL.md", "AGENTS.md"]
+stable_sections: ["PHASE -1 — ENTRY DETECTION", "Step -1.2: Bootstrap Sequence"]
+emotional_tone: "directive, bootstrapping, initialization"
+ideal_reader_state: "starting a new session or entering a repository"
 changelog: v1.0 — initial bootstrap phase; repo navigation patterns; repo-as-host model; .gitignore; multi-file coordination stub
 ---
 
@@ -389,6 +396,13 @@ consensus_score: 96
 optimized: production_grade
 input_languages: en
 trace_mode: true
+purpose: "Base protocol specification (TIER 0-6) for deterministic large-file processing"
+audience: ["agents", "developers"]
+when_to_read: "When understanding core protocol mechanics and invariants"
+related_files: ["PROTOCOL.ext.md", "SKILL.md", "config.yaml"]
+stable_sections: ["TIER 0 — INVARIANTS", "PRINCIPLE-05", "GATE-04 THRESHOLD RULES"]
+emotional_tone: "technical, precise, authoritative"
+ideal_reader_state: "implementing or debugging protocol behavior"
 changelog: v3.1 — fixes: EXECUTION_DIRECTIVE numbering, GATE-04 threshold, severity scale unification, llm_query spec, parallel_safe definition, double hygiene, checksum idempotency; additions: session persistence, tool matrix expansion, operation budget, idempotency guarantee
 ---
 
@@ -1305,8 +1319,7 @@ This protocol synthesizes:
 - Unified Severity Scale (SEV-1..4 across all registries)
 
 Architecture: deterministic, verifiable, rollback-safe, session-resumable, production-grade.
-```
 
 ---
 <!-- END OF ASSEMBLED PROTOCOL -->
-<!-- Assembly timestamp: 2026-04-06T06:28:50Z -->
+<!-- Assembly timestamp: 2026-04-06T08:40:37Z -->

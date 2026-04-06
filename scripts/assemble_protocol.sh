@@ -143,6 +143,13 @@ assemble_protocol() {
         echo "<!-- Assembly timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ) -->"
     } >> "$OUTPUT_FILE"
 
+    # Auto-fix unbalanced code blocks: if odd number of fences, append closing ```
+    local fence_count=$(grep -c '^\s*```' "$OUTPUT_FILE" || true)
+    if [ $((fence_count % 2)) -ne 0 ]; then
+        log_warn "Odd fence count ($fence_count) detected after assembly — appending closing \`\`\`"
+        echo '```' >> "$OUTPUT_FILE"
+    fi
+
     log_info "Protocol assembled successfully: $OUTPUT_FILE"
 
     # Report file stats
@@ -184,14 +191,17 @@ verify_assembly() {
     fi
 
     # Verify no broken markdown syntax
-    local open_count=$(grep -c '^```' "$OUTPUT_FILE")
-local close_count=$(grep -c '^```$' "$OUTPUT_FILE")  # только строки с тремя бэктиками в конце
+    # Count ALL lines starting with ``` (with or without language tag) — same pattern as CI
+    local block_count=$(grep -c '^\s*```' "$OUTPUT_FILE" || true)
 
-if [ "$open_count" -eq "$close_count" ]; then
-    log_info "Code blocks balanced ($open_count pairs)"
-else
-    log_warn "Unbalanced code blocks detected! Open: $open_count, Close: $close_count"
-fi
+    if [ $((block_count % 2)) -eq 0 ]; then
+        log_info "Code blocks balanced ($block_count fences = $((block_count / 2)) pairs)"
+    else
+        log_error "Unbalanced code blocks! Total fences: $block_count (must be even)"
+        log_error "Offending lines:"
+        grep -n '^\s*```' "$OUTPUT_FILE" | tail -20
+        return 1
+    fi
 
     log_info "Verification complete"
     return 0
