@@ -1,74 +1,90 @@
 {
-  "version": "3.2.0",
+  "version": "3.2.1",
   "generated": "2026-04-07T00:00:00Z",
-  "aliases": {
-    "verification_gates": ["GATE-00", "GATE-01", "GATE-02", "GATE-03", "GATE-04", "GATE-05"],
-    "gates": ["verification_gates"],
-    "validation": ["verification_gates"],
-    "checks": ["verification_gates"],
-    "chunking": ["PRINCIPLE-04"],
-    "rollback": ["TIER 4"],
-    "failsafe": ["TIER 5"],
-    "bootstrap": ["TIER -1"],
-    "invariants": ["INVAR-01", "INVAR-02", "INVAR-03", "INVAR-04"]
-  },
   "navigation": {
-    "quick_start": {
-      "file": "README.md",
-      "section": "quick-start"
+    "entry_points": {
+      "agents": "AGENTS.md",
+      "human": "README.md",
+      "system": "AI_MISSION.md",
+      "config": "SKILL.md"
     },
-    "tier_structure": {
-      "file": "PROTOCOL.md",
-      "section": "tier-structure"
-    },
-    "verification_gates": {
-      "file": "PROTOCOL.md",
-      "section": "verification-gates"
-    },
-    "session_limits": {
-      "file": "config.yaml",
-      "section": "session:"
-    },
-    "custom_validators": {
-      "file": "skills/validators/",
-      "description": "Create .js file"
-    },
-    "resume_session": {
-      "file": "checkpoints/",
-      "description": "Load checkpoint.json"
-    },
-    "protocol_version": {
-      "file": "VERSION"
-    },
-    "changelog": {
-      "file": "CHANGELOG.md"
+    "protocol_files": [
+      {
+        "path": "AGENTS.md",
+        "purpose": "Agent entry point with navigation matrix",
+        "tier": -1
+      },
+      {
+        "path": "README.md",
+        "purpose": "Human-friendly overview",
+        "tier": -1
+      },
+      {
+        "path": "SKILL.md",
+        "purpose": "Agent configuration and constraints",
+        "tier": -1
+      },
+      {
+        "path": "PROTOCOL.md",
+        "purpose": "Full protocol specification",
+        "tier": "0-6"
+      },
+      {
+        "path": "AI_MISSION.md",
+        "purpose": "System prompt bridge",
+        "tier": -1
+      },
+      {
+        "path": "config.yaml",
+        "purpose": "Runtime defaults",
+        "tier": -1
+      }
+    ],
+    "directories": {
+      "inputs": {
+        "purpose": "Files to process",
+        "type": "input"
+      },
+      "outputs": {
+        "purpose": "Generated artifacts",
+        "type": "output"
+      },
+      "checkpoints": {
+        "purpose": "Session persistence",
+        "type": "state"
+      },
+      "skills/validators": {
+        "purpose": "Custom validators",
+        "type": "extension"
+      }
     }
   },
-  "concepts": {
-    "deterministic_execution": {
-      "file": "PROTOCOL.base.md",
-      "section": "PRINCIPLE-01",
-      "description": "Every action has clear INPUT -> OUTPUT specification"
+  "aliases": {
+    "verification_gates": ["GATE-00", "GATE-01", "GATE-02", "GATE-03", "GATE-04", "GATE-05"],
+    "gates": "verification_gates",
+    "validation": "verification_gates",
+    "checks": "verification_gates",
+    "chunking": "PRINCIPLE-04",
+    "rollback": "TIER 4",
+    "failsafe": "TIER 5",
+    "invariants": ["INVAR-01", "INVAR-02", "INVAR-03", "INVAR-04", "INVAR-05"]
+  },
+  "shortcuts": {
+    "start": {
+      "action": "read",
+      "target": "AGENTS.md"
     },
-    "tool_first_navigation": {
-      "file": "PROTOCOL.base.md",
-      "section": "PRINCIPLE-02",
-      "description": "Use grep, regex, AST, chunk before reading entire file"
+    "process": {
+      "action": "process",
+      "target": "inputs/"
     },
-    "phased_execution": {
-      "file": "PROTOCOL.base.md",
-      "section": "PRINCIPLE-03",
-      "description": "ANALYZE -> PLAN -> EXECUTE -> VALIDATE -> DELIVER"
+    "resume": {
+      "action": "read",
+      "target": "checkpoints/checkpoint.json"
     },
-    "zero_drift_guarantee": {
-      "file": "PROTOCOL.base.md",
-      "section": "INVAR-03",
-      "description": "Preserve original formatting, modify only targeted elements"
-    },
-    "anti_fabrication": {
-      "file": "PROTOCOL.base.md",
-      "section": "INVAR-01",
-      "description": "No fabrication - absent data marked as [gap: not in sources]"
+    "config": {
+      "action": "read",
+      "target": "config.yaml"
     }
   }
 }

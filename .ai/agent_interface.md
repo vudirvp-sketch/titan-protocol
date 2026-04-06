@@ -1,66 +1,119 @@
-# Agent Interface — TITAN FUSE Protocol
+# TITAN FUSE Agent Interface
 
 ## Command Specification
 
-### Entry Points
-
-| Command | Description | Required Args |
-|---------|-------------|---------------|
-| `titan init` | Initialize session | `--input <path>` |
-| `titan process` | Execute pipeline | `--phase <0-5>` |
-| `titan checkpoint` | Save checkpoint | `--force` |
-| `titan resume` | Resume session | `--checkpoint <path>` |
-| `titan validate` | Run validations | `--gate <00-05>` |
-| `titan status` | Show state | `--verbose` |
-| `titan rollback` | Revert changes | `--to <backup_id>` |
-
-### Options
+### Navigation Commands
 
 ```
---input <path>         Input file path (required for init)
---output <path>        Output directory (default: outputs/)
---chunk-size <n>       Chunk size in lines (default: 1500)
---max-tokens <n>       Token budget (default: 100000)
---max-time <n>         Time budget in minutes (default: 60)
---clean                Strip metadata from output
---full-merge           Generate full merged file
---dry-run              Plan only, no execution
---verbose              Enable verbose logging
---force                Force operation (use with caution)
+READ <file>           — Load file into context
+NAVIGATE <directory>  — Change working context
+LIST <directory>      — List contents
 ```
 
-### Return Codes
+### Processing Commands
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | GATE failure |
-| 2 | Validation error |
-| 3 | Budget exceeded |
-| 4 | Rollback triggered |
-| 5 | User abort |
-| 127 | Configuration error |
-
-### Output Format
-
-All commands output structured JSON to stdout:
-
-```json
-{
-  "status": "success|failure|warning",
-  "code": 0,
-  "message": "Human-readable message",
-  "data": {
-    "state_snapshot": { ... },
-    "gates": { ... },
-    "metrics": { ... }
-  }
-}
+```
+PROCESS <file>        — Begin processing target file
+RESUME <checkpoint>   — Resume from checkpoint
+VALIDATE              — Run validation checks
+COMMIT                — Commit current batch
+ROLLBACK              — Revert to last checkpoint
 ```
 
-## Integration Notes
+### Query Commands
 
-- Agent reads `AGENTS.md` first for navigation
-- `SKILL.md` provides configuration overrides
-- `PROTOCOL.md` is assembled from `.base` and `.ext`
-- Checkpoints enable cross-session persistence
+```
+STATUS                — Return STATE_SNAPSHOT
+GATES                 — Return gate status
+BUDGET                — Return budget status
+GAPS                  — Return open gaps
+```
+
+### Output Commands
+
+```
+OUTPUT <artifact>     — Generate specific artifact
+MERGE                 — Generate full merge
+CLEAN                 — Apply document hygiene
+```
+
+## Response Format
+
+### Success Response
+
+```
+✅ <operation> complete
+  - Result: <description>
+  - Next: <suggested action>
+```
+
+### Error Response
+
+```
+❌ <operation> failed
+  - Reason: <error description>
+  - Recovery: <suggested fix>
+```
+
+### Blocked Response
+
+```
+⛔ BLOCKED at <GATE-XX>
+  - Condition: <failed condition>
+  - Required: <what needs to be fixed>
+  - Action: STOP + await instruction
+```
+
+## Session Lifecycle
+
+```
+INIT → BOOTSTRAP → PHASE_0 → PHASE_1 → PHASE_2 → PHASE_3 → PHASE_4 → PHASE_5 → COMPLETE
+         ↓            ↓         ↓         ↓         ↓         ↓         ↓
+      GATE-REPO    GATE-00   GATE-01   GATE-02   GATE-03   GATE-04   GATE-05
+```
+
+## Checkpoint Protocol
+
+### Write Checkpoint
+```
+CHECKPOINT WRITE
+  - Triggered by: gate passage, batch completion, timeout
+  - Location: checkpoints/checkpoint.json
+  - Atomic: full write or none
+```
+
+### Read Checkpoint
+```
+CHECKPOINT READ <path>
+  - Validate: protocol_version, source_checksum
+  - Restore: gates_passed, completed_batches, chunk_cursor
+  - Resume: continue from last state
+```
+
+## Interactive Approval
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ APPROVAL REQUIRED                                           │
+│ ─────────────────────────────────────────────────────────── │
+│ Reason: [description]                                       │
+│ Current: [current value]                                    │
+│ Requested: [requested value]                                │
+│ Impact: [consequences]                                      │
+│ ─────────────────────────────────────────────────────────── │
+│ Options: [Y]es / [N]o / [A]lways / [C]ancel                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Error Codes
+
+| Code | Meaning | Action |
+|------|---------|--------|
+| E001 | Source file not found | Verify path |
+| E002 | Checksum mismatch | Source modified |
+| E003 | Budget exceeded | Increase limit or split |
+| E004 | Gate blocked | Fix condition |
+| E005 | Validation failed | Apply patch or rollback |
+| E006 | Recursion limit | Flatten or defer |
+| E007 | Binary file | Skip file |
+| E008 | Malformed config | Fix YAML/JSON |

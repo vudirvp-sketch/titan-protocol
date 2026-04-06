@@ -1,320 +1,296 @@
 """
-TITAN FUSE Protocol - Event Bus
+Event Bus for TITAN FUSE Protocol.
 
-Structured event-driven communication for all phases and GATE operations.
-Replaces raw log parsing with typed, machine-readable events.
+Provides event-driven architecture with severity-based dispatch
+and handler failure escalation.
+
+Author: TITAN FUSE Team
+Version: 3.2.3
 """
 
-import json
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, Any, List, Callable, Optional
-from dataclasses import dataclass, asdict
 from enum import Enum
-from pathlib import Path
+from typing import Dict, List, Callable, Any, Optional
+import logging
+import traceback
 
 
-class EventType(Enum):
-    """Standard event types for TITAN Protocol."""
-    # Session events
-    SESSION_INIT = "session.init"
-    SESSION_RESUME = "session.resume"
-    SESSION_COMPLETE = "session.complete"
-    SESSION_PAUSE = "session.pause"
-    SESSION_FAIL = "session.fail"
-
-    # Phase events
-    PHASE_START = "phase.start"
-    PHASE_COMPLETE = "phase.complete"
-    PHASE_FAIL = "phase.fail"
-
-    # Gate events
-    GATE_PASS = "gate.pass"
-    GATE_FAIL = "gate.fail"
-    GATE_WARN = "gate.warn"
-    GATE_BLOCK = "gate.block"
-
-    # Chunk events
-    CHUNK_START = "chunk.start"
-    CHUNK_COMPLETE = "chunk.complete"
-    CHUNK_FAIL = "chunk.fail"
-
-    # Tool events
-    TOOL_CALL = "tool.call"
-    TOOL_RESULT = "tool.result"
-    TOOL_ERROR = "tool.error"
-
-    # Validation events
-    VALIDATION_PASS = "validation.pass"
-    VALIDATION_FAIL = "validation.fail"
-    PATCH_APPLY = "patch.apply"
-    PATCH_SKIP = "patch.skip"
-
-    # Compaction events
-    COMPACT_START = "compact.start"
-    COMPACT_COMPLETE = "compact.complete"
-
-    # Metric events
-    METRIC_EMIT = "metric.emit"
-    BUDGET_WARNING = "budget.warning"
-    BUDGET_EXCEEDED = "budget.exceeded"
+class EventSeverity(Enum):
+    """Event severity levels determining dispatch behavior."""
+    CRITICAL = 1  # GATE_FAIL, BUDGET_EXCEEDED - sync dispatch
+    WARN = 2      # GATE_WARN, ANOMALY_DETECTED
+    INFO = 3      # GATE_PASS, CURSOR_UPDATED
+    DEBUG = 4     # Detailed trace events
 
 
 @dataclass
 class Event:
-    """Structured event for TITAN Protocol."""
-    type: str
-    timestamp: str
-    session_id: Optional[str] = None
-    data: Dict[str, Any] = None
-    metadata: Dict[str, Any] = None
+    """
+    An event in the TITAN FUSE event system.
 
-    def to_json(self) -> str:
-        """Serialize event to JSON."""
-        return json.dumps(asdict(self))
+    Events carry typed data with severity classification,
+    enabling prioritized dispatch and handling.
+    """
+    event_type: str
+    data: Dict[str, Any]
+    severity: EventSeverity = EventSeverity.INFO
+    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    source: Optional[str] = None
+    event_id: str = field(default_factory=lambda: f"evt-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}")
+
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for serialization."""
+        return {
+            "event_id": self.event_id,
+            "event_type": self.event_type,
+            "data": self.data,
+            "severity": self.severity.name,
+            "timestamp": self.timestamp,
+            "source": self.source
+        }
 
     @classmethod
-    def from_json(cls, json_str: str) -> "Event":
-        """Deserialize event from JSON."""
-        data = json.loads(json_str)
-        return cls(**data)
+    def from_dict(cls, data: Dict) -> 'Event':
+        """Create from dictionary."""
+        return cls(
+            event_type=data["event_type"],
+            data=data["data"],
+            severity=EventSeverity[data.get("severity", "INFO")],
+            timestamp=data.get("timestamp", datetime.utcnow().isoformat() + "Z"),
+            source=data.get("source"),
+            event_id=data.get("event_id", f"evt-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}")
+        )
+
+    def __str__(self) -> str:
+        """Human-readable representation."""
+        severity_markers = {
+            EventSeverity.CRITICAL: "⛔",
+            EventSeverity.WARN: "⚠️",
+            EventSeverity.INFO: "ℹ️",
+            EventSeverity.DEBUG: "🔍"
+        }
+        marker = severity_markers.get(self.severity, "•")
+        return f"{marker} [{self.event_type}] {self.severity.name}"
 
 
 class EventBus:
     """
-    Event bus for structured event-driven communication.
+    Event bus with severity-based dispatch and handler failure escalation.
 
     Features:
-    - Typed event emission
-    - Event subscription/handlers
-    - Event logging/replay
-    - Prometheus-compatible metrics export
+    - Type-specific handler subscription
+    - Severity-based handler subscription
+    - Synchronous dispatch for CRITICAL events
+    - Handler failure escalation with EVENT_HANDLER_FAILURE events
+
+    Usage:
+        bus = EventBus()
+
+        # Subscribe to specific event type
+        bus.subscribe("GATE_FAIL", on_gate_fail)
+
+        # Subscribe to all CRITICAL events
+        bus.subscribe_severity(EventSeverity.CRITICAL, on_critical)
+
+        # Emit event
+        bus.emit(Event("GATE_PASS", {"gate_id": "GATE-00"}, EventSeverity.INFO))
     """
 
-    def __init__(self, log_path: Optional[Path] = None):
-        self.handlers: Dict[str, List[Callable]] = {}
-        self.event_log: List[Event] = []
-        self.log_path = log_path
-        self.session_id: Optional[str] = None
+    def __init__(self, config: Dict = None):
+        self.config = config or {}
+        self._handlers: Dict[str, List[Callable]] = {}
+        self._severity_handlers: Dict[EventSeverity, List[Callable]] = {}
+        self._logger = logging.getLogger(__name__)
+        self._handler_failure_action = self.config.get("handler_failure_action", "log")
+        self._event_history: List[Event] = []
+        self._max_history = self.config.get("max_history", 1000)
 
-        # Metrics collectors
-        self.metrics = {
-            "events_total": 0,
-            "events_by_type": {},
-            "gates_passed": 0,
-            "gates_failed": 0,
-            "chunks_completed": 0,
-            "patches_applied": 0,
-            "tokens_used": 0
-        }
-
-    def set_session(self, session_id: str) -> None:
-        """Set current session ID for events."""
-        self.session_id = session_id
-
-    def subscribe(self, event_type: str, handler: Callable) -> None:
+    def subscribe(self, event_type: str, handler: Callable[[Event], None]) -> None:
         """
-        Subscribe a handler to an event type.
+        Subscribe handler to event type.
 
         Args:
-            event_type: Event type to subscribe to
-            handler: Callable to handle the event
+            event_type: Event type to subscribe to (or "*" for all)
+            handler: Function to call when event is emitted
         """
-        if event_type not in self.handlers:
-            self.handlers[event_type] = []
-        self.handlers[event_type].append(handler)
+        if event_type not in self._handlers:
+            self._handlers[event_type] = []
+        self._handlers[event_type].append(handler)
+        self._logger.debug(f"Subscribed handler to {event_type}")
 
-    def unsubscribe(self, event_type: str, handler: Callable) -> None:
-        """Unsubscribe a handler from an event type."""
-        if event_type in self.handlers:
-            self.handlers[event_type] = [
-                h for h in self.handlers[event_type] if h != handler
-            ]
-
-    def emit(self, event_type: str, data: Dict[str, Any] = None,
-             metadata: Dict[str, Any] = None) -> Event:
+    def subscribe_severity(self, severity: EventSeverity, handler: Callable[[Event], None]) -> None:
         """
-        Emit a structured event.
+        Subscribe handler to all events of given severity.
 
         Args:
-            event_type: Type of event
-            data: Event payload
-            metadata: Additional metadata
+            severity: Event severity level
+            handler: Function to call when matching event is emitted
+        """
+        if severity not in self._severity_handlers:
+            self._severity_handlers[severity] = []
+        self._severity_handlers[severity].append(handler)
+        self._logger.debug(f"Subscribed handler to severity {severity.name}")
+
+    def unsubscribe(self, event_type: str, handler: Callable) -> bool:
+        """Unsubscribe handler from event type."""
+        if event_type in self._handlers and handler in self._handlers[event_type]:
+            self._handlers[event_type].remove(handler)
+            return True
+        return False
+
+    def emit(self, event: Event) -> None:
+        """
+        Emit event with handler failure escalation.
+
+        Args:
+            event: Event to emit
+        """
+        # Record in history
+        self._event_history.append(event)
+        if len(self._event_history) > self._max_history:
+            self._event_history = self._event_history[-self._max_history:]
+
+        self._logger.debug(f"Emitting event: {event.event_type} ({event.severity.name})")
+
+        # Dispatch to type-specific handlers
+        for handler in self._get_handlers(event.event_type):
+            self._safe_dispatch(handler, event)
+
+        # Dispatch to severity-specific handlers
+        for handler in self._severity_handlers.get(event.severity, []):
+            self._safe_dispatch(handler, event)
+
+        # Sync dispatch for CRITICAL events
+        if event.severity == EventSeverity.CRITICAL:
+            self._dispatch_critical(event)
+
+    def emit_simple(self, event_type: str, data: Dict,
+                    severity: EventSeverity = EventSeverity.INFO,
+                    source: str = None) -> Event:
+        """
+        Convenience method to create and emit event.
 
         Returns:
             The emitted event
         """
         event = Event(
-            type=event_type,
-            timestamp=datetime.utcnow().isoformat() + "Z",
-            session_id=self.session_id,
-            data=data or {},
-            metadata=metadata or {}
+            event_type=event_type,
+            data=data,
+            severity=severity,
+            source=source
         )
-
-        # Update metrics
-        self.metrics["events_total"] += 1
-        self.metrics["events_by_type"][event_type] = \
-            self.metrics["events_by_type"].get(event_type, 0) + 1
-
-        # Track specific metrics
-        if "gate" in event_type:
-            if "pass" in event_type:
-                self.metrics["gates_passed"] += 1
-            elif "fail" in event_type or "block" in event_type:
-                self.metrics["gates_failed"] += 1
-
-        if "chunk" in event_type and "complete" in event_type:
-            self.metrics["chunks_completed"] += 1
-
-        if "patch" in event_type and "apply" in event_type:
-            self.metrics["patches_applied"] += 1
-
-        # Add to event log
-        self.event_log.append(event)
-
-        # Write to log file if configured
-        if self.log_path:
-            self._write_to_log(event)
-
-        # Call handlers
-        handlers = self.handlers.get(event_type, [])
-        for handler in handlers:
-            try:
-                handler(event)
-            except Exception as e:
-                # Log handler error but don't fail
-                print(f"Handler error for {event_type}: {e}")
-
-        # Also call wildcard handlers
-        for handler in self.handlers.get("*", []):
-            try:
-                handler(event)
-            except Exception as e:
-                print(f"Wildcard handler error: {e}")
-
+        self.emit(event)
         return event
 
-    def _write_to_log(self, event: Event) -> None:
-        """Write event to log file."""
+    def _get_handlers(self, event_type: str) -> List[Callable]:
+        """Get handlers for event type, including wildcard."""
+        handlers = self._handlers.get(event_type, [])
+        wildcard_handlers = self._handlers.get("*", [])
+        return handlers + wildcard_handlers
+
+    def _safe_dispatch(self, handler: Callable, event: Event) -> None:
+        """Dispatch with failure handling."""
         try:
-            with open(self.log_path, "a") as f:
-                f.write(event.to_json() + "\n")
+            handler(event)
         except Exception as e:
-            print(f"Failed to write event log: {e}")
+            self._handle_handler_failure(handler, e, event)
 
-    def get_events(self, event_type: Optional[str] = None,
-                   limit: int = 100) -> List[Event]:
-        """
-        Get events from the log.
+    def _handle_handler_failure(self, handler: Callable, error: Exception, event: Event) -> None:
+        """Handle handler failure with escalation."""
+        handler_name = getattr(handler, '__name__', str(handler))
+        self._logger.error(f"Handler {handler_name} failed: {error}\n{traceback.format_exc()}")
 
-        Args:
-            event_type: Filter by event type (optional)
-            limit: Maximum number of events to return
+        # Emit failure event
+        failure_event = Event(
+            event_type="EVENT_HANDLER_FAILURE",
+            data={
+                "failed_handler": handler_name,
+                "original_event": event.event_type,
+                "original_event_id": event.event_id,
+                "error": str(error),
+                "error_type": type(error).__name__,
+                "traceback": traceback.format_exc()
+            },
+            severity=EventSeverity.CRITICAL,
+            source="EventBus"
+        )
+        self._dispatch_critical(failure_event)
 
-        Returns:
-            List of events
-        """
-        events = self.event_log
+        # Escalate based on config
+        action = self._handler_failure_action
+        if action == "abort":
+            self._logger.critical(f"Aborting due to handler failure: {handler_name}")
+            raise error
+        elif action == "warn":
+            self._logger.warning(f"Handler failure escalated: {handler_name}")
 
-        if event_type:
-            events = [e for e in events if e.type == event_type]
+    def _dispatch_critical(self, event: Event) -> None:
+        """Synchronous dispatch for CRITICAL events."""
+        for handler in self._get_handlers(event.event_type):
+            try:
+                handler(event)
+            except Exception as e:
+                # CRITICAL handler failure - log and continue
+                handler_name = getattr(handler, '__name__', str(handler))
+                self._logger.critical(f"CRITICAL handler failed: {handler_name}: {e}")
 
+    def get_history(self, limit: int = 100, severity: EventSeverity = None) -> List[Event]:
+        """Get recent event history."""
+        events = self._event_history
+        if severity:
+            events = [e for e in events if e.severity == severity]
         return events[-limit:]
 
-    def replay_events(self, events: List[Event]) -> None:
-        """
-        Replay events through handlers.
+    def clear_history(self) -> None:
+        """Clear event history."""
+        self._event_history.clear()
 
-        Args:
-            events: List of events to replay
-        """
-        for event in events:
-            handlers = self.handlers.get(event.type, [])
-            for handler in handlers:
-                try:
-                    handler(event)
-                except Exception as e:
-                    print(f"Replay handler error: {e}")
+    def get_stats(self) -> Dict:
+        """Get event bus statistics."""
+        severity_counts = {}
+        for sev in EventSeverity:
+            severity_counts[sev.name] = len([e for e in self._event_history if e.severity == sev])
 
-    def export_metrics(self) -> Dict[str, Any]:
-        """
-        Export metrics in Prometheus-compatible format.
-
-        Returns:
-            Metrics dictionary
-        """
         return {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "session_id": self.session_id,
-            "metrics": self.metrics.copy()
-        }
-
-    def export_prometheus(self) -> str:
-        """
-        Export metrics in Prometheus text format.
-
-        Returns:
-            Prometheus-formatted metrics string
-        """
-        lines = []
-
-        lines.append("# HELP titan_events_total Total number of events emitted")
-        lines.append("# TYPE titan_events_total counter")
-        lines.append(f"titan_events_total {self.metrics['events_total']}")
-
-        lines.append("# HELP titan_gates_passed Number of gates passed")
-        lines.append("# TYPE titan_gates_passed counter")
-        lines.append(f"titan_gates_passed {self.metrics['gates_passed']}")
-
-        lines.append("# HELP titan_gates_failed Number of gates failed")
-        lines.append("# TYPE titan_gates_failed counter")
-        lines.append(f"titan_gates_failed {self.metrics['gates_failed']}")
-
-        lines.append("# HELP titan_chunks_completed Number of chunks completed")
-        lines.append("# TYPE titan_chunks_completed counter")
-        lines.append(f"titan_chunks_completed {self.metrics['chunks_completed']}")
-
-        lines.append("# HELP titan_patches_applied Number of patches applied")
-        lines.append("# TYPE titan_patches_applied counter")
-        lines.append(f"titan_patches_applied {self.metrics['patches_applied']}")
-
-        # Events by type
-        lines.append("# HELP titan_events_by_type Events by type")
-        lines.append("# TYPE titan_events_by_type counter")
-        for event_type, count in self.metrics["events_by_type"].items():
-            safe_type = event_type.replace(".", "_")
-            lines.append(f'titan_events_by_type{{type="{safe_type}"}} {count}')
-
-        return "\n".join(lines)
-
-    def clear_log(self) -> None:
-        """Clear the event log."""
-        self.event_log.clear()
-
-    def get_summary(self) -> Dict[str, Any]:
-        """Get a summary of the event log."""
-        return {
-            "total_events": len(self.event_log),
-            "event_types": list(set(e.type for e in self.event_log)),
-            "session_id": self.session_id,
-            "metrics": self.metrics.copy()
+            "total_events": len(self._event_history),
+            "handler_count": sum(len(h) for h in self._handlers.values()),
+            "severity_handlers": {s.name: len(h) for s, h in self._severity_handlers.items()},
+            "severity_distribution": severity_counts
         }
 
 
-# Global event bus instance
-_global_event_bus: Optional[EventBus] = None
+# Pre-defined event types
+class EventTypes:
+    """Standard event types for TITAN FUSE Protocol."""
 
+    # Gate events
+    GATE_PASS = "GATE_PASS"
+    GATE_FAIL = "GATE_FAIL"
+    GATE_WARN = "GATE_WARN"
 
-def get_event_bus() -> EventBus:
-    """Get the global event bus instance."""
-    global _global_event_bus
-    if _global_event_bus is None:
-        _global_event_bus = EventBus()
-    return _global_event_bus
+    # Phase events
+    PHASE_START = "PHASE_START"
+    PHASE_COMPLETE = "PHASE_COMPLETE"
 
+    # Processing events
+    CHUNK_START = "CHUNK_START"
+    CHUNK_COMPLETE = "CHUNK_COMPLETE"
+    CURSOR_UPDATED = "CURSOR_UPDATED"
 
-def init_event_bus(log_path: Optional[Path] = None) -> EventBus:
-    """Initialize the global event bus."""
-    global _global_event_bus
-    _global_event_bus = EventBus(log_path=log_path)
-    return _global_event_bus
+    # Issue events
+    ISSUE_FOUND = "ISSUE_FOUND"
+    ISSUE_FIXED = "ISSUE_FIXED"
+
+    # Budget events
+    BUDGET_WARNING = "BUDGET_WARNING"
+    BUDGET_EXCEEDED = "BUDGET_EXCEEDED"
+
+    # Error events
+    EVENT_HANDLER_FAILURE = "EVENT_HANDLER_FAILURE"
+    CURSOR_DRIFT = "CURSOR_DRIFT"
+
+    # v3.2.1 Module events
+    INVENTORY_READY = "INVENTORY_READY"
+    CROSSREF_BROKEN = "CROSSREF_BROKEN"
+    ANOMALY_DETECTED = "ANOMALY_DETECTED"

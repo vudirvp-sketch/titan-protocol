@@ -1,326 +1,87 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0",
-  "protocol_version": "3.2.0",
-  "description": "Pre-computed index for semantic search in TITAN FUSE Protocol repository",
-  "generated": "2026-04-06T07:00:00Z",
-
-  "files": [
-    {
-      "path": "AGENTS.md",
-      "type": "markdown",
-      "purpose": "Entry point for LLM agents navigating the repository",
-      "audience": ["agents", "developers"],
-      "key_concepts": ["navigation", "entry-point", "quick-start"],
-      "sections": [
-        {
-          "heading": "Quick Start",
-          "line_start": 24,
-          "line_end": 35,
-          "summary": "Steps to start processing: assemble protocol, place files, run agent"
-        },
-        {
-          "heading": "Navigation Matrix",
-          "line_start": 39,
-          "line_end": 52,
-          "summary": "Table mapping intents to files and sections"
-        },
-        {
-          "heading": "Protocol Architecture",
-          "line_start": 56,
-          "line_end": 78,
-          "summary": "Mermaid diagram and TIER structure overview"
-        },
-        {
-          "heading": "Critical Constraints",
-          "line_start": 124,
-          "line_end": 140,
-          "summary": "NEVER and ALWAYS rules for agent behavior"
-        }
-      ],
-      "usage_hint": "Read FIRST when entering repository"
-    },
-    {
-      "path": "README.md",
-      "type": "markdown",
-      "purpose": "Human-friendly overview and documentation",
-      "audience": ["developers", "users"],
-      "key_concepts": ["overview", "features", "configuration", "troubleshooting"],
-      "sections": [
-        {
-          "heading": "Quick Start",
-          "line_start": 9,
-          "line_end": 25,
-          "summary": "Clone, assemble, and run the protocol"
-        },
-        {
-          "heading": "Repository Structure",
-          "line_start": 51,
-          "line_end": 86,
-          "summary": "Directory layout and file purposes"
-        },
-        {
-          "heading": "Verification Gates",
-          "line_start": 137,
-          "line_end": 153,
-          "summary": "GATE-00 through GATE-05 conditions and thresholds"
-        },
-        {
-          "heading": "Troubleshooting",
-          "line_start": 257,
-          "line_end": 269,
-          "summary": "Common issues and their fixes"
-        }
-      ],
-      "usage_hint": "Primary documentation for humans"
-    },
-    {
-      "path": "SKILL.md",
-      "type": "markdown",
-      "purpose": "Agent configuration and directives",
-      "audience": ["agents"],
-      "key_concepts": ["configuration", "constraints", "validators", "checkpoints"],
-      "sections": [
-        {
-          "heading": "Agent Directives",
-          "line_start": 22,
-          "line_end": 42,
-          "summary": "Domain profile and processing constraints"
-        },
-        {
-          "heading": "Tool Permissions",
-          "line_start": 44,
-          "line_end": 58,
-          "summary": "Permitted and restricted tools"
-        },
-        {
-          "heading": "Checkpoint Configuration",
-          "line_start": 155,
-          "line_end": 169,
-          "summary": "Session persistence settings"
-        }
-      ],
-      "usage_hint": "Read SECOND after AGENTS.md"
-    },
-    {
-      "path": "PROTOCOL.md",
-      "type": "markdown",
-      "purpose": "Full assembled protocol specification",
-      "audience": ["agents", "developers"],
-      "key_concepts": ["invariants", "phases", "gates", "validation"],
-      "sections": [
-        {
-          "heading": "TIER 0 — INVARIANTS",
-          "line_start": 403,
-          "line_end": 451,
-          "summary": "Non-negotiable rules: INVAR-01 through INVAR-04"
-        },
-        {
-          "heading": "PHASE 0 — INITIALIZATION",
-          "line_start": 516,
-          "line_end": 658,
-          "summary": "Quick orient, environment offload, NAV_MAP, workspace isolation"
-        },
-        {
-          "heading": "TIER 6 — VERIFICATION GATES",
-          "line_start": 843,
-          "line_end": 855,
-          "summary": "GATE-00 through GATE-05 summary"
-        }
-      ],
-      "usage_hint": "Reference for protocol specification"
-    },
-    {
-      "path": "PROTOCOL.base.md",
-      "type": "markdown",
-      "purpose": "Base protocol (TIER 0-6)",
-      "audience": ["agents", "developers"],
-      "key_concepts": ["invariants", "principles", "phases", "validation"],
-      "sections": [
-        {
-          "heading": "TIER 0 — INVARIANTS",
-          "line_start": 23,
-          "line_end": 71,
-          "summary": "Non-negotiable rules"
-        },
-        {
-          "heading": "TIER 1 — CORE PRINCIPLES",
-          "line_start": 73,
-          "line_end": 131,
-          "summary": "Deterministic execution, tool-first navigation, phased execution"
-        },
-        {
-          "heading": "TIER 2 — EXECUTION PROTOCOL",
-          "line_start": 133,
-          "line_end": 461,
-          "summary": "Phase 0-5 detailed specification"
-        }
-      ],
-      "usage_hint": "Source for protocol assembly"
-    },
-    {
-      "path": "PROTOCOL.ext.md",
-      "type": "markdown",
-      "purpose": "TIER -1 Bootstrap extension",
-      "audience": ["agents"],
-      "key_concepts": ["bootstrap", "repo-navigation", "self-init"],
-      "sections": [
-        {
-          "heading": "TIER -1 — BOOTSTRAP PHASE",
-          "line_start": 16,
-          "line_end": 376,
-          "summary": "Repository navigation and self-initialization"
-        }
-      ],
-      "usage_hint": "Extension for repo-aware processing"
-    },
-    {
-      "path": "config.yaml",
-      "type": "yaml",
-      "purpose": "Runtime configuration defaults",
-      "audience": ["agents", "developers"],
-      "key_concepts": ["session", "chunking", "validation", "checkpoint"],
-      "sections": [
-        {
-          "heading": "session:",
-          "line_start": 11,
-          "line_end": 23,
-          "summary": "Session limits and persistence settings"
-        },
-        {
-          "heading": "chunking:",
-          "line_start": 28,
-          "line_end": 49,
-          "summary": "Chunk size and boundary configuration"
-        },
-        {
-          "heading": "validation:",
-          "line_start": 79,
-          "line_end": 93,
-          "summary": "Patch iterations and GATE-04 thresholds"
-        }
-      ],
-      "usage_hint": "Modify for runtime customization"
-    },
-    {
-      "path": "scripts/enhanced_llm_query.py",
-      "type": "python",
-      "purpose": "Progressive fallback chain for LLM queries",
-      "audience": ["agents"],
-      "key_concepts": ["llm_query", "fallback", "chunk", "gap"],
-      "functions": [
-        {
-          "name": "EnhancedLLMQuery.query",
-          "line": 177,
-          "summary": "Execute query with fallback chain",
-          "usage_hint": "Call for isolated sub-queries on chunks"
-        },
-        {
-          "name": "EnhancedLLMQuery.get_stats",
-          "line": 266,
-          "summary": "Get query statistics",
-          "usage_hint": "Track performance and gap rate"
-        }
-      ],
-      "usage_hint": "Use for chunk-level queries with fallback"
-    },
-    {
-      "path": "skills/validators/security.js",
-      "type": "javascript",
-      "purpose": "Security validator for secrets detection",
-      "audience": ["agents"],
-      "key_concepts": ["security", "secrets", "credentials", "SEV-1"],
-      "functions": [
-        {
-          "name": "validate",
-          "line": 66,
-          "summary": "Detect secrets, credentials, sensitive data",
-          "usage_hint": "NEVER auto-fix security violations"
-        }
-      ],
-      "usage_hint": "Auto-loaded in Phase 2"
-    },
-    {
-      "path": "skills/validators/no-todos.js",
-      "type": "javascript",
-      "purpose": "Reject TODO/FIXME markers",
-      "audience": ["agents"],
-      "key_concepts": ["todos", "fixme", "maintainability", "SEV-3"],
-      "functions": [
-        {
-          "name": "validate",
-          "line": 31,
-          "summary": "Detect TODO/FIXME/XXX/HACK markers",
-          "usage_hint": "Auto-loaded in Phase 2"
-        }
-      ],
-      "usage_hint": "Ensure clean code delivery"
-    },
-    {
-      "path": ".ai/nav_map.json",
-      "type": "json",
-      "purpose": "Semantic navigation index",
-      "audience": ["agents"],
-      "key_concepts": ["navigation", "semantic-index", "shortcuts"],
-      "usage_hint": "Lookup for concept-to-location mapping"
-    },
-    {
-      "path": ".ai/context_hints.md",
-      "type": "markdown",
-      "purpose": "STOP/PROCEED/GO signals",
-      "audience": ["agents"],
-      "key_concepts": ["signals", "gates", "thresholds"],
-      "usage_hint": "Reference for decision signals"
-    },
-    {
-      "path": ".ai/shortcuts.yaml",
-      "type": "yaml",
-      "purpose": "Zero-click shortcuts",
-      "audience": ["agents"],
-      "key_concepts": ["shortcuts", "commands", "quick-access"],
-      "usage_hint": "Use for instant navigation"
-    },
-    {
-      "path": ".ai/agent_interface.md",
-      "type": "markdown",
-      "purpose": "Agent command specification",
-      "audience": ["agents"],
-      "key_concepts": ["commands", "responses", "interface"],
-      "usage_hint": "Implement agent commands"
-    },
-    {
-      "path": "AI_MISSION.md",
-      "type": "markdown",
-      "purpose": "System prompt for LLM context",
-      "audience": ["developers", "agents"],
-      "key_concepts": ["mission", "constraints", "action-sequence"],
-      "usage_hint": "Copy into LLM system prompt"
-    },
-    {
-      "path": "DECISION_TREE.json",
-      "type": "json",
-      "purpose": "Finite state machine for protocol",
-      "audience": ["agents"],
-      "key_concepts": ["states", "transitions", "events"],
-      "usage_hint": "State machine reference"
-    }
-  ],
-
-  "concept_index": {
-    "verification_gates": ["PROTOCOL.md", "README.md", ".ai/context_hints.md"],
-    "chunking": ["PROTOCOL.base.md", "config.yaml", "scripts/enhanced_llm_query.py"],
-    "invariants": ["PROTOCOL.base.md", "PROTOCOL.md", "AI_MISSION.md"],
-    "bootstrap": ["PROTOCOL.ext.md", "AGENTS.md"],
-    "security": ["skills/validators/security.js", "skills/validators/security.context.md"],
-    "checkpoint": ["PROTOCOL.base.md", "config.yaml", "checkpoints/checkpoint.context.md"],
-    "navigation": ["AGENTS.md", ".ai/nav_map.json", ".ai/shortcuts.yaml"],
-    "configuration": ["SKILL.md", "config.yaml"]
+  "version": "3.2.1",
+  "generated": "2026-04-07T00:00:00Z",
+  "repository": {
+    "name": "titan-protocol",
+    "source": "https://github.com/vudirvp-sketch/titan-protocol"
   },
-
-  "statistics": {
-    "total_files": 16,
-    "total_functions": 4,
-    "total_sections": 24,
-    "concept_count": 8
+  "index": {
+    "files": [
+      {
+        "path": "AGENTS.md",
+        "type": "navigation",
+        "tier": -1,
+        "purpose": "Agent entry point",
+        "read_order": 1
+      },
+      {
+        "path": "README.md",
+        "type": "documentation",
+        "tier": -1,
+        "purpose": "Human overview",
+        "read_order": 2
+      },
+      {
+        "path": "SKILL.md",
+        "type": "configuration",
+        "tier": -1,
+        "purpose": "Agent directives",
+        "read_order": 3
+      },
+      {
+        "path": "PROTOCOL.md",
+        "type": "specification",
+        "tier": "0-6",
+        "purpose": "Full protocol",
+        "read_order": 4
+      },
+      {
+        "path": "config.yaml",
+        "type": "configuration",
+        "tier": -1,
+        "purpose": "Runtime defaults",
+        "read_order": 5
+      }
+    ],
+    "directories": [
+      {
+        "path": "inputs/",
+        "type": "input",
+        "purpose": "Files to process"
+      },
+      {
+        "path": "outputs/",
+        "type": "output",
+        "purpose": "Generated artifacts"
+      },
+      {
+        "path": "checkpoints/",
+        "type": "state",
+        "purpose": "Session persistence"
+      },
+      {
+        "path": "skills/validators/",
+        "type": "extension",
+        "purpose": "Custom validators"
+      }
+    ]
+  },
+  "semantic_index": {
+    "verification_gates": {
+      "file": "PROTOCOL.md",
+      "sections": ["GATE-00", "GATE-01", "GATE-02", "GATE-03", "GATE-04", "GATE-05"]
+    },
+    "invariants": {
+      "file": "PROTOCOL.md",
+      "sections": ["INVAR-01", "INVAR-02", "INVAR-03", "INVAR-04", "INVAR-05"]
+    },
+    "principles": {
+      "file": "PROTOCOL.md",
+      "sections": ["PRINCIPLE-01", "PRINCIPLE-02", "PRINCIPLE-03", "PRINCIPLE-04", "PRINCIPLE-05", "PRINCIPLE-06"]
+    },
+    "tiers": {
+      "file": "PROTOCOL.md",
+      "sections": ["TIER 0", "TIER 1", "TIER 2", "TIER 3", "TIER 4", "TIER 5", "TIER 6"]
+    }
   }
 }

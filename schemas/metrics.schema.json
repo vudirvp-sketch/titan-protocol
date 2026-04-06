@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TITAN FUSE Metrics Schema",
+  "description": "Schema for metrics.json output",
+  "type": "object",
+  "properties": {
+    "session": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "string"},
+        "duration_seconds": {"type": "integer"},
+        "status": {"type": "string", "enum": ["COMPLETE", "PARTIAL", "ABORTED"]}
+      },
+      "required": ["id", "status"]
+    },
+    "processing": {
+      "type": "object",
+      "properties": {
+        "chunks_total": {"type": "integer"},
+        "issues_found": {"type": "integer"},
+        "issues_fixed": {"type": "integer"},
+        "gaps": {"type": "integer"}
+      }
+    },
+    "gates": {
+      "type": "object",
+      "properties": {
+        "GATE-00": {"type": "string", "enum": ["PASS", "FAIL", "WARN", "PENDING"]},
+        "GATE-01": {"type": "string", "enum": ["PASS", "FAIL", "WARN", "PENDING"]},
+        "GATE-02": {"type": "string", "enum": ["PASS", "FAIL", "WARN", "PENDING"]},
+        "GATE-03": {"type": "string", "enum": ["PASS", "FAIL", "WARN", "PENDING"]},
+        "GATE-04": {"type": "string", "enum": ["PASS", "FAIL", "WARN", "PENDING"]},
+        "GATE-05": {"type": "string", "enum": ["PASS", "FAIL", "WARN", "PENDING"]}
+      }
+    },
+    "tokens": {
+      "type": "object",
+      "properties": {
+        "total": {"type": "integer"},
+        "root_model": {"type": "integer"},
+        "leaf_model": {"type": "integer"},
+        "per_query_p50": {"type": "integer"},
+        "per_query_p95": {"type": "integer"}
+      }
+    },
+    "assessment": {
+      "type": "object",
+      "properties": {
+        "signal": {"type": "string", "enum": ["WEAK", "MODERATE", "STRONG"]},
+        "readiness": {"type": "string", "enum": ["PRODUCTION_READY", "EXPERIMENTAL", "REVIEW_REQUIRED"]},
+        "combined_score": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "model_routing": {
+      "type": "object",
+      "properties": {
+        "root_calls": {"type": "integer"},
+        "leaf_calls": {"type": "integer"},
+        "fallback_calls": {"type": "integer"},
+        "fallback_rate": {"type": "number"}
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "properties": {
+        "total_failures": {"type": "integer"},
+        "unique_symptoms": {"type": "integer"},
+        "escalations": {"type": "integer"}
+      }
+    }
+  },
+  "required": ["session"]
+}

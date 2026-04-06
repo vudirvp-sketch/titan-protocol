@@ -1,1028 +1,230 @@
 """
-TITAN FUSE Protocol - Orchestrator
+Orchestrator for TITAN FUSE Protocol.
 
-Execution layer that coordinates the processing pipeline.
-Implements the TIER structure and GATE validation.
+Provides mode-specific gate behavior and execution coordination.
 
-Updated for v3.2:
-- INVAR-05: LLM Code Execution Gate integration
-- PRINCIPLE-04: Secondary chunk limits
-- GATE-04: Confidence advisory
-- metrics.json: p50/p95 token distribution
+Author: TITAN FUSE Team
+Version: 3.2.3
 """
 
-import json
-import time
-from pathlib import Path
-from datetime import datetime
-from typing import Optional, Dict, Any, List, Tuple
+from dataclasses import dataclass
+from typing import Dict, Any, Optional, List
 from enum import Enum
-import statistics
+import logging
 
 
-class Phase(Enum):
-    """Processing phases as defined in PROTOCOL.base.md"""
-    BOOTSTRAP = -1
-    INIT = 0
-    SEARCH_DISCOVERY = 1
-    ANALYSIS_CLASSIFICATION = 2
-    PLANNING = 3
-    EXECUTION_VALIDATION = 4
-    DELIVERY_HYGIENE = 5
+class ExecutionMode(Enum):
+    """Execution modes for TITAN FUSE Protocol."""
+    DIRECT = "direct"          # Standard execution
+    AUTO = "auto"              # Automated with stricter gates
+    MANUAL = "manual"          # Human-in-loop with advisory gates
+    INTERACTIVE = "interactive"  # Interactive with human checkpoints
 
 
-PHASE_NAMES = {
-    -1: "PHASE -1: BOOTSTRAP",
-    0: "PHASE 0: INITIALIZATION",
-    1: "PHASE 1: SEARCH & DISCOVERY",
-    2: "PHASE 2: ANALYSIS & CLASSIFICATION",
-    3: "PHASE 3: PLANNING",
-    4: "PHASE 4: EXECUTION & VALIDATION",
-    5: "PHASE 5: DELIVERY & HYGIENE"
-}
+@dataclass
+class ModeConfig:
+    """Configuration for a specific execution mode."""
+    eval_veto_sensitivity: str = "NORMAL"
+    gate_03_mode: str = "BLOCKING"
+    gate_04_mode: str = "BLOCKING"
+    gate_04_threshold: float = 0.75
+    requires_human_ack: bool = False
+    auto_rollback_enabled: bool = True
+    checkpoint_frequency: str = "normal"  # "low", "normal", "high"
+
+    def to_dict(self) -> Dict:
+        return {
+            "eval_veto_sensitivity": self.eval_veto_sensitivity,
+            "gate_03_mode": self.gate_03_mode,
+            "gate_04_mode": self.gate_04_mode,
+            "gate_04_threshold": self.gate_04_threshold,
+            "requires_human_ack": self.requires_human_ack,
+            "auto_rollback_enabled": self.auto_rollback_enabled,
+            "checkpoint_frequency": self.checkpoint_frequency
+        }
+
+
+class ModeAdapter:
+    """
+    Apply mode-specific gate behavior modifications.
+
+    Different execution modes have different gate behaviors:
+    - DIRECT: Standard blocking gates
+    - AUTO: Stricter GATE-04 threshold, higher eval_veto sensitivity
+    - MANUAL: GATE-03/04 demoted to ADVISORY, requires human acknowledgment
+    - INTERACTIVE: ADVISORY gates with checkpoints at each phase
+    """
+
+    MODE_PRESETS = {
+        "direct": ModeConfig(
+            eval_veto_sensitivity="NORMAL",
+            gate_03_mode="BLOCKING",
+            gate_04_mode="BLOCKING",
+            gate_04_threshold=0.75,
+            requires_human_ack=False,
+            auto_rollback_enabled=True,
+            checkpoint_frequency="normal"
+        ),
+        "auto": ModeConfig(
+            eval_veto_sensitivity="HIGH",
+            gate_03_mode="BLOCKING",
+            gate_04_mode="BLOCKING",
+            gate_04_threshold=0.85,  # Stricter
+            requires_human_ack=False,
+            auto_rollback_enabled=True,
+            checkpoint_frequency="high"
+        ),
+        "manual": ModeConfig(
+            eval_veto_sensitivity="NORMAL",
+            gate_03_mode="ADVISORY",  # Demoted to advisory
+            gate_04_mode="ADVISORY",  # Demoted to advisory
+            gate_04_threshold=0.75,
+            requires_human_ack=True,
+            auto_rollback_enabled=False,
+            checkpoint_frequency="high"
+        ),
+        "interactive": ModeConfig(
+            eval_veto_sensitivity="NORMAL",
+            gate_03_mode="ADVISORY",
+            gate_04_mode="ADVISORY",
+            gate_04_threshold=0.70,  # More lenient
+            requires_human_ack=True,
+            auto_rollback_enabled=True,
+            checkpoint_frequency="high"
+        )
+    }
+
+    def __init__(self, mode: str = "direct", custom_config: ModeConfig = None):
+        """
+        Initialize mode adapter.
+
+        Args:
+            mode: Execution mode name
+            custom_config: Optional custom mode configuration
+        """
+        self.mode = mode
+        self._logger = logging.getLogger(__name__)
+
+        if custom_config:
+            self.config = custom_config
+        else:
+            self.config = self.MODE_PRESETS.get(mode, self.MODE_PRESETS["direct"])
+
+        self._logger.info(f"ModeAdapter initialized with mode: {mode}")
+
+    def apply_to_gate(self, gate_id: str, base_result: Dict) -> Dict:
+        """
+        Apply mode-specific modifications to gate result.
+
+        Args:
+            gate_id: Gate identifier (e.g., "GATE-03")
+            base_result: Base gate result dictionary
+
+        Returns:
+            Modified gate result with mode-specific behavior
+        """
+        result = base_result.copy()
+
+        # Apply GATE-03 modifications
+        if gate_id == "GATE-03" and self.config.gate_03_mode == "ADVISORY":
+            result["mode"] = "ADVISORY"
+            if result.get("status") == "FAIL":
+                result["status"] = "WARN"
+                result["advisory_note"] = "GATE-03 demoted to ADVISORY in current mode"
+                result["requires_acknowledgment"] = self.config.requires_human_ack
+                self._logger.info(f"GATE-03 demoted to ADVISORY: {result.get('reason', 'unknown')}")
+
+        # Apply GATE-04 modifications
+        elif gate_id == "GATE-04":
+            if self.config.gate_04_mode == "ADVISORY":
+                result["mode"] = "ADVISORY"
+                result["requires_acknowledgment"] = self.config.requires_human_ack
+
+            if self.config.gate_04_threshold != 0.75:
+                result["threshold"] = self.config.gate_04_threshold
+                result["threshold_note"] = f"Threshold adjusted to {self.config.gate_04_threshold} for {self.mode} mode"
+
+            if result.get("status") == "FAIL" and self.config.gate_04_mode == "ADVISORY":
+                result["status"] = "WARN"
+                result["advisory_note"] = "GATE-04 demoted to ADVISORY in current mode"
+
+        # Apply eval_veto sensitivity
+        if self.config.eval_veto_sensitivity == "HIGH":
+            result["eval_veto_sensitivity"] = "HIGH"
+            # Higher sensitivity means more cautious evaluation
+            if "confidence" in result and result["confidence"] < 0.9:
+                result["eval_veto_triggered"] = True
+
+        return result
+
+    def get_modifications(self) -> Dict[str, Any]:
+        """Get all mode modifications as dict."""
+        return {
+            "mode": self.mode,
+            **self.config.to_dict()
+        }
+
+    def should_checkpoint(self, phase: int) -> bool:
+        """Determine if checkpoint should be created at this phase."""
+        if self.config.checkpoint_frequency == "high":
+            return True
+        elif self.config.checkpoint_frequency == "low":
+            return phase in [0, 3, 5]
+        else:  # normal
+            return phase in [0, 2, 4, 5]
+
+    def should_auto_rollback(self) -> bool:
+        """Check if auto-rollback is enabled for this mode."""
+        return self.config.auto_rollback_enabled
+
+    def requires_acknowledgment(self) -> bool:
+        """Check if human acknowledgment is required."""
+        return self.config.requires_human_ack
+
+    @classmethod
+    def register_mode(cls, mode_name: str, config: ModeConfig) -> None:
+        """Register a custom mode."""
+        cls.MODE_PRESETS[mode_name] = config
+
+    @classmethod
+    def list_modes(cls) -> List[str]:
+        """List available modes."""
+        return list(cls.MODE_PRESETS.keys())
 
 
 class Orchestrator:
     """
-    Execution orchestrator for TITAN FUSE Protocol.
+    Main orchestrator for TITAN FUSE Protocol execution.
 
-    Coordinates:
-    - Phase transitions (Phase -1 through Phase 5)
-    - Gate validation (GATE-00 through GATE-05)
-    - Tool routing
-    - Batch processing
+    Coordinates phases, gates, and state transitions.
     """
 
-    def __init__(self, repo_root: Path):
-        self.repo_root = repo_root
-        self.protocol_path = repo_root / "PROTOCOL.md"
-        self.config_path = repo_root / "config.yaml"
-        self.inputs_dir = repo_root / "inputs"
-        self.outputs_dir = repo_root / "outputs"
+    def __init__(self, mode: str = "direct", config: Dict = None):
+        self.mode_adapter = ModeAdapter(mode)
+        self.config = config or {}
+        self._logger = logging.getLogger(__name__)
+        self._current_phase = 0
+        self._state = "INIT"
 
-        # Load configuration
-        self.config = self._load_config()
-        
-        # NEW v3.2.2: Workspace isolation
-        self._enforce_workspace_isolation()
-
-    def _load_config(self) -> Dict:
-        """Load configuration from config.yaml."""
-        try:
-            import yaml
-            with open(self.config_path) as f:
-                return yaml.safe_load(f)
-        except Exception:
-            return {
-                "session": {"max_tokens": 100000, "max_time_minutes": 60},
-                "chunking": {"default_size": 1500},
-                "validation": {"max_patch_iterations": 2}
-            }
-    
-    # =========================================================================
-    # WORKSPACE ISOLATION (Task 1.5)
-    # =========================================================================
-    
-    def _enforce_workspace_isolation(self) -> None:
-        """
-        Ensure all operations occur within workspace.
-        
-        NEW in v3.2.2: Workspace path enforcement for security.
-        """
-        security_config = self.config.get("security", {})
-        workspace = security_config.get("workspace_path")
-        
-        if workspace:
-            self.workspace_path = Path(workspace).resolve()
-            if not self.workspace_path.exists():
-                self.workspace_path.mkdir(parents=True, exist_ok=True)
-        else:
-            # Default to repo root
-            self.workspace_path = self.repo_root.resolve()
-        
-        # Store for later validation
-        self._allowed_paths = [
-            self.workspace_path,
-            self.inputs_dir,
-            self.outputs_dir
-        ]
-    
-    def _validate_path_in_workspace(self, path: Path) -> bool:
-        """Check if path is within allowed workspace."""
-        resolved = path.resolve()
-        return any(
-            str(resolved).startswith(str(allowed))
-            for allowed in self._allowed_paths
-        )
-    
-    def _safe_read(self, path: Path) -> str:
-        """
-        Safely read file with workspace validation.
-        
-        Raises PermissionError if path outside workspace.
-        """
-        if not self._validate_path_in_workspace(path):
-            raise PermissionError(f"[gap: workspace_violation] Path outside workspace: {path}")
-        return path.read_text()
-    
-    def _safe_write(self, path: Path, content: str) -> None:
-        """
-        Safely write file with workspace validation.
-        
-        Raises PermissionError if path outside workspace.
-        """
-        if not self._validate_path_in_workspace(path):
-            raise PermissionError(f"[gap: workspace_violation] Path outside workspace: {path}")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
-
-    # =========================================================================
-    # GATE VALIDATION
-    # =========================================================================
-
-    def validate_gate(self, gate_id: str, session: Dict) -> Tuple[bool, Dict]:
-        """
-        Validate a specific gate.
-
-        Args:
-            gate_id: Gate identifier (GATE-00 through GATE-05)
-            session: Current session state
-
-        Returns:
-            Tuple of (passed, details)
-        """
-        gate_validators = {
-            "GATE-00": self._validate_gate_00,
-            "GATE-01": self._validate_gate_01,
-            "GATE-02": self._validate_gate_02,
-            "GATE-03": self._validate_gate_03,
-            "GATE-04": self._validate_gate_04,
-            "GATE-05": self._validate_gate_05
+    def get_current_state(self) -> Dict:
+        """Get current orchestration state."""
+        return {
+            "state": self._state,
+            "current_phase": self._current_phase,
+            "mode": self.mode_adapter.get_modifications()
         }
 
-        validator = gate_validators.get(gate_id)
-        if validator:
-            return validator(session)
-
-        return False, {"error": f"Unknown gate: {gate_id}"}
-
-    def _validate_gate_00(self, session: Dict) -> Tuple[bool, Dict]:
-        """
-        GATE-00: NAV_MAP exists AND all chunks indexed
-
-        Validation:
-        - Navigation map built
-        - All chunks have IDs
-        - Source file loaded
-        """
-        details = {
-            "gate": "GATE-00",
-            "checks": []
-        }
-
-        # Check source file
-        source_file = session.get("source_file")
-        if not source_file:
-            details["checks"].append({
-                "name": "source_file",
-                "status": "FAIL",
-                "message": "No source file specified"
-            })
-            return False, details
-
-        details["checks"].append({
-            "name": "source_file",
-            "status": "PASS",
-            "message": f"Source: {source_file}"
-        })
-
-        # Check NAV_MAP (chunks)
-        chunks = session.get("chunks", {})
-        if not chunks:
-            details["checks"].append({
-                "name": "nav_map",
-                "status": "FAIL",
-                "message": "No chunks indexed"
-            })
-            return False, details
-
-        details["checks"].append({
-            "name": "nav_map",
-            "status": "PASS",
-            "message": f"{len(chunks)} chunks indexed"
-        })
-
-        # All checks passed
-        return True, details
-
-    def _validate_gate_01(self, session: Dict) -> Tuple[bool, Dict]:
-        """
-        GATE-01: All target patterns scanned
-
-        Validation:
-        - Pattern detection complete
-        - Duplicates identified
-        - Terminology checked
-        """
-        details = {
-            "gate": "GATE-01",
-            "checks": []
-        }
-
-        # Check if patterns were scanned
-        state_snapshot = session.get("state_snapshot", {})
-        patterns_scanned = state_snapshot.get("patterns_scanned", False)
-
-        if not patterns_scanned:
-            details["checks"].append({
-                "name": "patterns_scanned",
-                "status": "FAIL",
-                "message": "Pattern detection not complete"
-            })
-            return False, details
-
-        details["checks"].append({
-            "name": "patterns_scanned",
-            "status": "PASS",
-            "message": "All target patterns scanned"
-        })
-
-        return True, details
-
-    def _validate_gate_02(self, session: Dict) -> Tuple[bool, Dict]:
-        """
-        GATE-02: All issues classified with ISSUE_ID
-
-        Validation:
-        - Each issue has ISSUE_ID
-        - Severity assigned (SEV-1..4)
-        - Category assigned
-        """
-        details = {
-            "gate": "GATE-02",
-            "checks": []
-        }
-
-        open_issues = session.get("open_issues", [])
-        state_snapshot = session.get("state_snapshot", {})
-        issues_classified = state_snapshot.get("issues_classified", False)
-
-        if not issues_classified and open_issues:
-            details["checks"].append({
-                "name": "issues_classified",
-                "status": "FAIL",
-                "message": f"{len(open_issues)} issues not fully classified"
-            })
-            return False, details
-
-        details["checks"].append({
-            "name": "issues_classified",
-            "status": "PASS",
-            "message": f"{len(open_issues)} issues classified"
-        })
-
-        return True, details
-
-    def _validate_gate_03(self, session: Dict) -> Tuple[bool, Dict]:
-        """
-        GATE-03: Plan validated AND no KEEP_VETO violations AND budget headroom
-
-        Validation:
-        - Execution plan exists
-        - No KEEP_VETO violations
-        - Budget available
-        """
-        details = {
-            "gate": "GATE-03",
-            "checks": []
-        }
-
-        # Check budget
-        tokens_used = session.get("tokens_used", 0)
-        max_tokens = session.get("max_tokens", 100000)
-        budget_remaining = max_tokens - tokens_used
-        budget_pct = (tokens_used / max_tokens) * 100
-
-        if budget_pct > 90:
-            details["checks"].append({
-                "name": "budget",
-                "status": "FAIL",
-                "message": f"Budget exceeded: {budget_pct:.1f}% used"
-            })
-            return False, details
-
-        details["checks"].append({
-            "name": "budget",
-            "status": "PASS",
-            "message": f"Budget OK: {budget_pct:.1f}% used, {budget_remaining} remaining"
-        })
-
-        # Check execution plan
-        state_snapshot = session.get("state_snapshot", {})
-        execution_plan = state_snapshot.get("execution_plan")
-
-        if not execution_plan:
-            details["checks"].append({
-                "name": "execution_plan",
-                "status": "FAIL",
-                "message": "No execution plan"
-            })
-            return False, details
-
-        details["checks"].append({
-            "name": "execution_plan",
-            "status": "PASS",
-            "message": "Execution plan validated"
-        })
-
-        # Check KEEP_VETO
-        keep_veto_violations = state_snapshot.get("keep_veto_violations", [])
-        if keep_veto_violations:
-            details["checks"].append({
-                "name": "keep_veto",
-                "status": "FAIL",
-                "message": f"KEEP_VETO violations: {keep_veto_violations}"
-            })
-            return False, details
-
-        details["checks"].append({
-            "name": "keep_veto",
-            "status": "PASS",
-            "message": "No KEEP_VETO violations"
-        })
-
-        return True, details
-
-    def _validate_gate_04(self, session: Dict) -> Tuple[bool, Dict]:
-        """
-        GATE-04: Validations pass OR gaps within threshold
-        
-        Updated in v3.2.1:
-        - Added checksum-based gap verification (R-02/R-05 fix)
-        - External verification of agent self-reports
-        
-        Threshold Rules:
-        - BLOCK: SEV-1 gaps > 0, SEV-2 gaps > 2, total gaps > 20%
-        - WARN: SEV-3 gaps > 5, SEV-4 gaps > 10
-        - PASS: All above false
-        
-        Confidence Advisory (v3.2):
-        - IF all completed QueryResults have confidence = HIGH
-          AND total open gaps = 0:
-          → log advisory: "early_exit eligible"
-          → agent MAY skip remaining SEV-4-only batches with human acknowledgement
-        
-        Checksum-Based Verification (v3.2.1):
-        - Each gap must have a checksum of the source evidence
-        - Verification ensures gap is grounded in actual source content
-        """
-        details = {
-            "gate": "GATE-04",
-            "checks": []
-        }
-
-        known_gaps = session.get("known_gaps", [])
-        open_issues = session.get("open_issues", [])
-
-        # NEW in v3.2.1: Verify gap checksums
-        verified_gaps, unverified_gaps = self._verify_gap_checksums(
-            known_gaps, 
-            session.get("source_file")
-        )
-        
-        if unverified_gaps:
-            details["checks"].append({
-                "name": "gap_verification",
-                "status": "WARN",
-                "message": f"{len(unverified_gaps)} gaps lack source verification"
-            })
-
-        # Count gaps by severity (would parse from gap strings in production)
-        sev1_gaps = sum(1 for g in verified_gaps if "SEV-1" in g)
-        sev2_gaps = sum(1 for g in verified_gaps if "SEV-2" in g)
-        sev3_gaps = sum(1 for g in verified_gaps if "SEV-3" in g)
-        sev4_gaps = sum(1 for g in verified_gaps if "SEV-4" in g)
-
-        total_issues = len(open_issues) or 1
-        total_gaps = len(verified_gaps)
-        gap_pct = (total_gaps / total_issues) * 100 if total_issues > 0 else 0
-
-        # Check blocking conditions
-        blocked = False
-        warnings = []
-
-        if sev1_gaps > 0:
-            blocked = True
-            details["checks"].append({
-                "name": "sev1_gaps",
-                "status": "BLOCK",
-                "message": f"SEV-1 gaps: {sev1_gaps} (max: 0)"
-            })
-
-        if sev2_gaps > 2:
-            blocked = True
-            details["checks"].append({
-                "name": "sev2_gaps",
-                "status": "BLOCK",
-                "message": f"SEV-2 gaps: {sev2_gaps} (max: 2)"
-            })
-
-        if gap_pct > 20:
-            blocked = True
-            details["checks"].append({
-                "name": "total_gaps",
-                "status": "BLOCK",
-                "message": f"Total gaps: {gap_pct:.1f}% (max: 20%)"
-            })
-
-        # Check warning conditions
-        if sev3_gaps > 5:
-            warnings.append(f"SEV-3 gaps: {sev3_gaps} (max: 5)")
-
-        if sev4_gaps > 10:
-            warnings.append(f"SEV-4 gaps: {sev4_gaps} (max: 10)")
-
-        # NEW in v3.2: Confidence advisory check
-        confidence_summary = session.get("confidence_summary", {})
-        all_high_confidence = confidence_summary.get("all_high", False)
-        
-        if all_high_confidence and total_gaps == 0:
-            details["checks"].append({
-                "name": "confidence_advisory",
-                "status": "ADVISORY",
-                "message": "early_exit eligible — all chunks HIGH confidence, zero gaps"
-            })
-            details["early_exit_eligible"] = True
-            # Note: This is advisory only, does NOT auto-exit
-            # Requires human acknowledgement to skip SEV-4 batches
-
-        if blocked:
-            return False, details
-
-        if warnings:
-            details["status"] = "WARN"
-            details["warnings"] = warnings
-            return True, details
-
-        details["checks"].append({
-            "name": "gates_validation",
-            "status": "PASS",
-            "message": "All validations passed"
-        })
-        
-        # Add verification summary
-        details["gap_verification"] = {
-            "verified": len(verified_gaps),
-            "unverified": len(unverified_gaps),
-            "total": len(known_gaps)
-        }
-
-        return True, details
-    
-    def _verify_gap_checksums(self, 
-                              gaps: List[str], 
-                              source_file: Optional[str]) -> Tuple[List[str], List[str]]:
-        """
-        Verify gap checksums against source file.
-        
-        NEW in v3.2.1: External verification of agent self-reports.
-        
-        Each gap should have format:
-        "[gap: <reason> -- source:<line_start>-<line_end>:<checksum>]"
-        
-        Args:
-            gaps: List of gap strings
-            source_file: Path to source file
-            
-        Returns:
-            Tuple of (verified_gaps, unverified_gaps)
-        """
-        import hashlib
-        import re
-        
-        if not source_file or not Path(source_file).exists():
-            # Cannot verify - return all as unverified
-            return [], gaps
-        
-        verified = []
-        unverified = []
-        
-        try:
-            with open(source_file) as f:
-                source_lines = f.readlines()
-        except Exception:
-            return [], gaps
-        
-        # Pattern to extract checksum info from gap
-        checksum_pattern = re.compile(r'source:(\d+)-(\d+):([a-f0-9]+)')
-        
-        for gap in gaps:
-            match = checksum_pattern.search(gap)
-            
-            if not match:
-                # No checksum info - mark as unverified
-                unverified.append(gap)
-                continue
-            
-            try:
-                line_start = int(match.group(1))
-                line_end = int(match.group(2))
-                expected_checksum = match.group(3)
-                
-                # Extract source content
-                if line_start < len(source_lines) and line_end <= len(source_lines):
-                    content = ''.join(source_lines[line_start:line_end])
-                    actual_checksum = hashlib.sha256(
-                        content.encode()
-                    ).hexdigest()[:16]
-                    
-                    if actual_checksum == expected_checksum:
-                        verified.append(gap)
-                    else:
-                        unverified.append(gap)
-                else:
-                    unverified.append(gap)
-                    
-            except Exception:
-                unverified.append(gap)
-        
-        return verified, unverified
-
-    def _validate_gate_05(self, session: Dict) -> Tuple[bool, Dict]:
-        """
-        GATE-05: All artifacts generated AND hygiene complete
-
-        Validation:
-        - CHANGE_LOG.md created
-        - INDEX.md created
-        - metrics.json created
-        - Document hygiene applied
-        """
-        details = {
-            "gate": "GATE-05",
-            "checks": []
-        }
-
-        # Check for artifacts
-        artifacts = ["CHANGE_LOG.md", "INDEX.md", "metrics.json"]
-        missing = []
-
-        for artifact in artifacts:
-            artifact_path = self.outputs_dir / artifact
-            if not artifact_path.exists():
-                missing.append(artifact)
-
-        if missing:
-            details["checks"].append({
-                "name": "artifacts",
-                "status": "FAIL",
-                "message": f"Missing artifacts: {missing}"
-            })
-            return False, details
-
-        details["checks"].append({
-            "name": "artifacts",
-            "status": "PASS",
-            "message": f"All artifacts generated: {artifacts}"
-        })
-
-        # Check document hygiene
-        state_snapshot = session.get("state_snapshot", {})
-        hygiene_complete = state_snapshot.get("hygiene_complete", False)
-
-        if not hygiene_complete:
-            details["checks"].append({
-                "name": "hygiene",
-                "status": "FAIL",
-                "message": "Document hygiene not complete"
-            })
-            return False, details
-
-        details["checks"].append({
-            "name": "hygiene",
-            "status": "PASS",
-            "message": "Document hygiene complete"
-        })
-
-        return True, details
-
-    # =========================================================================
-    # PIPELINE EXECUTION
-    # =========================================================================
-
-    def run_pipeline(self,
-                     session: Dict,
-                     start_phase: Optional[str] = None,
-                     batch_size: int = 5) -> Dict:
-        """
-        Run the processing pipeline.
-
-        Args:
-            session: Current session state
-            start_phase: Optional phase to start from
-            batch_size: Number of batches before checkpoint
-
-        Returns:
-            Pipeline execution result
-        """
-        result = {
-            "success": False,
-            "phases_completed": [],
-            "artifacts": [],
-            "errors": []
-        }
-
-        # Determine starting phase
-        current_phase = session.get("current_phase", -1)
-        if start_phase:
-            try:
-                current_phase = int(start_phase)
-            except ValueError:
-                pass
-
-        # Execute phases sequentially
-        phases = [
-            (-1, self._phase_bootstrap),
-            (0, self._phase_init),
-            (1, self._phase_search_discovery),
-            (2, self._phase_analysis_classification),
-            (3, self._phase_planning),
-            (4, self._phase_execution_validation),
-            (5, self._phase_delivery_hygiene)
-        ]
-
-        for phase_num, phase_func in phases:
-            if phase_num < current_phase:
-                continue
-
-            try:
-                phase_result = phase_func(session)
-                result["phases_completed"].append(phase_num)
-
-                if phase_result.get("artifacts"):
-                    result["artifacts"].extend(phase_result["artifacts"])
-
-                if not phase_result.get("success", True):
-                    result["errors"].append({
-                        "phase": phase_num,
-                        "error": phase_result.get("error", "Unknown error")
-                    })
-                    break
-
-            except Exception as e:
-                result["errors"].append({
-                    "phase": phase_num,
-                    "error": str(e)
-                })
-                break
-
-        # Determine success
-        result["success"] = len(result["errors"]) == 0
-
-        return result
-
-    def _phase_bootstrap(self, session: Dict) -> Dict:
-        """
-        PHASE -1: Bootstrap - Repository navigation and self-initialization.
-
-        This phase is read-only - no file modifications.
-        
-        v3.2.2: Added sandbox verification (INVAR-05).
-        """
-        # NEW v3.2.2: Sandbox verification
-        try:
-            from security.sandbox_verifier import verify_sandbox
-            sandbox_result = verify_sandbox(self.config)
-            
-            if not sandbox_result["verified"]:
-                return {
-                    "success": False,
-                    "phase": "bootstrap",
-                    "error": f"[gap: sandbox_verification_failed] Sandbox mode configured but not active",
-                    "details": sandbox_result
-                }
-        except ImportError:
-            sandbox_result = {"verified": True, "mode": "unknown", "checks": []}
-        
+    def transition_to_phase(self, phase: int) -> Dict:
+        """Transition to a new phase."""
+        old_phase = self._current_phase
+        self._current_phase = phase
+        self._logger.info(f"Phase transition: {old_phase} -> {phase}")
         return {
             "success": True,
-            "phase": "bootstrap",
-            "sandbox": sandbox_result,
-            "message": "Bootstrap complete"
+            "from_phase": old_phase,
+            "to_phase": phase
         }
 
-    def _phase_init(self, session: Dict) -> Dict:
-        """
-        PHASE 0: INITIALIZATION
-
-        - Quick Orient Header (STATE_SNAPSHOT)
-        - Environment Offload (if >5000 lines)
-        - Build NAV_MAP
-        - Workspace Isolation
-        - Session Checkpoint
-        
-        v3.2.2: Added input size protection and secret scanning.
-        """
-        source_file = session.get("source_file")
-
-        if not source_file:
-            # Check inputs directory
-            input_files = list(self.inputs_dir.glob("*"))
-            input_files = [f for f in input_files if f.is_file() and not f.name.startswith(".")]
-
-            # NEW v3.2.2: Input size protection
-            security_config = self.config.get("security", {})
-            max_size_mb = security_config.get("max_input_file_size_mb", 100)
-            max_total_mb = security_config.get("max_total_input_size_mb", 500)
-            max_size_bytes = max_size_mb * 1024 * 1024
-            max_total_bytes = max_total_mb * 1024 * 1024
-            
-            total_size = sum(f.stat().st_size for f in input_files)
-            
-            for f in input_files:
-                if f.stat().st_size > max_size_bytes:
-                    return {
-                        "success": False,
-                        "error": f"[gap: input_file_too_large] {f.name} exceeds {max_size_mb}MB limit"
-                    }
-            
-            if total_size > max_total_bytes:
-                return {
-                    "success": False,
-                    "error": f"[gap: total_input_size_exceeded] {total_size / 1024 / 1024:.1f}MB exceeds {max_total_mb}MB limit"
-                }
-            
-            # NEW v3.2.2: Secret scanning
-            if security_config.get("secrets_scan", False):
-                try:
-                    from security.secret_scanner import run_secret_scan
-                    scan_result = run_secret_scan(self.inputs_dir)
-                    if scan_result["blocked"]:
-                        return {
-                            "success": False,
-                            "error": f"[gap: secrets_detected] Found {scan_result['secrets_found']} potential secrets",
-                            "details": scan_result
-                        }
-                except ImportError:
-                    pass  # Scanner not available, skip
-
-            if input_files:
-                source_file = str(input_files[0])
-            else:
-                return {
-                    "success": False,
-                    "error": "No input files found"
-                }
-
-        # Read source file
-        try:
-            with open(source_file) as f:
-                content = f.read()
-                lines = content.split("\n")
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Failed to read source file: {e}"
-            }
-
-        # Build NAV_MAP (chunk the file)
-        chunk_size = self.config.get("chunking", {}).get("default_size", 1500)
-        chunks = {}
-
-        for i, start in enumerate(range(0, len(lines), chunk_size)):
-            end = min(start + chunk_size, len(lines))
-            chunk_id = f"C{i+1}"
-            chunks[chunk_id] = {
-                "chunk_id": chunk_id,
-                "status": "PENDING",
-                "line_start": start,
-                "line_end": end,
-                "changes": [],
-                "checksum": None,
-                "offset": 0
-            }
-
-        return {
-            "success": True,
-            "phase": "init",
-            "chunks": chunks,
-            "source_file": source_file,
-            "total_lines": len(lines),
-            "message": f"Initialized with {len(chunks)} chunks"
-        }
-
-    def _phase_search_discovery(self, session: Dict) -> Dict:
-        """
-        PHASE 1: SEARCH & DISCOVERY
-
-        Pattern Detection for:
-        - Duplicates
-        - Terminology issues
-        - Contradictions
-        - TODO/FIXME markers
-        - Orphan references
-        - KEEP markers
-        """
-        import re
-
-        chunks = session.get("chunks", {})
-        patterns_found = {
-            "duplicates": [],
-            "todos": [],
-            "fixmes": [],
-            "keep_markers": [],
-            "orphan_refs": []
-        }
-
-        # Pattern templates
-        patterns = {
-            "todo": re.compile(r'\bTODO\b'),
-            "fixme": re.compile(r'\bFIXME\b'),
-            "keep": re.compile(r'<!--\s*KEEP\s*-->'),
-            "ref": re.compile(r'\[([^\]]+)\]\s*\(\s*([^)]*)\s*\)')
-        }
-
-        # Scan for patterns (would read actual file in production)
-        # For now, return patterns structure
-
-        return {
-            "success": True,
-            "phase": "search_discovery",
-            "patterns": patterns_found,
-            "message": "Pattern detection complete"
-        }
-
-    def _phase_analysis_classification(self, session: Dict) -> Dict:
-        """
-        PHASE 2: ANALYSIS & CLASSIFICATION
-
-        Issue Classification with:
-        - ISSUE_ID
-        - SEV-1..4 severity
-        - Category
-        - Fix strategy
-        """
-        issues = session.get("open_issues", [])
-
-        return {
-            "success": True,
-            "phase": "analysis_classification",
-            "issues_classified": len(issues),
-            "message": "Issue classification complete"
-        }
-
-    def _phase_planning(self, session: Dict) -> Dict:
-        """
-        PHASE 3: PLANNING
-
-        - Execution Plan
-        - Pathology Registry
-        - Operation Budget
-        """
-        return {
-            "success": True,
-            "phase": "planning",
-            "execution_plan": {
-                "batches": [],
-                "dependencies": {}
-            },
-            "message": "Execution plan created"
-        }
-
-    def _phase_execution_validation(self, session: Dict) -> Dict:
-        """
-        PHASE 4: EXECUTION & VALIDATION
-
-        - Surgical Patch Engine
-        - Validation Loop
-        """
-        return {
-            "success": True,
-            "phase": "execution_validation",
-            "patches_applied": 0,
-            "message": "Execution and validation complete"
-        }
-
-    def _phase_delivery_hygiene(self, session: Dict) -> Dict:
-        """
-        PHASE 5: DELIVERY & HYGIENE
-
-        - Document Hygiene
-        - Artifact Generation
-        
-        Updated in v3.2:
-        - metrics.json includes p50/p95 token distribution
-        - Model routing breakdown
-        - Confidence summary
-        """
-        artifacts = []
-
-        # Create output directory
-        self.outputs_dir.mkdir(parents=True, exist_ok=True)
-
-        # Generate artifacts
-        index_path = self.outputs_dir / "INDEX.md"
-        with open(index_path, "w") as f:
-            f.write("# NAVIGATION INDEX\n\n")
-            for chunk_id, chunk in session.get("chunks", {}).items():
-                f.write(f"- [{chunk_id}] L{chunk.get('line_start', 0)}-{chunk.get('line_end', 0)}\n")
-        artifacts.append(str(index_path))
-
-        change_log_path = self.outputs_dir / "CHANGE_LOG.md"
-        with open(change_log_path, "w") as f:
-            f.write("# CHANGE_LOG\n\n")
-            f.write(f"Session: {session.get('id', 'unknown')}\n\n")
-        artifacts.append(str(change_log_path))
-
-        # NEW in v3.2: Enhanced metrics with p50/p95
-        metrics_path = self.outputs_dir / "metrics.json"
-        
-        # Get token and latency metrics from session
-        token_history = session.get("token_history", [])
-        latency_history = session.get("latency_history", [])
-        
-        # Calculate percentiles
-        token_metrics = self._calculate_percentiles(token_history)
-        latency_metrics = self._calculate_percentiles(latency_history)
-        
-        # Get model routing info
-        model_routing = session.get("model_routing", {})
-        
-        # Get confidence summary
-        confidence = session.get("confidence_summary", {})
-        
-        metrics_data = {
-            "session": {
-                "id": session.get("id"),
-                "status": "COMPLETE",
-                "recursion_depth_peak": session.get("recursion_depth_peak", 0)
-            },
-            "processing": {
-                "chunks_total": len(session.get("chunks", {})),
-                "issues_found": len(session.get("open_issues", [])),
-                "gaps": len(session.get("known_gaps", []))
-            },
-            "tokens": {
-                "total": session.get("tokens_used", 0),
-                "max": session.get("max_tokens", 100000),
-                "per_query_p50": token_metrics.get("p50", 0),
-                "per_query_p95": token_metrics.get("p95", 0),
-                "total_queries": token_metrics.get("count", 0)
-            },
-            "latency": {
-                "p50_ms": latency_metrics.get("p50", 0),
-                "p95_ms": latency_metrics.get("p95", 0),
-                "mean_ms": latency_metrics.get("mean", 0)
-            },
-            "model_routing": {
-                "root_model_calls": model_routing.get("root_calls", 0),
-                "leaf_model_calls": model_routing.get("leaf_calls", 0),
-                "root_model_tokens": model_routing.get("root_tokens", 0),
-                "leaf_model_tokens": model_routing.get("leaf_tokens", 0)
-            },
-            "confidence": {
-                "all_high": confidence.get("all_high", False),
-                "high_count": confidence.get("high_count", 0),
-                "med_count": confidence.get("med_count", 0),
-                "low_count": confidence.get("low_count", 0)
-            },
-            "gates": {
-                g: s.get("status") for g, s in session.get("gates", {}).items()
-            }
-        }
-        
-        with open(metrics_path, "w") as f:
-            json.dump(metrics_data, f, indent=2)
-        artifacts.append(str(metrics_path))
-
-        return {
-            "success": True,
-            "phase": "delivery_hygiene",
-            "artifacts": artifacts,
-            "message": "Delivery and hygiene complete"
-        }
-    
-    def _calculate_percentiles(self, values: List[int]) -> Dict:
-        """
-        Calculate p50, p95, mean for a list of values.
-        
-        Args:
-            values: List of numeric values
-            
-        Returns:
-            Dict with p50, p95, mean, count
-        """
-        if not values:
-            return {"p50": 0, "p95": 0, "mean": 0, "count": 0}
-        
-        sorted_vals = sorted(values)
-        n = len(sorted_vals)
-        
-        return {
-            "p50": int(statistics.median(sorted_vals)),
-            "p95": int(sorted_vals[int(n * 0.95)]) if n >= 20 else int(sorted_vals[-1]),
-            "mean": int(statistics.mean(sorted_vals)),
-            "min": int(sorted_vals[0]),
-            "max": int(sorted_vals[-1]),
-            "count": n
-        }
+    def process_gate_result(self, gate_id: str, result: Dict) -> Dict:
+        """Process gate result with mode-specific modifications."""
+        return self.mode_adapter.apply_to_gate(gate_id, result)

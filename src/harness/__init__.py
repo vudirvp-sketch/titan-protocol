@@ -1,4 +1,6 @@
-"""TITAN FUSE Protocol - Orchestrator Module"""
-from .orchestrator import Orchestrator, Phase
+# TITAN FUSE Protocol - Harness Module
+"""Orchestration and execution harness."""
 
-__all__ = ["Orchestrator", "Phase"]
+from .orchestrator import ModeAdapter, ModeConfig
+
+__all__ = ['ModeAdapter', 'ModeConfig']

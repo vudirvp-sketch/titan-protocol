@@ -1,44 +1,74 @@
+# TITAN FUSE Navigation Shortcuts
+
 shortcuts:
-  process_file:
-    description: "Process a file from inputs/"
-    action: "execute_pipeline"
-    files:
-      - "inputs/"
-    steps:
-      - "Read SKILL.md"
-      - "Read PROTOCOL.md"
-      - "Execute PHASE 0-5"
+  # Navigation shortcuts
+  "start":
+    description: "Begin protocol - read entry point"
+    action: "read"
+    files: ["AGENTS.md"]
 
-  resume_session:
-    description: "Resume interrupted session"
-    action: "restore_checkpoint"
-    files:
-      - "checkpoints/checkpoint.json"
-    steps:
-      - "Load checkpoint"
-      - "Verify source_checksum"
-      - "Continue from chunk_cursor"
+  "config":
+    description: "Read agent configuration"
+    action: "read"
+    files: ["SKILL.md", "config.yaml"]
 
-  validate_output:
-    description: "Run validation checks"
-    action: "validate"
-    files:
-      - "outputs/"
-    checks:
-      - "GATE-04 threshold"
-      - "CHANGE_LOG format"
-      - "Artifact completeness"
+  "protocol":
+    description: "Read full protocol specification"
+    action: "read"
+    files: ["PROTOCOL.md"]
 
-  generate_metrics:
-    description: "Export session metrics"
-    action: "export"
-    output: "outputs/metrics.json"
-    format: "json"
+  # Processing shortcuts
+  "process":
+    description: "Process files in inputs/"
+    action: "process"
+    files: ["inputs/"]
 
-  show_status:
-    description: "Display current session status"
-    action: "display"
-    sections:
-      - "STATE_SNAPSHOT"
-      - "gates_passed"
-      - "budget_used"
+  "resume":
+    description: "Resume from checkpoint"
+    action: "resume"
+    files: ["checkpoints/checkpoint.json"]
+
+  # Status shortcuts
+  "status":
+    description: "Check current session status"
+    action: "query"
+    returns: "STATE_SNAPSHOT"
+
+  "gates":
+    description: "Check gate status"
+    action: "query"
+    returns: "gates_passed"
+
+  "budget":
+    description: "Check token budget"
+    action: "query"
+    returns: "budget_used / budget_max"
+
+  # Output shortcuts
+  "output":
+    description: "Navigate to outputs"
+    action: "navigate"
+    target: "outputs/"
+
+  "artifacts":
+    description: "List generated artifacts"
+    action: "list"
+    target: "outputs/"
+
+  # Help shortcuts
+  "help":
+    description: "Show available shortcuts"
+    action: "help"
+
+  "version":
+    description: "Show protocol version"
+    action: "read"
+    files: ["VERSION"]
+
+# Command aliases
+aliases:
+  "go": "start"
+  "init": "start"
+  "run": "process"
+  "check": "status"
+  "metrics": "artifacts"

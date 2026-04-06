@@ -1,7 +1,6 @@
-"""
-Planning module for TITAN FUSE Protocol.
-"""
+# TITAN FUSE Protocol - Planning Module
+"""Planning and state snapshot management."""
 
-from .cycle_detector import CycleDetector, validate_dag
+from .state_snapshot import StateSnapshot, SnapshotManager
 
-__all__ = ['CycleDetector', 'validate_dag']
+__all__ = ['StateSnapshot', 'SnapshotManager']

@@ -1,77 +1,321 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TITAN FUSE Protocol Configuration Schema",
+  "description": "Configuration schema for TITAN FUSE Protocol v3.2.3",
   "type": "object",
-  "required": ["session", "chunking", "validation"],
   "properties": {
     "session": {
       "type": "object",
-      "required": ["max_tokens", "max_time_minutes"],
       "properties": {
-        "max_tokens": {"type": "integer", "minimum": 10000},
-        "max_time_minutes": {"type": "integer", "minimum": 5},
-        "max_files_per_session": {"type": "integer", "minimum": 1}
-      },
-      "additionalProperties": false
+        "id": {"type": ["string", "null"]},
+        "max_tokens": {"type": "integer", "minimum": 1000},
+        "max_time_minutes": {"type": "integer", "minimum": 1},
+        "checkpoint_enabled": {"type": "boolean"}
+      }
     },
     "chunking": {
       "type": "object",
-      "required": ["default_size"],
       "properties": {
         "default_size": {"type": "integer", "minimum": 100},
-        "min_size": {"type": "integer", "minimum": 100},
-        "max_size": {"type": "integer"},
-        "auto_adjust": {"type": "boolean"}
-      },
-      "additionalProperties": false
+        "large_file_size": {"type": "integer"},
+        "min_size": {"type": "integer"},
+        "semantic_boundaries": {"type": "boolean"},
+        "boundary_markers": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "chunking_limits": {
+      "type": "object",
+      "properties": {
+        "max_chars_per_chunk": {"type": "integer"},
+        "max_tokens_per_chunk": {"type": "integer"},
+        "enforce_secondary_limits": {"type": "boolean"}
+      }
+    },
+    "llm_query": {
+      "type": "object",
+      "properties": {
+        "max_response_tokens": {"type": "integer"},
+        "max_chunk_tokens": {"type": "integer"},
+        "fallback_enabled": {"type": "boolean"},
+        "fallback": {
+          "type": "object",
+          "properties": {
+            "max_attempts": {"type": "integer"},
+            "size_reduction_factor": {"type": "number"},
+            "timeout_seconds": {"type": "integer"},
+            "model_fallback": {"type": "boolean"},
+            "models": {
+              "type": "array",
+              "items": {"type": "string"}
+            }
+          }
+        }
+      }
     },
     "validation": {
       "type": "object",
       "properties": {
-        "max_patch_iterations": {"type": "integer", "minimum": 1}
+        "max_patch_iterations": {"type": "integer"},
+        "parallel_safe_check": {"type": "boolean"},
+        "gate_04": {
+          "type": "object",
+          "properties": {
+            "max_sev1_gaps": {"type": "integer"},
+            "max_sev2_gaps": {"type": "integer"},
+            "max_total_gap_pct": {"type": "integer"}
+          }
+        }
       }
     },
     "checkpoint": {
       "type": "object",
       "properties": {
         "enabled": {"type": "boolean"},
+        "format_version": {"type": "string"},
+        "chunk_checksums": {"type": "boolean"},
+        "partial_resumption": {"type": "boolean"},
+        "max_age_days": {"type": "integer"},
+        "path": {"type": "string"},
         "interval_tokens": {"type": "integer"},
         "interval_seconds": {"type": "integer"},
         "compression": {"type": "string", "enum": ["none", "gzip", "zstd"]},
-        "encryption": {"type": "string", "enum": ["none", "aes-256-gcm"]},
-        "security": {"type": "string", "enum": ["safe", "fast"]}
+        "security": {"type": "string"}
       }
     },
-    "security": {
+    "output": {
       "type": "object",
       "properties": {
-        "redos_timeout_ms": {"type": "integer", "minimum": 100},
-        "max_input_file_size_mb": {"type": "number"},
-        "max_total_input_size_mb": {"type": "number"},
-        "secrets_scan": {"type": "boolean"},
-        "workspace_path": {"type": "string"}
+        "directory": {"type": "string"},
+        "clean_mode": {"type": "boolean"},
+        "full_merge": {"type": "boolean"},
+        "full_merge_max_lines": {"type": "integer"},
+        "artifacts": {
+          "type": "object",
+          "properties": {
+            "index": {"type": "boolean"},
+            "symbol_map": {"type": "boolean"},
+            "change_log": {"type": "boolean"},
+            "decision_record": {"type": "boolean"},
+            "metrics": {"type": "boolean"}
+          }
+        }
       }
     },
-    "policy": {
+    "multi_file": {
       "type": "object",
       "properties": {
-        "max_recursion_depth": {"type": "integer", "minimum": 1, "maximum": 10}
+        "default_limit": {"type": "integer"},
+        "hard_limit": {"type": "integer"},
+        "require_approval": {"type": "boolean"},
+        "dependency_resolution": {"type": "boolean"},
+        "max_dependency_depth": {"type": "integer"},
+        "cross_file_patches": {"type": "boolean"}
+      }
+    },
+    "approval": {
+      "type": "object",
+      "properties": {
+        "mode": {"type": "string", "enum": ["interactive", "callback", "auto-reject"]},
+        "callback": {
+          "type": "object",
+          "properties": {
+            "url": {"type": ["string", "null"]},
+            "timeout": {"type": "integer"},
+            "retries": {"type": "integer"}
+          }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "output_file": {"type": "string"},
+        "prometheus": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "port": {"type": "integer"}
+          }
+        },
+        "webhook": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "url": {"type": ["string", "null"]},
+            "events": {
+              "type": "array",
+              "items": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "validators": {
+      "type": "object",
+      "properties": {
+        "auto_load": {"type": "boolean"},
+        "timeout": {"type": "integer"},
+        "disabled": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "mode": {
+      "type": "object",
+      "properties": {
+        "current": {"type": "string", "enum": ["direct", "auto", "manual", "interactive"]},
+        "presets_dir": {"type": "string"}
+      }
+    },
+    "model_routing": {
+      "type": "object",
+      "properties": {
+        "root_model": {
+          "type": "object",
+          "properties": {
+            "provider": {"type": "string"},
+            "model": {"type": "string"},
+            "max_tokens": {"type": "integer"},
+            "temperature": {"type": "number"}
+          }
+        },
+        "leaf_model": {
+          "type": "object",
+          "properties": {
+            "provider": {"type": "string"},
+            "model": {"type": "string"},
+            "max_tokens": {"type": "integer"},
+            "temperature": {"type": "number"}
+          }
+        },
+        "track_costs": {"type": "boolean"},
+        "log_model_usage": {"type": "boolean"},
+        "validation": {
+          "type": "object",
+          "properties": {
+            "require_root_model": {"type": "boolean"},
+            "require_leaf_model": {"type": "boolean"},
+            "warn_on_empty": {"type": "boolean"}
+          }
+        }
       }
     },
     "model_fallback": {
       "type": "object",
       "properties": {
         "enabled": {"type": "boolean"},
-        "chain": {"type": "array", "items": {"type": "string"}},
+        "chain": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
         "triggers": {
           "type": "object",
           "properties": {
             "timeout_ms": {"type": "integer"},
-            "error_rate_threshold": {"type": "number"},
-            "token_budget_exceeded": {"type": "boolean"}
+            "error_rate_threshold": {"type": "number"}
+          }
+        },
+        "degradation_mode": {"type": "string"}
+      }
+    },
+    "budget": {
+      "type": "object",
+      "properties": {
+        "sev_allocation": {
+          "type": "object",
+          "properties": {
+            "sev_1_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "sev_2_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "sev_3_4_ratio": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        },
+        "actions": {
+          "type": "object",
+          "properties": {
+            "WARNING": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "EXCEEDED": {
+              "type": "array",
+              "items": {"type": "string"}
+            }
           }
         }
       }
+    },
+    "sandbox": {
+      "type": "object",
+      "properties": {
+        "timeout_ms": {"type": "integer", "minimum": 100},
+        "memory_limit_mb": {"type": "integer", "minimum": 16}
+      }
+    },
+    "confidence": {
+      "type": "object",
+      "properties": {
+        "enable_advisory": {"type": "boolean"},
+        "early_exit_threshold": {"type": "string"},
+        "require_acknowledgement": {"type": "boolean"},
+        "log_confidence": {"type": "boolean"}
+      }
+    },
+    "recursion": {
+      "type": "object",
+      "properties": {
+        "max_recursion_depth": {"type": "integer", "minimum": 1},
+        "track_peak": {"type": "boolean"}
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "properties": {
+        "enable_token_tracking": {"type": "boolean"},
+        "calculate_percentiles": {"type": "boolean"},
+        "track_latency": {"type": "boolean"},
+        "include_model_breakdown": {"type": "boolean"}
+      }
+    },
+    "security": {
+      "type": "object",
+      "properties": {
+        "execution_mode": {"type": "string", "enum": ["trusted", "sandbox", "human_gate", "disabled"]},
+        "sandbox_type": {"type": "string", "enum": ["none", "docker", "venv", "restricted_subprocess"]},
+        "permitted_operations": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "blocked_operations": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "max_input_file_size_mb": {"type": "integer"},
+        "max_total_input_size_mb": {"type": "integer"},
+        "secrets_scan": {"type": "boolean"}
+      }
+    },
+    "development": {
+      "type": "object",
+      "properties": {
+        "debug": {"type": "boolean"},
+        "keep_intermediates": {"type": "boolean"},
+        "dry_run": {"type": "boolean"},
+        "verbose": {"type": "boolean"}
+      }
+    },
+    "logging": {
+      "type": "object",
+      "properties": {
+        "level": {"type": "string", "enum": ["debug", "info", "warning", "error"]},
+        "file": {"type": ["string", "null"]},
+        "timestamps": {"type": "boolean"},
+        "include_session_id": {"type": "boolean"}
+      }
     }
-  },
-  "additionalProperties": false
+  }
 }

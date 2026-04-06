@@ -1,340 +1,171 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0",
-  "protocol_version": "3.2.0",
-  "description": "Finite State Machine for TITAN FUSE Protocol execution",
-  "generated": "2026-04-06T07:00:00Z",
-
+  "version": "3.2.1",
+  "description": "TITAN FUSE Protocol State Machine",
+  "initial_state": "INIT",
   "states": {
     "INIT": {
-      "description": "Initial state before any processing",
-      "entry_actions": ["detect_entry_point", "load_config"],
-      "transitions": {
-        "REPO_NAVIGATE": "REPO_ORIENTATION",
-        "FILE_DIRECT": "PHASE_0_INIT",
-        "REPOMIX": "PHASE_0_INIT",
-        "REPO_HOST": "BOOTSTRAP"
-      }
+      "description": "Initial state - entry point classification",
+      "transitions": [
+        {
+          "event": "REPO_URL",
+          "target": "BOOTSTRAP",
+          "condition": "input matches github.com/{user}/{repo}"
+        },
+        {
+          "event": "FILE_PATH",
+          "target": "PHASE_0",
+          "condition": "input is direct file path"
+        },
+        {
+          "event": "REPOMIX",
+          "target": "PHASE_0",
+          "condition": "input is repomix file"
+        },
+        {
+          "event": "REPO_HOST",
+          "target": "BOOTSTRAP",
+          "condition": "SKILL.md or PROTOCOL.md in current directory"
+        }
+      ]
     },
-
-    "REPO_ORIENTATION": {
-      "description": "Navigate repository structure",
-      "phase": "-1A",
-      "entry_actions": ["fetch_repo_ui", "scan_anchors", "build_repo_map"],
-      "transitions": {
-        "GATE_REPO_00_PASS": "BOOTSTRAP",
-        "GATE_REPO_00_FAIL": "ERROR_STATE"
-      }
-    },
-
     "BOOTSTRAP": {
-      "description": "Self-initialization from repo files",
-      "phase": "-1B",
-      "entry_actions": ["read_readme", "read_skill_md", "read_protocol_md", "discover_inputs", "check_checkpoints"],
-      "transitions": {
-        "GATE_REPO_01_PASS": "PHASE_0_INIT",
-        "GATE_REPO_01_FAIL": "NO_INPUTS_ERROR"
-      }
+      "description": "TIER -1 Bootstrap phase - repository navigation",
+      "transitions": [
+        {
+          "event": "GATE_REPO_01_PASS",
+          "target": "PHASE_0",
+          "condition": "bootstrap sequence complete, INPUT_QUEUE non-empty"
+        },
+        {
+          "event": "NO_INPUTS",
+          "target": "ABORTED",
+          "condition": "inputs/ empty"
+        }
+      ]
     },
-
-    "PHASE_0_INIT": {
+    "PHASE_0": {
       "description": "Initialization & Indexing",
-      "phase": "0",
-      "entry_actions": ["quick_orient_header", "environment_offload", "build_nav_map", "workspace_isolation", "session_checkpoint"],
-      "transitions": {
-        "GATE_00_PASS": "PHASE_1_SEARCH",
-        "GATE_00_FAIL": "NAV_MAP_ERROR"
-      }
+      "transitions": [
+        {
+          "event": "GATE_00_PASS",
+          "target": "PHASE_1",
+          "condition": "NAV_MAP exists, all chunks indexed"
+        },
+        {
+          "event": "GATE_00_FAIL",
+          "target": "ABORTED",
+          "condition": "cannot build NAV_MAP"
+        }
+      ]
     },
-
-    "PHASE_1_SEARCH": {
+    "PHASE_1": {
       "description": "Search & Discovery",
-      "phase": "1",
-      "entry_actions": ["pattern_detection", "scan_targets"],
-      "transitions": {
-        "GATE_01_PASS": "PHASE_2_ANALYSIS",
-        "GATE_01_FAIL": "SCAN_ERROR"
-      }
+      "transitions": [
+        {
+          "event": "GATE_01_PASS",
+          "target": "PHASE_2",
+          "condition": "all target patterns scanned"
+        }
+      ]
     },
-
-    "PHASE_2_ANALYSIS": {
+    "PHASE_2": {
       "description": "Analysis & Classification",
-      "phase": "2",
-      "entry_actions": ["classify_issues", "assign_issue_ids", "run_validators"],
-      "transitions": {
-        "GATE_02_PASS": "PHASE_3_PLANNING",
-        "GATE_02_FAIL": "CLASSIFICATION_ERROR"
-      }
+      "transitions": [
+        {
+          "event": "GATE_02_PASS",
+          "target": "PHASE_3",
+          "condition": "all issues classified with ISSUE_ID"
+        }
+      ]
     },
-
-    "PHASE_3_PLANNING": {
+    "PHASE_3": {
       "description": "Planning",
-      "phase": "3",
-      "entry_actions": ["build_execution_plan", "create_pathology_registry", "check_budget"],
-      "transitions": {
-        "GATE_03_PASS": "PHASE_4_EXECUTION",
-        "GATE_03_FAIL": "PLANNING_ERROR",
-        "BUDGET_WARNING": "PHASE_4_EXECUTION_SUSPENDED"
-      }
+      "transitions": [
+        {
+          "event": "GATE_03_PASS",
+          "target": "PHASE_4",
+          "condition": "plan validated, no KEEP_VETO violations"
+        },
+        {
+          "event": "KEEP_VETO",
+          "target": "ABORTED",
+          "condition": "attempt to modify protected content"
+        }
+      ]
     },
-
-    "PHASE_4_EXECUTION": {
+    "PHASE_4": {
       "description": "Execution & Validation",
-      "phase": "4",
-      "entry_actions": ["apply_changes", "run_validation_loop", "check_keep_veto"],
-      "transitions": {
-        "GATE_04_PASS": "PHASE_5_DELIVERY",
-        "GATE_04_WARN": "PHASE_5_DELIVERY",
-        "GATE_04_BLOCK": "VALIDATION_ERROR",
-        "ROLLBACK": "ROLLBACK_STATE"
-      }
+      "transitions": [
+        {
+          "event": "GATE_04_PASS",
+          "target": "PHASE_5",
+          "condition": "validation pass, gaps within threshold"
+        },
+        {
+          "event": "GATE_04_WARN",
+          "target": "PHASE_5",
+          "condition": "gaps within warning threshold, human ack"
+        },
+        {
+          "event": "GATE_04_BLOCK",
+          "target": "ROLLBACK",
+          "condition": "SEV-1/SEV-2 gaps exceed threshold"
+        },
+        {
+          "event": "VALIDATION_FAIL",
+          "target": "PHASE_4",
+          "condition": "retry after patch"
+        }
+      ]
     },
-
-    "PHASE_4_EXECUTION_SUSPENDED": {
-      "description": "Execution suspended due to budget warning",
-      "phase": "4",
-      "entry_actions": ["suspend_sev3_sev4", "report_budget_status"],
-      "transitions": {
-        "APPROVAL_GRANTED": "PHASE_4_EXECUTION",
-        "APPROVAL_DENIED": "BUDGET_EXCEEDED"
-      }
-    },
-
-    "PHASE_5_DELIVERY": {
+    "PHASE_5": {
       "description": "Delivery & Hygiene",
-      "phase": "5",
-      "entry_actions": ["document_hygiene", "generate_artifacts", "update_status_transitions"],
-      "transitions": {
-        "GATE_05_PASS": "COMPLETE",
-        "GATE_05_FAIL": "DELIVERY_ERROR"
-      }
-    },
-
-    "ROLLBACK_STATE": {
-      "description": "Rollback triggered",
-      "entry_actions": ["restore_from_backup", "log_rollback", "report_state"],
-      "transitions": {
-        "RETRY": "PHASE_4_EXECUTION",
-        "ABORT": "ERROR_STATE"
-      }
-    },
-
-    "COMPLETE": {
-      "description": "Processing complete",
-      "entry_actions": ["write_final_checkpoint", "generate_metrics", "cleanup_work_dir"],
-      "transitions": {
-        "FULL_MERGE": "MERGE_OUTPUT",
-        "STANDARD": "FINAL_OUTPUT"
-      }
-    },
-
-    "MERGE_OUTPUT": {
-      "description": "Full merge output mode",
-      "entry_actions": ["verify_gate_05", "load_working_copy", "run_checksum_verification"],
-      "transitions": {
-        "SUCCESS": "FINAL_OUTPUT",
-        "DIVERGENCE": "MERGE_ERROR"
-      }
-    },
-
-    "FINAL_OUTPUT": {
-      "description": "Final output delivered",
-      "entry_actions": ["output_artifacts", "archive_session"],
-      "transitions": {}
-    },
-
-    "ERROR_STATE": {
-      "description": "Unrecoverable error",
-      "entry_actions": ["log_error", "write_checkpoint", "await_instruction"],
-      "max_retries": 3,
-      "retry_count": 0,
-      "transitions": {
-        "RETRY": "INIT",
-        "RETRY_LIMIT_EXCEEDED": "ABORTED",
-        "ABORT": "ABORTED"
-      },
-      "on_retry": {
-        "action": "increment_retry_count",
-        "check": "if retry_count >= max_retries then RETRY_LIMIT_EXCEEDED"
-      }
-    },
-
-    "NO_INPUTS_ERROR": {
-      "description": "No processable inputs found",
-      "entry_actions": ["report_no_inputs", "suggest_add_files"],
-      "transitions": {
-        "FILES_ADDED": "BOOTSTRAP",
-        "ABORT": "ABORTED"
-      }
-    },
-
-    "NAV_MAP_ERROR": {
-      "description": "NAV_MAP construction failed",
-      "entry_actions": ["report_nav_map_error", "suggest_chunking"],
-      "transitions": {
-        "RETRY": "PHASE_0_INIT",
-        "ABORT": "ABORTED"
-      }
-    },
-
-    "SCAN_ERROR": {
-      "description": "Pattern scanning incomplete",
-      "entry_actions": ["report_scan_error", "list_missing_patterns"],
-      "transitions": {
-        "RETRY": "PHASE_1_SEARCH",
-        "SKIP_PATTERNS": "PHASE_2_ANALYSIS"
-      }
-    },
-
-    "CLASSIFICATION_ERROR": {
-      "description": "Issue classification failed",
-      "entry_actions": ["report_unclassified", "request_manual_classification"],
-      "transitions": {
-        "CLASSIFIED": "PHASE_3_PLANNING",
-        "ABORT": "ABORTED"
-      }
-    },
-
-    "PLANNING_ERROR": {
-      "description": "Execution plan invalid",
-      "entry_actions": ["report_planning_error", "check_keep_veto_violations"],
-      "transitions": {
-        "PLAN_FIXED": "PHASE_3_PLANNING",
-        "ABORT": "ABORTED"
-      }
-    },
-
-    "VALIDATION_ERROR": {
-      "description": "Validation failed with too many gaps",
-      "entry_actions": ["report_gap_counts", "list_sev1_sev2_gaps"],
-      "transitions": {
-        "GAPS_FIXED": "PHASE_4_EXECUTION",
-        "ABORT": "ABORTED"
-      }
-    },
-
-    "DELIVERY_ERROR": {
-      "description": "Artifact generation failed",
-      "entry_actions": ["report_missing_artifacts", "list_incomplete_hygiene"],
-      "transitions": {
-        "FIXED": "PHASE_5_DELIVERY",
-        "ABORT": "ABORTED"
-      }
-    },
-
-    "BUDGET_EXCEEDED": {
-      "description": "Session budget exceeded",
-      "entry_actions": ["write_checkpoint", "report_budget_exceeded"],
-      "transitions": {
-        "NEW_SESSION": "INIT"
-      }
-    },
-
-    "MERGE_ERROR": {
-      "description": "Checksum divergence in merge",
-      "entry_actions": ["report_divergence", "suggest_manual_review"],
-      "transitions": {
-        "MANUAL_APPROVAL": "FINAL_OUTPUT",
-        "ABORT": "ABORTED"
-      }
-    },
-
-    "ABORTED": {
-      "description": "Processing aborted",
-      "entry_actions": ["cleanup", "archive_logs"],
-      "transitions": {}
-    }
-  },
-
-  "events": {
-    "GATE_00_PASS": {
-      "description": "NAV_MAP exists and all chunks indexed",
-      "severity": "info"
-    },
-    "GATE_00_FAIL": {
-      "description": "NAV_MAP missing or incomplete",
-      "severity": "error"
-    },
-    "GATE_01_PASS": {
-      "description": "All target patterns scanned",
-      "severity": "info"
-    },
-    "GATE_01_FAIL": {
-      "description": "Pattern scanning incomplete",
-      "severity": "error"
-    },
-    "GATE_02_PASS": {
-      "description": "All issues classified with ISSUE_ID",
-      "severity": "info"
-    },
-    "GATE_02_FAIL": {
-      "description": "Issues remain unclassified",
-      "severity": "error"
-    },
-    "GATE_03_PASS": {
-      "description": "Plan validated, no KEEP_VETO violations, budget OK",
-      "severity": "info"
-    },
-    "GATE_03_FAIL": {
-      "description": "Plan invalid or KEEP_VETO violation",
-      "severity": "error"
-    },
-    "GATE_04_PASS": {
-      "description": "All validations pass, gaps within threshold",
-      "severity": "info"
-    },
-    "GATE_04_WARN": {
-      "description": "Validations pass with warnings",
-      "severity": "warning"
-    },
-    "GATE_04_BLOCK": {
-      "description": "Too many gaps or critical gaps",
-      "severity": "error"
-    },
-    "GATE_05_PASS": {
-      "description": "All artifacts generated, hygiene complete",
-      "severity": "info"
-    },
-    "GATE_05_FAIL": {
-      "description": "Artifacts missing or hygiene incomplete",
-      "severity": "error"
-    },
-    "GATE_REPO_00_PASS": {
-      "description": "REPO_MAP built, bootstrap_doc identified",
-      "severity": "info"
-    },
-    "GATE_REPO_00_FAIL": {
-      "description": "Repository structure issue",
-      "severity": "error"
-    },
-    "GATE_REPO_01_PASS": {
-      "description": "Bootstrap complete, INPUT_QUEUE non-empty",
-      "severity": "info"
-    },
-    "GATE_REPO_01_FAIL": {
-      "description": "Bootstrap failed or no inputs",
-      "severity": "error"
+      "transitions": [
+        {
+          "event": "GATE_05_PASS",
+          "target": "COMPLETE",
+          "condition": "artifacts generated, hygiene complete"
+        },
+        {
+          "event": "GATE_05_FAIL",
+          "target": "ABORTED",
+          "condition": "cannot generate required artifacts"
+        }
+      ]
     },
     "ROLLBACK": {
-      "description": "Rollback triggered by validation failure",
-      "severity": "warning"
+      "description": "Recovery state",
+      "transitions": [
+        {
+          "event": "RETRY",
+          "target": "PHASE_4",
+          "condition": "rollback complete, ready to retry"
+        },
+        {
+          "event": "ABORT",
+          "target": "ABORTED",
+          "condition": "max retries exceeded"
+        }
+      ]
     },
-    "BUDGET_WARNING": {
-      "description": "Token usage at 90%",
-      "severity": "warning"
+    "COMPLETE": {
+      "description": "Session completed successfully",
+      "transitions": []
     },
-    "BUDGET_EXCEEDED_EVT": {
-      "description": "Token or time budget exceeded",
-      "severity": "error"
+    "ABORTED": {
+      "description": "Session aborted",
+      "transitions": []
     }
   },
-
-  "initial_state": "INIT",
-  "final_states": ["FINAL_OUTPUT", "ABORTED"],
-
-  "metadata": {
-    "total_states": 24,
-    "total_events": 18,
-    "phases": ["-1A", "-1B", "0", "1", "2", "3", "4", "5"]
-  }
+  "terminal_states": ["COMPLETE", "ABORTED"],
+  "gate_sequence": [
+    "GATE-REPO-00",
+    "GATE-REPO-01",
+    "GATE-00",
+    "GATE-01",
+    "GATE-02",
+    "GATE-03",
+    "GATE-04",
+    "GATE-05"
+  ]
 }

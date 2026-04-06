@@ -1,13 +1,12 @@
-# TITAN FUSE Agent Ignore
-# Files and patterns to skip during processing
-
 # Agent working directories
 /tmp/titan_ws_*/
+*.checkpoint.json.tmp
+
+# Intermediate artifacts (keep final only)
 WORK_DIR/
 working_copy/
 
-# Intermediate artifacts
-*.checkpoint.json.tmp
+# Debug and draft outputs
 *.debug.md
 *_draft.md
 *_iter*.md
@@ -15,33 +14,23 @@ working_copy/
 # OS artifacts
 .DS_Store
 Thumbs.db
-*.swp
-*.swo
-*~
 
-# IDE
-.vscode/
-.idea/
-*.sublime-*
-
-# Build outputs
+# Node modules (if any)
 node_modules/
-dist/
-build/
+
+# Python cache
 __pycache__/
 *.pyc
-.env
-.env.local
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 
 # Logs
 *.log
-logs/
-
-# Test outputs
-coverage/
-.nyc_output/
-
-# Temporary files
-*.tmp
-*.temp
-.cache/

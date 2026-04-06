@@ -1,4 +1,6 @@
-"""TITAN FUSE Protocol - Event Bus Module"""
-from .event_bus import EventBus, Event, EventType, get_event_bus, init_event_bus
+# TITAN FUSE Protocol - Events Module
+"""Event bus for event-driven architecture."""
 
-__all__ = ["EventBus", "Event", "EventType", "get_event_bus", "init_event_bus"]
+from .event_bus import EventBus, Event, EventSeverity
+
+__all__ = ['EventBus', 'Event', 'EventSeverity']
