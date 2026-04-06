@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""
+TITAN FUSE Protocol - CLI Entry Point
+
+Usage:
+    ./titan --help
+    ./titan init [input_files...]
+    ./titan validate [--gate GATE | --all]
+    ./titan resume [checkpoint_path]
+    ./titan login [--provider PROVIDER]
+    ./titan doctor
+    ./titan status
+    ./titan process [--phase PHASE]
+    ./titan compact [--strategy STRATEGY]
+    ./titan export [--format FORMAT] [--output DIR]
+"""
+
+import sys
+import os
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+from cli.titan_cli import main
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -251,7 +251,6 @@ validate-checkpoints:
               print(f"❌ Schema validation failed: {e.message}")
               exit(1)
           EOF
-
   report-status:
     name: Report Validation Status
     runs-on: ubuntu-latest
