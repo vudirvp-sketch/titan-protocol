@@ -1,378 +1,160 @@
-# TITAN FUSE Protocol Configuration
-# Version: 3.2.0
-#
-# This file contains configurable defaults for the protocol.
-# Settings here can be overridden by SKILL.md or command-line arguments.
-
-# =============================================================================
-# SESSION CONFIGURATION
-# =============================================================================
-
 session:
-  # Unique identifier (auto-generated if not specified)
   id: null
-
-  # Maximum tokens for the session
   max_tokens: 100000
-
-  # Maximum wall-clock time in minutes
   max_time_minutes: 60
-
-  # Enable session persistence
   checkpoint_enabled: true
-
-# =============================================================================
-# CHUNKING CONFIGURATION
-# =============================================================================
-
 chunking:
-  # Default chunk size in lines
   default_size: 1500
-
-  # Reduced chunk size for very large files (>30k lines)
   large_file_size: 800
-
-  # Minimum chunk size (do not split below this)
   min_size: 500
-
-  # Attempt to split on semantic boundaries
   semantic_boundaries: true
-
-  # Boundary markers (in order of preference)
   boundary_markers:
-    - "^#{1,6} "        # Markdown headings
-    - "^function "      # JavaScript functions
-    - "^def "           # Python functions
-    - "^class "         # Class definitions
-    - "^---$"           # Horizontal rules
-    - "^```"            # Code blocks
-
-# =============================================================================
-# LLM QUERY CONFIGURATION
-# =============================================================================
-
+  - '^#{1,6} '
+  - '^function '
+  - '^def '
+  - '^class '
+  - ^---$
+  - ^```
 llm_query:
-  # Maximum tokens for query response
   max_response_tokens: 2048
-
-  # Chunk size limit for queries (tokens)
   max_chunk_tokens: 4000
-
-  # Enable fallback chain
   fallback_enabled: true
-
-  # Fallback chain configuration
   fallback:
     max_attempts: 4
     size_reduction_factor: 0.5
     timeout_seconds: 30
-
-    # Model fallback (if available)
     model_fallback: true
     models:
-      - primary
-      - alternative-1
-
-# =============================================================================
-# VALIDATION CONFIGURATION
-# =============================================================================
-
+    - primary
+    - alternative-1
 validation:
-  # Maximum patch iterations per defect
   max_patch_iterations: 2
-
-  # Enable parallel-safe batch checking
   parallel_safe_check: true
-
-  # GATE-04 threshold settings
   gate_04:
-    max_sev1_gaps: 0        # Zero tolerance for critical gaps
-    max_sev2_gaps: 2        # Max 2 high-severity gaps
-    max_total_gap_pct: 20   # Max 20% gaps as percentage of issues
-
-# =============================================================================
-# CHECKPOINT CONFIGURATION
-# =============================================================================
-
+    max_sev1_gaps: 0
+    max_sev2_gaps: 2
+    max_total_gap_pct: 20
 checkpoint:
-  # Checkpoint format version
-  format_version: "2.0"
-
-  # Enable chunk-level checksums
+  format_version: '2.0'
   chunk_checksums: true
-
-  # Enable partial resumption
   partial_resumption: true
-
-  # Maximum checkpoint age in days
   max_age_days: 30
-
-  # Checkpoint file path (relative to repo root)
   path: checkpoints/checkpoint.json
-
-# =============================================================================
-# OUTPUT CONFIGURATION
-# =============================================================================
-
 output:
-  # Output directory
   directory: outputs/
-
-  # Enable clean output mode
   clean_mode: true
-
-  # Enable full merge mode
   full_merge: true
-
-  # Maximum file size for full merge (lines)
   full_merge_max_lines: 8000
-
-  # Artifacts to generate
   artifacts:
     index: true
     symbol_map: true
     change_log: true
     decision_record: false
     metrics: true
-
-# =============================================================================
-# MULTI-FILE CONFIGURATION
-# =============================================================================
-
 multi_file:
-  # Default file limit per session
   default_limit: 3
-
-  # Hard maximum (even with approval)
   hard_limit: 10
-
-  # Require approval to exceed default limit
   require_approval: true
-
-  # Enable dependency resolution
   dependency_resolution: true
-
-  # Maximum dependency graph depth
   max_dependency_depth: 5
-
-  # Cross-file patches (experimental)
   cross_file_patches: false
-
-# =============================================================================
-# APPROVAL HANDLER CONFIGURATION
-# =============================================================================
-
 approval:
-  # Mode: interactive | callback | auto-reject
   mode: interactive
-
-  # Callback configuration (for callback mode)
   callback:
     url: null
     timeout: 300
     retries: 3
-
-# =============================================================================
-# METRICS CONFIGURATION
-# =============================================================================
-
 metrics:
-  # Enable metrics collection
   enabled: true
-
-  # Output file
   output_file: outputs/metrics.json
-
-  # Prometheus export
   prometheus:
     enabled: false
     port: 9090
-
-  # Webhook notification
   webhook:
     enabled: false
     url: null
     events:
-      - session_complete
-      - session_failed
-      - gate_blocked
-
-# =============================================================================
-# VALIDATOR CONFIGURATION
-# =============================================================================
-
+    - session_complete
+    - session_failed
+    - gate_blocked
 validators:
-  # Auto-load validators from skills/validators/
   auto_load: true
-
-  # Validator timeout (seconds)
   timeout: 10
-
-  # Disabled validators (by name)
   disabled: []
-
-# =============================================================================
-# LOGGING CONFIGURATION
-# =============================================================================
-
 logging:
-  # Log level: debug | info | warn | error
   level: info
-
-  # Log file (null for console only)
   file: null
-
-  # Include timestamps
   timestamps: true
-
-  # Include session ID in logs
   include_session_id: true
-
-# =============================================================================
-# REPOSITORY STRUCTURE
-# =============================================================================
-
 repository:
-  # Required directories (created if missing)
   directories:
-    - inputs
-    - outputs
-    - checkpoints
-    - skills
-    - scripts
-    - examples
-
-  # Required files (validated on startup)
+  - inputs
+  - outputs
+  - checkpoints
+  - skills
+  - scripts
+  - examples
   required_files:
-    - PROTOCOL.md
-    - SKILL.md
-    - README.md
-    - VERSION
-
-# =============================================================================
-# DEVELOPMENT OPTIONS
-# =============================================================================
-
+  - PROTOCOL.md
+  - SKILL.md
+  - README.md
+  - VERSION
 development:
-  # Enable debug mode (extra logging, no cleanup)
   debug: false
-
-  # Keep intermediate files
   keep_intermediates: false
-
-  # Dry run mode (no actual changes)
   dry_run: false
-
-  # Verbose output
   verbose: false
-
-# =============================================================================
-# SECURITY CONFIGURATION (INVAR-05) - NEW in v3.2
-# =============================================================================
-
 security:
-  # Execution mode for LLM-generated code
-  # Options: sandbox | human_gate | disabled
   execution_mode: human_gate
-  
-  # Sandbox type (only used if execution_mode = sandbox)
-  # Options: docker | venv | restricted_subprocess | none
   sandbox_type: none
-  
-  # Allow list of permitted operations
   permitted_operations:
-    - file_read
-    - file_write
-    - grep
-    - sed
-  
-  # Blocked operations (always blocked regardless of mode)
+  - file_read
+  - file_write
+  - grep
+  - sed
   blocked_operations:
-    - rm_rf
-    - sudo
-    - chmod
-    - chown
-
-# =============================================================================
-# CHUNKING SECONDARY LIMITS (PRINCIPLE-04) - NEW in v3.2
-# =============================================================================
-
+  - rm_rf
+  - sudo
+  - chmod
+  - chown
 chunking_limits:
-  # Maximum characters per chunk (hard limit)
   max_chars_per_chunk: 150000
-  
-  # Maximum tokens per chunk (hard limit, approx)
   max_tokens_per_chunk: 30000
-  
-  # Enforce secondary limits (override primary line limit if exceeded)
   enforce_secondary_limits: true
-
-# =============================================================================
-# RECURSION CONTROL - NEW in v3.2
-# =============================================================================
-
 recursion:
-  # Maximum recursion depth for nested sub-tasks
-  # 0 = no sub-tasks allowed
-  # 1 = one level of nesting (recommended)
   max_recursion_depth: 1
-  
-  # Track recursion peak for reporting
   track_peak: true
-
-# =============================================================================
-# MODEL ROUTING (PRINCIPLE-06) - NEW in v3.2
-# =============================================================================
-
-# Remove this section entirely to use single model for all operations.
-# When configured, routes calls according to model type:
-# - root_model: used for orchestration, gate decisions, planning (Phase 0-3, 5)
-# - leaf_model: used for llm_query calls on chunks (Phase 1-4)
-
 model_routing:
-  # Root model for orchestration (frontier model recommended)
-  root_model: ""
-  
-  # Leaf model for chunk processing (cheaper model recommended)
-  leaf_model: ""
-  
-  # Enable cost tracking
+  root_model: ''
+  leaf_model: ''
   track_costs: true
-  
-  # Log model used per query
   log_model_usage: true
-
-# =============================================================================
-# CONFIDENCE ADVISORY (GATE-04) - NEW in v3.2
-# =============================================================================
-
 confidence:
-  # Enable confidence advisory in GATE-04
   enable_advisory: true
-  
-  # Confidence threshold for early exit advisory
   early_exit_threshold: HIGH
-  
-  # Require human acknowledgement for early exit
   require_acknowledgement: true
-  
-  # Log confidence scores for analysis
   log_confidence: true
-
-# =============================================================================
-# TELEMETRY (metrics.json) - NEW in v3.2
-# =============================================================================
-
 telemetry:
-  # Enable token distribution tracking
   enable_token_tracking: true
-  
-  # Calculate p50/p95 percentiles
   calculate_percentiles: true
-  
-  # Track latency per query
   track_latency: true
-  
-  # Include model usage breakdown
   include_model_breakdown: true
-
+mode:
+  current: direct
+  presets_dir: presets/
+intent_classifier:
+  enabled: false
+  method: rule_based
+  confidence_threshold: 0.7
+  log_all: true
+anomaly_detection:
+  enabled: false
+  baseline_sessions: 10
+  threshold_multiplier: 3
+  action: warn
+model_fallback:
+  enabled: false
+  chain:
+  - secondary-frontier
+  - local-high-end
+  degradation_mode: reduced_capability

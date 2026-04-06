@@ -1,0 +1,159 @@
+# TITAN FUSE Protocol v3.2.1 - Mode Configuration
+# This file configures the execution mode and related settings.
+# Settings here can be overridden by CLI arguments (--mode=auto, etc.)
+
+protocol_version: 3.2.1
+
+# =============================================================================
+# CURRENT MODE
+# =============================================================================
+# Options: direct | auto | manual | preset:NAME | hybrid
+# Default: direct (backward compatible with v3.2.0)
+mode: direct
+
+# =============================================================================
+# MODE-SPECIFIC SETTINGS
+# =============================================================================
+
+direct:
+  description: "Standard phase pipeline without intent classification"
+  pipeline: "PHASE_-1 → PHASE_0 → PHASE_1 → PHASE_2 → PHASE_3 → PHASE_4 → PHASE_5"
+  backward_compatible: true
+  features:
+    intent_detection: false
+    skill_auto_generation: false
+    template_caching: false
+
+auto:
+  description: "Intent detection → planning → execution with verification"
+  pipeline: "TIER_-2 → PHASE_-1 → INTENT_CLASSIFICATION → DYNAMIC_PIPELINE"
+  features:
+    intent_detection: true
+    skill_auto_generation: false  # Phase 2
+    template_caching: false       # Phase 2
+  
+  intent_classifier:
+    method: rule_based
+    version: v1
+    confidence_threshold: 0.7
+    
+    # Override thresholds by classification type
+    threshold_overrides:
+      generation: 0.9      # High bar for code generation
+      debugging: 0.8       # Medium-high for debugging
+      analysis: 0.7        # Default threshold
+      research: 0.6        # Lower bar for research
+      multimodal: 0.7      # Default for multimodal
+
+manual:
+  description: "User-controlled pipeline with enforced gates"
+  requires_user_input: true
+  gate_pause:
+    - GATE-00
+    - GATE-02
+    - GATE-03
+    - GATE-04
+  interactive_prompt: true
+
+preset:
+  description: "Load workflow from presets/{NAME}/workflow.yaml"
+  location: presets/
+  available_presets:
+    - code_review
+    - documentation
+    - debugging
+
+hybrid:
+  description: "AUTO start with mid-flight intervention capability"
+  enabled: false  # Phase 3 feature
+  state_preservation: required
+  intervention_triggers:
+    - user_request
+    - gate_failure
+    - confidence_drop_below: 0.5
+
+# =============================================================================
+# PIPELINE CONFIGURATION
+# =============================================================================
+
+pipeline:
+  intent_detection:
+    enabled: false  # Set to true for auto mode
+    classifier: rule_based_v1
+    confidence_threshold: 0.7
+    log_all_classifications: true
+    
+  planning:
+    dag_builder: true
+    template_caching: false  # Phase 2
+    
+  skill_binding:
+    auto_generation: false   # Phase 2
+    cache_ttl_days: 30
+
+# =============================================================================
+# GATES CONFIGURATION
+# =============================================================================
+
+gates:
+  # TIER_-2 Gates (only for AUTO mode)
+  GATE-INTENT:
+    enabled: false  # Phase 1: only for AUTO mode
+    phase: -2
+    trigger: "mode == AUTO AND intent_classified"
+    on_fail:
+      action: pause
+      message: "Intent confidence below threshold. Please clarify."
+
+  GATE-SKILL:
+    enabled: false  # Phase 2
+    phase: -2
+    trigger: "skill_generated"
+    
+  # PHASE_0 Gate
+  GATE-SECURITY:
+    enabled: true
+    phase: 0
+    trigger: "code_execution_requested"
+    
+  # PHASE_3 Gate  
+  GATE-PLAN:
+    enabled: true
+    phase: 3
+    trigger: "execution_plan_built"
+    user_confirmation:
+      required: "confidence < 0.95"
+      auto_approve: "confidence >= 0.95"
+    
+  # PHASE_4 Gate
+  GATE-EXEC:
+    enabled: true
+    phase: 4
+    trigger: "batch_execution_complete"
+
+# =============================================================================
+# FALLBACK CONFIGURATION
+# =============================================================================
+
+fallback:
+  # Fallback mode when selected mode fails
+  mode: direct
+  
+  # Fallback triggers
+  triggers:
+    - intent_classification_failure
+    - mode_specific_error
+    - configuration_missing
+    
+  # Auto-switch after N failures
+  auto_switch_after_failures: 3
+
+# =============================================================================
+# LOGGING
+# =============================================================================
+
+logging:
+  mode_selection: true
+  mode_transitions: true
+  intent_classifications: true
+  gate_decisions: true

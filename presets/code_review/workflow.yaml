@@ -1,0 +1,87 @@
+# TITAN FUSE Protocol - Code Review Preset
+# Preset for automated code review workflows
+
+name: code_review
+version: 1.0.0
+description: "Automated code review with quality gates"
+
+# Pipeline phases to execute
+phases:
+  - phase: -1
+    name: bootstrap
+    enabled: true
+  
+  - phase: 0
+    name: initialization
+    enabled: true
+    steps:
+      - quick_orient_header
+      - build_nav_map
+      - workspace_isolation
+  
+  - phase: 1
+    name: search_discovery
+    enabled: true
+    patterns:
+      - code_smells
+      - security_issues
+      - style_violations
+      - complexity_metrics
+  
+  - phase: 2
+    name: analysis_classification
+    enabled: true
+    classifiers:
+      - severity_classifier
+      - category_classifier
+  
+  - phase: 3
+    name: planning
+    enabled: true
+    generate_recommendations: true
+  
+  - phase: 4
+    name: execution_validation
+    enabled: false  # Read-only for code review
+  
+  - phase: 5
+    name: delivery_hygiene
+    enabled: true
+    artifacts:
+      - review_report.md
+      - metrics.json
+      - issues_list.json
+
+# Gate configuration
+gates:
+  GATE-00:
+    required: true
+    description: "NAV_MAP must be built"
+  
+  GATE-01:
+    required: true
+    description: "All patterns must be scanned"
+  
+  GATE-02:
+    required: true
+    description: "All issues must be classified"
+
+# Output configuration
+output:
+  format: markdown
+  include_severity: true
+  include_line_numbers: true
+  include_suggestions: true
+  group_by_severity: true
+
+# Validators to run
+validators:
+  - no-todos
+  - security
+  - api-version
+
+# Constraints
+constraints:
+  max_files: 5
+  read_only: true
+  max_tokens_per_file: 30000

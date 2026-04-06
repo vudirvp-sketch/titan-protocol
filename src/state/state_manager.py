@@ -117,6 +117,29 @@ class SessionState:
     # NEW in v3.2: Confidence tracking
     confidence_scores: List[str] = field(default_factory=list)
     all_high_confidence: bool = True
+    
+    # NEW in v3.2.1: Mode selection
+    mode: str = "direct"  # direct | auto | manual | preset | hybrid
+    preset_name: Optional[str] = None
+    mode_config_source: str = "default"
+    
+    # NEW in v3.2.1: Intent classification (for AUTO mode)
+    intent_classification: Optional[str] = None  # analysis | generation | debugging | research | multimodal
+    intent_confidence: float = 0.0
+    intent_hash: Optional[str] = None
+    secondary_intents: List[str] = field(default_factory=list)
+    success_criteria: List[str] = field(default_factory=list)
+    domain_volatility: str = "medium"  # low | medium | high
+    
+    # NEW in v3.2.1: Extended gates (GATE-INTENT, GATE-PLAN, GATE-SKILL, GATE-SECURITY, GATE-EXEC)
+    # Gates are now initialized with GATE-INTENT through GATE-EXEC
+    gate_intents_passed: List[str] = field(default_factory=list)
+    
+    # NEW in v3.2.1: Anomaly detection baseline
+    baseline_p50_tokens: float = 0.0
+    baseline_p95_tokens: float = 0.0
+    baseline_sessions_count: int = 0
+    anomaly_detected: bool = False
 
 
 class StateManager:
@@ -200,13 +223,18 @@ class StateManager:
             created_at=now,
             updated_at=now,
             status=SessionStatus.INITIALIZED.value,
-            protocol_version="3.2.0",
+            protocol_version="3.2.1",
             max_tokens=max_tokens
         )
 
-        # Initialize gates
+        # Initialize standard gates (GATE-00 through GATE-05)
         for i in range(6):
             gate_id = f"GATE-{i:02d}"
+            session.gates[gate_id] = GateState(gate_id=gate_id)
+        
+        # NEW in v3.2.1: Initialize extended gates
+        extended_gates = ["GATE-INTENT", "GATE-PLAN", "GATE-SKILL", "GATE-SECURITY", "GATE-EXEC"]
+        for gate_id in extended_gates:
             session.gates[gate_id] = GateState(gate_id=gate_id)
 
         # Set source file if provided
@@ -973,3 +1001,137 @@ class StateManager:
 
         except Exception as e:
             return {"success": False, "error": str(e), "artifacts": artifacts}
+
+    # =========================================================================
+    # NEW in v3.2.1: ANOMALY DETECTION
+    # =========================================================================
+
+    def update_baseline(self, p50: float, p95: float) -> None:
+        """
+        Update anomaly detection baseline with new session metrics.
+        
+        Baseline is established after first N successful sessions.
+        Handles the edge case where first sessions may fail.
+        
+        Args:
+            p50: p50 token count from completed session
+            p95: p95 token count from completed session
+        """
+        if not self.current_session:
+            return
+        
+        # Increment baseline sessions count
+        self.current_session.baseline_sessions_count += 1
+        
+        # Update running average (exponential moving average)
+        alpha = 0.3  # Weight for new values
+        if self.current_session.baseline_p50_tokens == 0:
+            # First baseline value
+            self.current_session.baseline_p50_tokens = p50
+            self.current_session.baseline_p95_tokens = p95
+        else:
+            # Update with EMA
+            self.current_session.baseline_p50_tokens = (
+                alpha * p50 + (1 - alpha) * self.current_session.baseline_p50_tokens
+            )
+            self.current_session.baseline_p95_tokens = (
+                alpha * p95 + (1 - alpha) * self.current_session.baseline_p95_tokens
+            )
+        
+        self._save_current_session()
+    
+    def check_anomaly(self, current_p95: float, threshold_multiplier: float = 3.0) -> Dict:
+        """
+        Check if current metrics indicate an anomaly.
+        
+        FIX for spec bug: Only check after baseline is established.
+        If baseline_sessions_count < required_minimum, skip check.
+        
+        Args:
+            current_p95: Current p95 token count
+            threshold_multiplier: Multiplier for anomaly threshold
+            
+        Returns:
+            Dict with anomaly detection result
+        """
+        if not self.current_session:
+            return {"anomaly": False, "reason": "No active session"}
+        
+        # Require at least 3 sessions for baseline (fix for "what if first 10 fail")
+        MIN_BASELINE_SESSIONS = 3
+        if self.current_session.baseline_sessions_count < MIN_BASELINE_SESSIONS:
+            return {
+                "anomaly": False,
+                "reason": f"Baseline not established ({self.current_session.baseline_sessions_count}/{MIN_BASELINE_SESSIONS} sessions)"
+            }
+        
+        # Check if p95 exceeds threshold
+        threshold = self.current_session.baseline_p95_tokens * threshold_multiplier
+        
+        if current_p95 > threshold:
+            self.current_session.anomaly_detected = True
+            self._save_current_session()
+            
+            return {
+                "anomaly": True,
+                "current_p95": current_p95,
+                "threshold": threshold,
+                "baseline_p95": self.current_session.baseline_p95_tokens,
+                "multiplier": threshold_multiplier,
+                "action": "warn"  # or "suspend" based on config
+            }
+        
+        return {
+            "anomaly": False,
+            "current_p95": current_p95,
+            "threshold": threshold,
+            "baseline_p95": self.current_session.baseline_p95_tokens
+        }
+
+    # =========================================================================
+    # NEW in v3.2.1: INTENT CLASSIFICATION MANAGEMENT
+    # =========================================================================
+
+    def set_intent_classification(self, 
+                                  classification: str,
+                                  confidence: float,
+                                  intent_hash: str,
+                                  secondary_intents: List[str] = None,
+                                  success_criteria: List[str] = None,
+                                  domain_volatility: str = "medium") -> None:
+        """
+        Set intent classification for the session (AUTO mode).
+        
+        Args:
+            classification: Primary intent classification
+            confidence: Confidence score (0.0-1.0)
+            intent_hash: Hash of intent for caching
+            secondary_intents: List of secondary intents
+            success_criteria: List of extracted success criteria
+            domain_volatility: Domain volatility level
+        """
+        if not self.current_session:
+            return
+        
+        self.current_session.intent_classification = classification
+        self.current_session.intent_confidence = confidence
+        self.current_session.intent_hash = intent_hash
+        self.current_session.secondary_intents = secondary_intents or []
+        self.current_session.success_criteria = success_criteria or []
+        self.current_session.domain_volatility = domain_volatility
+        
+        self._save_current_session()
+
+    def get_intent_summary(self) -> Dict:
+        """Get intent classification summary for the session."""
+        if not self.current_session:
+            return {"classification": None}
+        
+        return {
+            "classification": self.current_session.intent_classification,
+            "confidence": self.current_session.intent_confidence,
+            "intent_hash": self.current_session.intent_hash,
+            "secondary_intents": self.current_session.secondary_intents,
+            "success_criteria": self.current_session.success_criteria,
+            "domain_volatility": self.current_session.domain_volatility
+        }

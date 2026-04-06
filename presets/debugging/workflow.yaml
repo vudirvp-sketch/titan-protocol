@@ -1,0 +1,101 @@
+# TITAN FUSE Protocol - Debugging Preset
+# Preset for debugging and issue resolution
+
+name: debugging
+version: 1.0.0
+description: "Debugging and issue resolution workflow"
+
+# Pipeline phases to execute
+phases:
+  - phase: -1
+    name: bootstrap
+    enabled: true
+  
+  - phase: 0
+    name: initialization
+    enabled: true
+    steps:
+      - quick_orient_header
+      - build_nav_map
+      - workspace_isolation
+      - error_context_capture
+  
+  - phase: 1
+    name: search_discovery
+    enabled: true
+    patterns:
+      - error_patterns
+      - stack_traces
+      - exception_handling
+      - logic_errors
+      - race_conditions
+  
+  - phase: 2
+    name: analysis_classification
+    enabled: true
+    classifiers:
+      - root_cause_classifier
+      - severity_classifier
+  
+  - phase: 3
+    name: planning
+    enabled: true
+    generate_fix_plan: true
+    prioritize_by_severity: true
+  
+  - phase: 4
+    name: execution_validation
+    enabled: true
+    allow_patches: true
+    validation_strict: true
+  
+  - phase: 5
+    name: delivery_hygiene
+    enabled: true
+    artifacts:
+      - fix_report.md
+      - changes_applied.json
+      - test_recommendations.md
+
+# Gate configuration
+gates:
+  GATE-00:
+    required: true
+    description: "Error context captured"
+  
+  GATE-02:
+    required: true
+    description: "Root cause identified"
+  
+  GATE-03:
+    required: true
+    description: "Fix plan validated"
+  
+  GATE-04:
+    required: true
+    description: "Fixes validated"
+
+# Output configuration
+output:
+  format: markdown
+  include_diff: true
+  include_test_suggestions: true
+  include_rollback_info: true
+
+# Validators to run
+validators:
+  - security
+
+# Constraints
+constraints:
+  max_files: 2
+  allow_modifications: true
+  require_tests: true
+  create_backup: true
+  max_tokens_per_file: 40000
+
+# Recovery configuration
+recovery:
+  enabled: true
+  max_retries: 3
+  rollback_on_failure: true

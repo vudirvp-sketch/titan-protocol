@@ -1,0 +1,86 @@
+# TITAN FUSE Protocol - Documentation Preset
+# Preset for documentation generation and improvement
+
+name: documentation
+version: 1.0.0
+description: "Documentation generation and improvement workflow"
+
+# Pipeline phases to execute
+phases:
+  - phase: -1
+    name: bootstrap
+    enabled: true
+  
+  - phase: 0
+    name: initialization
+    enabled: true
+    steps:
+      - quick_orient_header
+      - build_nav_map
+      - workspace_isolation
+  
+  - phase: 1
+    name: search_discovery
+    enabled: true
+    patterns:
+      - missing_docs
+      - broken_links
+      - outdated_sections
+      - incomplete_examples
+  
+  - phase: 2
+    name: analysis_classification
+    enabled: true
+    classifiers:
+      - doc_quality_classifier
+      - completeness_classifier
+  
+  - phase: 3
+    name: planning
+    enabled: true
+    generate_outline: true
+  
+  - phase: 4
+    name: execution_validation
+    enabled: true
+    allow_generation: true
+  
+  - phase: 5
+    name: delivery_hygiene
+    enabled: true
+    artifacts:
+      - updated_docs.md
+      - doc_index.md
+      - cross_references.json
+
+# Gate configuration
+gates:
+  GATE-00:
+    required: true
+    description: "NAV_MAP must be built"
+  
+  GATE-01:
+    required: true
+    description: "Documentation patterns scanned"
+  
+  GATE-03:
+    required: true
+    description: "Documentation plan validated"
+
+# Output configuration
+output:
+  format: markdown
+  include_toc: true
+  include_cross_refs: true
+  preserve_original: true
+
+# Validators to run
+validators:
+  - no-todos
+
+# Constraints
+constraints:
+  max_files: 3
+  allow_modifications: true
+  preserve_frontmatter: true
+  max_tokens_per_file: 50000

@@ -235,8 +235,11 @@ class NavigationTester:
         for md_file in md_files:
             content = md_file.read_text()
 
+            # Remove code blocks to avoid false positives from Python kwargs like [name](**kwargs)
+            content_without_code = re.sub(r'```[\s\S]*?```', '', content)
+
             # Find markdown links: [text](path)
-            links = re.findall(r'\[([^\]]+)\]\(([^)]+)\)', content)
+            links = re.findall(r'\[([^\]]+)\]\(([^)]+)\)', content_without_code)
 
             for text, link in links:
                 # Skip external links and anchors
