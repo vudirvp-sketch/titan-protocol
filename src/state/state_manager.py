@@ -223,7 +223,7 @@ class StateManager:
             created_at=now,
             updated_at=now,
             status=SessionStatus.INITIALIZED.value,
-            protocol_version="3.2.1",
+            protocol_version="3.2.2",
             max_tokens=max_tokens
         )
 
@@ -729,12 +729,13 @@ class StateManager:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def resume_from_checkpoint(self, checkpoint_path: str) -> Dict:
+    def resume_from_checkpoint(self, checkpoint_path: str, allow_unsafe: bool = False) -> Dict:
         """
         Resume session from checkpoint.
 
         Args:
             checkpoint_path: Path to checkpoint file
+            allow_unsafe: Allow loading pickle checkpoints (UNSAFE)
 
         Returns:
             Resume result dictionary
@@ -746,13 +747,44 @@ class StateManager:
 
         try:
             # Detect format and load
-            if checkpoint_file.suffix == ".bin":
+            if checkpoint_file.suffix == ".bin" or checkpoint_file.suffix == ".pkl":
+                if not allow_unsafe:
+                    return {
+                        "success": False,
+                        "error": "[gap: unsafe_checkpoint] Pickle checkpoints require --unsafe flag. Use JSON checkpoints for safety."
+                    }
                 with open(checkpoint_file, "rb") as f:
                     session = pickle.load(f)
+            elif checkpoint_file.suffix == ".gz":
+                import gzip
+                with gzip.open(checkpoint_file, 'rt') as f:
+                    data = json.load(f)
+                session = self._dict_to_session(data)
+            elif checkpoint_file.suffix == ".zst":
+                try:
+                    import zstandard as zstd
+                    dctx = zstd.ZstdDecompressor()
+                    with open(checkpoint_file, 'rb') as f:
+                        decompressed = dctx.decompress(f.read())
+                    data = json.loads(decompressed)
+                    session = self._dict_to_session(data)
+                except ImportError:
+                    return {"success": False, "error": "zstandard package required for .zst files"}
             else:
                 with open(checkpoint_file) as f:
                     data = json.load(f)
                 session = self._dict_to_session(data)
+
+            # NEW v3.2.2: Apply schema migrations if needed
+            session_dict = self._session_to_dict(session)
+            loaded_version = session_dict.get("protocol_version", "3.2.0")
+            if loaded_version != "3.2.2":
+                try:
+                    from schema.migrations import apply_migrations
+                    session_dict = apply_migrations(session_dict)
+                    session = self._dict_to_session(session_dict)
+                except ImportError:
+                    pass  # Migrations not available, continue
 
             # Validate source checksum if present
             if session.source_file and session.source_checksum:

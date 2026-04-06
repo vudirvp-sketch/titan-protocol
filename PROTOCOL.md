@@ -1,6 +1,6 @@
 # TITAN FUSE PROTOCOL - ASSEMBLED
 
-<!-- Generated: 2026-04-06T20:00:07Z -->
+<!-- Generated: 2026-04-06T21:11:25Z -->
 <!-- Version: 3.2.1 -->
 <!-- Components: PROTOCOL.ext.md + PROTOCOL.base.md -->
 
@@ -1540,4 +1540,4 @@ cost-aware, recursion-bounded, execution-gated, production-grade.
 
 ---
 <!-- END OF ASSEMBLED PROTOCOL -->
-<!-- Assembly timestamp: 2026-04-06T20:00:07Z -->
+<!-- Assembly timestamp: 2026-04-06T21:11:25Z -->

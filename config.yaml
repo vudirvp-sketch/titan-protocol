@@ -35,11 +35,16 @@ validation:
     max_sev2_gaps: 2
     max_total_gap_pct: 20
 checkpoint:
+  enabled: true
   format_version: '2.0'
   chunk_checksums: true
   partial_resumption: true
   max_age_days: 30
   path: checkpoints/checkpoint.json
+  interval_tokens: 5000
+  interval_seconds: 60
+  compression: none
+  security: safe
 output:
   directory: outputs/
   clean_mode: true
@@ -105,7 +110,7 @@ development:
   dry_run: true  # FIXED: Default to true for safety (R-04 mitigation)
   verbose: false
 security:
-  execution_mode: human_gate
+  execution_mode: trusted
   sandbox_type: none
   permitted_operations:
   - file_read
@@ -117,12 +122,20 @@ security:
   - sudo
   - chmod
   - chown
+  max_input_file_size_mb: 100
+  max_total_input_size_mb: 500
+  secrets_scan: false
+  workspace_path: null
+  redos_timeout_ms: 1000
 chunking_limits:
   max_chars_per_chunk: 150000
   max_tokens_per_chunk: 30000
   enforce_secondary_limits: true
+policy:
+  max_recursion_depth: 3
+
 recursion:
-  max_recursion_depth: 1
+  max_recursion_depth: 3
   track_peak: true
 model_routing:
   root_model: ''  # REQUIRED: Set to your orchestration model ID

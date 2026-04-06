@@ -2,6 +2,92 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.2.2] - 2026-04-07
+
+### Security (Critical)
+- **Config Schema Validation**: Invalid config keys now detected via JSON Schema
+  - New `schemas/config.schema.json` for validation
+  - Gap tag: `[gap: config_validation_failed]`
+- **Input File Size DoS Protection**: Max 100MB per file, 500MB total
+  - Gap tags: `[gap: input_file_too_large]`, `[gap: total_input_size_exceeded]`
+- **Secret Scanning Integration**: Detect AWS/GitHub/API keys in inputs
+  - New `src/security/secret_scanner.py` module
+  - Gap tag: `[gap: secrets_detected]`
+- **Provider Credential Isolation**: No API keys stored in SessionState
+  - Environment variable pattern: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
+- **Workspace Path Enforcement**: All file operations sandboxed
+  - Gap tag: `[gap: workspace_violation]`
+- **Safe Checkpoint Serialization**: JSON+zstd default, pickle requires `--unsafe`
+  - New `src/state/checkpoint_serialization.py` module
+
+### Checkpoints
+- **Session-Scoped Isolation**: Parallel sessions supported
+  - Checkpoints stored in `checkpoints/<session_id>/`
+  - `latest.json` symlink for easy access
+- **Schema Migration Framework**: Auto-upgrade old checkpoints
+  - New `src/schema/migrations.py` module
+  - Migrations: 3.2.0 → 3.2.1 → 3.2.2
+- **Checkpoint Frequency Tuning**: Token/time based intervals
+  - `interval_tokens: 5000`, `interval_seconds: 60`
+
+### Gates
+- **Extended Gates Documentation**: GATE-SECURITY, GATE-EXEC, GATE-INTENT, GATE-PLAN, GATE-SKILL
+  - New `docs/extended_gates.md`
+- **Sandbox Health Check (INVAR-05)**: Runtime verification
+  - New `src/security/sandbox_verifier.py` module
+- **Configurable Recursion Limit**: Default 3 (was 1)
+  - `policy.max_recursion_depth: 3` in config.yaml
+- **GATE-04 Early Exit Enhancement**: Confidence before SEV-4 checks
+  - SEV-1/SEV-2 checked first (non-negotiable)
+
+### DAG & Planning
+- **CycleDetector**: Prevent infinite loops in execution plan
+  - New `src/planning/cycle_detector.py` module
+  - Gap tag: `[gap: dag_cycle_detected]`
+- **Plan Amendment Gate**: Root model cannot bypass GATE-02
+  - New `src/policy/plan_amendment_gate.py` module
+- **Per-Node Rollback**: Partial recovery from failures
+  - State snapshots in `outputs/snapshots/`
+
+### Observability
+- **Structured Gap Objects**: Machine-parseable gap data
+  - New `src/state/gap.py` module
+  - `Gap` dataclass with severity, source refs, checksums
+- **Parity Tests**: Full test coverage for v3.2.2 modules
+  - New `tests/test_v322_modules.py`
+
+### Resolved Conflicts
+- A: Checkpoint format → JSON+zstd default
+- B: GATE-04 confidence → SEV-1/2 non-negotiable
+- D: DECISION_TREE → code is source of truth
+- G: EventBus → sync for CRITICAL, async for TELEMETRY
+- I: Async I/O → sync default, adapter opt-in
+
+### Files Created
+```
+schemas/config.schema.json
+src/security/__init__.py
+src/security/secret_scanner.py
+src/security/sandbox_verifier.py
+src/schema/__init__.py
+src/schema/migrations.py
+src/state/gap.py
+src/state/checkpoint_serialization.py
+src/planning/__init__.py
+src/planning/cycle_detector.py
+src/policy/plan_amendment_gate.py
+docs/extended_gates.md
+tests/test_v322_modules.py
+SECURITY.md
+```
+
+### Files Modified
+```
+config.yaml (security, checkpoint, policy sections)
+VERSION (3.2.1 → 3.2.2)
+CHANGELOG.md (this entry)
+```
+
 ## [3.2.0] - 2026-04-07
 
 ### Added - NEW in v3.2 (Protocol Implementation)

@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["session", "chunking", "validation"],
+  "properties": {
+    "session": {
+      "type": "object",
+      "required": ["max_tokens", "max_time_minutes"],
+      "properties": {
+        "max_tokens": {"type": "integer", "minimum": 10000},
+        "max_time_minutes": {"type": "integer", "minimum": 5},
+        "max_files_per_session": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "chunking": {
+      "type": "object",
+      "required": ["default_size"],
+      "properties": {
+        "default_size": {"type": "integer", "minimum": 100},
+        "min_size": {"type": "integer", "minimum": 100},
+        "max_size": {"type": "integer"},
+        "auto_adjust": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "validation": {
+      "type": "object",
+      "properties": {
+        "max_patch_iterations": {"type": "integer", "minimum": 1}
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "interval_tokens": {"type": "integer"},
+        "interval_seconds": {"type": "integer"},
+        "compression": {"type": "string", "enum": ["none", "gzip", "zstd"]},
+        "encryption": {"type": "string", "enum": ["none", "aes-256-gcm"]},
+        "security": {"type": "string", "enum": ["safe", "fast"]}
+      }
+    },
+    "security": {
+      "type": "object",
+      "properties": {
+        "redos_timeout_ms": {"type": "integer", "minimum": 100},
+        "max_input_file_size_mb": {"type": "number"},
+        "max_total_input_size_mb": {"type": "number"},
+        "secrets_scan": {"type": "boolean"},
+        "workspace_path": {"type": "string"}
+      }
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "max_recursion_depth": {"type": "integer", "minimum": 1, "maximum": 10}
+      }
+    },
+    "model_fallback": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "chain": {"type": "array", "items": {"type": "string"}},
+        "triggers": {
+          "type": "object",
+          "properties": {
+            "timeout_ms": {"type": "integer"},
+            "error_rate_threshold": {"type": "number"},
+            "token_budget_exceeded": {"type": "boolean"}
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

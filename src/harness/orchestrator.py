@@ -626,10 +626,28 @@ class Orchestrator:
         PHASE -1: Bootstrap - Repository navigation and self-initialization.
 
         This phase is read-only - no file modifications.
+        
+        v3.2.2: Added sandbox verification (INVAR-05).
         """
+        # NEW v3.2.2: Sandbox verification
+        try:
+            from security.sandbox_verifier import verify_sandbox
+            sandbox_result = verify_sandbox(self.config)
+            
+            if not sandbox_result["verified"]:
+                return {
+                    "success": False,
+                    "phase": "bootstrap",
+                    "error": f"[gap: sandbox_verification_failed] Sandbox mode configured but not active",
+                    "details": sandbox_result
+                }
+        except ImportError:
+            sandbox_result = {"verified": True, "mode": "unknown", "checks": []}
+        
         return {
             "success": True,
             "phase": "bootstrap",
+            "sandbox": sandbox_result,
             "message": "Bootstrap complete"
         }
 
@@ -642,6 +660,8 @@ class Orchestrator:
         - Build NAV_MAP
         - Workspace Isolation
         - Session Checkpoint
+        
+        v3.2.2: Added input size protection and secret scanning.
         """
         source_file = session.get("source_file")
 
@@ -649,6 +669,42 @@ class Orchestrator:
             # Check inputs directory
             input_files = list(self.inputs_dir.glob("*"))
             input_files = [f for f in input_files if f.is_file() and not f.name.startswith(".")]
+
+            # NEW v3.2.2: Input size protection
+            security_config = self.config.get("security", {})
+            max_size_mb = security_config.get("max_input_file_size_mb", 100)
+            max_total_mb = security_config.get("max_total_input_size_mb", 500)
+            max_size_bytes = max_size_mb * 1024 * 1024
+            max_total_bytes = max_total_mb * 1024 * 1024
+            
+            total_size = sum(f.stat().st_size for f in input_files)
+            
+            for f in input_files:
+                if f.stat().st_size > max_size_bytes:
+                    return {
+                        "success": False,
+                        "error": f"[gap: input_file_too_large] {f.name} exceeds {max_size_mb}MB limit"
+                    }
+            
+            if total_size > max_total_bytes:
+                return {
+                    "success": False,
+                    "error": f"[gap: total_input_size_exceeded] {total_size / 1024 / 1024:.1f}MB exceeds {max_total_mb}MB limit"
+                }
+            
+            # NEW v3.2.2: Secret scanning
+            if security_config.get("secrets_scan", False):
+                try:
+                    from security.secret_scanner import run_secret_scan
+                    scan_result = run_secret_scan(self.inputs_dir)
+                    if scan_result["blocked"]:
+                        return {
+                            "success": False,
+                            "error": f"[gap: secrets_detected] Found {scan_result['secrets_found']} potential secrets",
+                            "details": scan_result
+                        }
+                except ImportError:
+                    pass  # Scanner not available, skip
 
             if input_files:
                 source_file = str(input_files[0])

@@ -239,12 +239,14 @@ class TitanCLI:
             }
         }, success=all_passed)
 
-    def cmd_resume(self, checkpoint_path: Optional[str] = None) -> int:
+    def cmd_resume(self, checkpoint_path: Optional[str] = None,
+                   allow_unsafe: bool = False) -> int:
         """
         Resume from checkpoint.
 
         Args:
             checkpoint_path: Path to checkpoint file (uses default if not provided)
+            allow_unsafe: Allow loading pickle checkpoints (UNSAFE)
 
         Returns:
             Exit code (0 for success)
@@ -253,7 +255,10 @@ class TitanCLI:
             self.repo_root / "checkpoints" / "checkpoint.json"
         )
 
-        result = self.state_manager.resume_from_checkpoint(checkpoint_file)
+        result = self.state_manager.resume_from_checkpoint(
+            checkpoint_file, 
+            allow_unsafe=allow_unsafe
+        )
 
         if result.get("status") == "RESUMED":
             self.event_bus.emit("session.resume", {
@@ -591,6 +596,8 @@ def create_parser() -> argparse.ArgumentParser:
     # resume command
     resume_parser = subparsers.add_parser("resume", help="Resume from checkpoint")
     resume_parser.add_argument("checkpoint", nargs="?", help="Checkpoint file path")
+    resume_parser.add_argument("--unsafe", action="store_true",
+                               help="Allow loading pickle checkpoints (UNSAFE)")
 
     # login command
     login_parser = subparsers.add_parser("login", help="Authenticate with LLM provider")
@@ -649,7 +656,8 @@ def main() -> int:
             all_gates=args.all
         ),
         "resume": lambda: cli.cmd_resume(
-            checkpoint_path=args.checkpoint
+            checkpoint_path=args.checkpoint,
+            allow_unsafe=getattr(args, 'unsafe', False)
         ),
         "login": lambda: cli.cmd_login(
             provider=args.provider,

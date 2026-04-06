@@ -1,9 +1,18 @@
 """
 TITAN FUSE Protocol - Security Module
 
-Implements INVAR-05: LLM Code Execution Gate
+Provides security features:
+- Secret scanning
+- Sandbox verification
+- Execution gates
 """
 
-from .execution_gate import ExecutionGate, ExecutionMode, SandboxType
+from .secret_scanner import SecretScanner, run_secret_scan
+from .sandbox_verifier import SandboxVerifier, verify_sandbox
 
-__all__ = ["ExecutionGate", "ExecutionMode", "SandboxType"]
+__all__ = [
+    'SecretScanner',
+    'run_secret_scan',
+    'SandboxVerifier',
+    'verify_sandbox'
+]
