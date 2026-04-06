@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "TITAN FUSE Checkpoint Format v2.0",
-  "description": "Enhanced checkpoint format with chunk-level recovery support",
+  "title": "TITAN FUSE Checkpoint Format v2.1",
+  "description": "Enhanced checkpoint format with chunk-level recovery and policy state support",
   "type": "object",
   "required": [
     "session_id",
@@ -133,6 +133,12 @@
       "description": "Maximum tokens allowed for this session",
       "minimum": 0
     },
+    "budget_state": {
+      "type": "string",
+      "description": "FIX 06: Current budget state for policy context",
+      "enum": ["NORMAL", "BUDGET_WARNING", "BUDGET_EXCEEDED"],
+      "default": "NORMAL"
+    },
     "source_line_count": {
       "type": "integer",
       "description": "Total lines in source file",
@@ -164,6 +170,24 @@
           "severity": { "type": "string", "enum": ["SEV-1", "SEV-2", "SEV-3", "SEV-4"] },
           "description": { "type": "string" }
         }
+      }
+    },
+    "policy_manifest_hash": {
+      "type": "string",
+      "description": "FIX 04: SHA-256 hash of the active policy manifest at checkpoint time",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "policy_retry_state": {
+      "type": "object",
+      "description": "FIX 05: Retry state for policy engine - prevents infinite retry loops after session resume",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "retry_count": { "type": "integer", "minimum": 0 },
+          "last_policy_triggered": { "type": "string" },
+          "last_retry_timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["retry_count"]
       }
     },
     "state_snapshot": {

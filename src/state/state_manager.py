@@ -89,6 +89,15 @@ class SessionState:
     # Provider config
     provider: Optional[str] = None
     provider_configured: bool = False
+    
+    # FIX 05: Policy retry state for checkpoint persistence
+    policy_retry_state: Dict[str, Dict] = field(default_factory=dict)
+    
+    # FIX 04: Policy manifest hash for validation on resume
+    policy_manifest_hash: Optional[str] = None
+    
+    # FIX 06: Budget state for policy context
+    budget_state: str = "NORMAL"  # NORMAL | BUDGET_WARNING | BUDGET_EXCEEDED
 
 
 class StateManager:
@@ -264,6 +273,103 @@ class StateManager:
         if batch_id not in self.current_session.completed_batches:
             self.current_session.completed_batches.append(batch_id)
             self._save_current_session()
+    
+    # =========================================================================
+    # FIX 05: Policy retry state management
+    # =========================================================================
+    
+    def update_retry_state(self, context_key: str, retry_count: int, 
+                          policy_name: str = "") -> None:
+        """
+        FIX 05: Update retry state for a context key.
+        
+        This MUST be called after every retry attempt to ensure
+        the retry count is persisted to checkpoint.
+        """
+        if not self.current_session:
+            return
+        
+        self.current_session.policy_retry_state[context_key] = {
+            "retry_count": retry_count,
+            "last_policy_triggered": policy_name,
+            "last_retry_timestamp": datetime.utcnow().isoformat() + "Z"
+        }
+        self._save_current_session()
+    
+    def get_retry_count(self, context_key: str) -> int:
+        """FIX 05: Get retry count for a context key."""
+        if not self.current_session:
+            return 0
+        
+        state = self.current_session.policy_retry_state.get(context_key, {})
+        return state.get("retry_count", 0)
+    
+    def reset_retry_state(self, context_key: str) -> None:
+        """FIX 05: Reset retry state for a context key."""
+        if not self.current_session:
+            return
+        
+        if context_key in self.current_session.policy_retry_state:
+            del self.current_session.policy_retry_state[context_key]
+            self._save_current_session()
+    
+    # =========================================================================
+    # FIX 04: Policy manifest hash validation
+    # =========================================================================
+    
+    def set_policy_manifest_hash(self, manifest_hash: str) -> None:
+        """FIX 04: Store policy manifest hash in session."""
+        if not self.current_session:
+            return
+        
+        self.current_session.policy_manifest_hash = manifest_hash
+        self._save_current_session()
+    
+    def validate_policy_manifest(self, current_hash: str) -> Dict:
+        """
+        FIX 04: Validate that policy manifest hasn't changed since checkpoint.
+        
+        Returns dict with validation result.
+        """
+        if not self.current_session:
+            return {"valid": True, "warning": None}
+        
+        stored_hash = self.current_session.policy_manifest_hash
+        if stored_hash and stored_hash != current_hash:
+            return {
+                "valid": False,
+                "warning": "Policy manifest has changed since last checkpoint. "
+                           "Some policies may behave differently. "
+                           "Acknowledge to continue or restore manifest."
+            }
+        
+        return {"valid": True, "warning": None}
+    
+    # =========================================================================
+    # FIX 06: Budget state for policy context
+    # =========================================================================
+    
+    def get_budget_state(self) -> str:
+        """FIX 06: Get current budget state for policy context."""
+        if not self.current_session:
+            return "NORMAL"
+        return self.current_session.budget_state
+    
+    def get_policy_context(self) -> Dict:
+        """
+        FIX 06: Build context dict for policy evaluation.
+        
+        Includes budget state and tokens remaining.
+        """
+        if not self.current_session:
+            return {"budget_state": "NORMAL", "tokens_remaining": 100000}
+        
+        return {
+            "budget_state": self.current_session.budget_state,
+            "tokens_remaining": self.current_session.max_tokens - self.current_session.tokens_used,
+            "tokens_used": self.current_session.tokens_used,
+            "max_tokens": self.current_session.max_tokens
+        }
 
     def add_issue(self, issue_id: str) -> None:
         """Add an open issue."""
@@ -303,6 +409,16 @@ class StateManager:
             return True
 
         self.current_session.tokens_used += tokens
+        
+        # FIX 06: Update budget state based on usage
+        usage_pct = self.current_session.tokens_used / self.current_session.max_tokens
+        if usage_pct >= 1.0:
+            self.current_session.budget_state = "BUDGET_EXCEEDED"
+        elif usage_pct >= 0.9:
+            self.current_session.budget_state = "BUDGET_WARNING"
+        else:
+            self.current_session.budget_state = "NORMAL"
+        
         self._save_current_session()
 
         return self.current_session.tokens_used < self.current_session.max_tokens
@@ -400,7 +516,13 @@ class StateManager:
                 "gates_passed": [g for g, s in session.gates.items() if s.status == "PASS"],
                 "completed_batches": session.completed_batches,
                 "chunk_cursor": session.chunk_cursor,
-                "open_issues": session.open_issues
+                "open_issues": session.open_issues,
+                # FIX 05: Include policy retry state for core to restore
+                "policy_retry_state": session.policy_retry_state,
+                # FIX 04: Include manifest hash warning if applicable
+                "policy_manifest_hash": session.policy_manifest_hash,
+                # FIX 06: Include budget state
+                "budget_state": session.budget_state
             }
 
         except Exception as e:
