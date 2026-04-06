@@ -1,0 +1,35 @@
+# Agent working directories
+/tmp/titan_ws_*/
+*.checkpoint.json.tmp
+
+# Intermediate artifacts (keep final only)
+WORK_DIR/
+working_copy/
+
+# Debug and draft outputs
+*.debug.md
+*_draft.md
+*_iter*.md
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Node modules (if using JS validators)
+node_modules/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local

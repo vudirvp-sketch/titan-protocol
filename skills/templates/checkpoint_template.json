@@ -1,0 +1,33 @@
+{
+  "session_id": "<UUID>",
+  "protocol_version": "3.2.0",
+  "source_file": "<path>",
+  "source_checksum": "<sha256>",
+  "source_line_count": 0,
+  "chunk_count": 0,
+  "chunk_checksums": {},
+  "completed_chunks": [],
+  "pending_chunks": [],
+  "modification_map": {},
+  "gates_passed": [],
+  "completed_batches": [],
+  "open_issues": [],
+  "chunk_cursor": null,
+  "timestamp": "<ISO-8601>",
+  "resumable": true,
+  "resumption_type": "FULL",
+  "budget_used": 0,
+  "budget_max": 100000,
+  "issues_found": 0,
+  "issues_fixed": 0,
+  "gaps": [],
+  "state_snapshot": {
+    "current_task": null,
+    "last_completed_batch": "NONE",
+    "next_action": "INITIALIZE",
+    "blocked_by": "NONE",
+    "active_issues": [],
+    "context_mode": "DIRECT"
+  },
+  "metadata": {}
+}

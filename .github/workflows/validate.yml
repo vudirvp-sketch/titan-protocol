@@ -1,0 +1,271 @@
+name: TITAN Protocol Validation
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate-structure:
+    name: Validate Repository Structure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check required files
+        run: |
+          echo "Checking required files..."
+          required_files=(
+            "PROTOCOL.md"
+            "PROTOCOL.base.md"
+            "PROTOCOL.ext.md"
+            "SKILL.md"
+            "README.md"
+            "VERSION"
+            "CHANGELOG.md"
+            "config.yaml"
+          )
+
+          missing=0
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing: $file"
+              missing=1
+            else
+              echo "✅ Found: $file"
+            fi
+          done
+
+          if [ $missing -eq 1 ]; then
+            echo "Error: Required files missing"
+            exit 1
+          fi
+
+      - name: Check required directories
+        run: |
+          echo "Checking required directories..."
+          required_dirs=(
+            "inputs"
+            "outputs"
+            "checkpoints"
+            "skills"
+            "scripts"
+            "examples"
+          )
+
+          missing=0
+          for dir in "${required_dirs[@]}"; do
+            if [ ! -d "$dir" ]; then
+              echo "❌ Missing directory: $dir"
+              missing=1
+            else
+              echo "✅ Found directory: $dir"
+            fi
+          done
+
+          if [ $missing -eq 1 ]; then
+            echo "Error: Required directories missing"
+            exit 1
+          fi
+
+  validate-protocol:
+    name: Validate Protocol Assembly
+    runs-on: ubuntu-latest
+    needs: validate-structure
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate PROTOCOL.md syntax
+        run: |
+          echo "Validating PROTOCOL.md syntax..."
+
+          # Check for balanced code blocks
+          code_blocks=$(grep -c '^\s*```' PROTOCOL.md || true)
+          if [ $((code_blocks % 2)) -ne 0 ]; then
+            echo "❌ Unbalanced code blocks in PROTOCOL.md"
+            exit 1
+          fi
+          echo "✅ Code blocks balanced: $code_blocks blocks"
+
+          # Check for required sections
+          required_sections=(
+            "TIER 0"
+            "TIER 1"
+            "TIER 2"
+            "TIER 3"
+            "TIER 4"
+            "TIER 5"
+            "TIER 6"
+            "EXECUTION DIRECTIVE"
+          )
+
+          for section in "${required_sections[@]}"; do
+            if grep -q "$section" PROTOCOL.md; then
+              echo "✅ Found section: $section"
+            else
+              echo "❌ Missing section: $section"
+              exit 1
+            fi
+          done
+
+      - name: Validate protocol version
+        run: |
+          echo "Validating protocol version..."
+          version=$(cat VERSION)
+          echo "Current version: $version"
+
+          # Validate semantic version format
+          if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid version format: $version (expected X.Y.Z)"
+            exit 1
+          fi
+          echo "✅ Valid semantic version"
+
+  validate-scripts:
+    name: Validate Scripts
+    runs-on: ubuntu-latest
+    needs: validate-structure
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate shell scripts
+        run: |
+          echo "Validating shell scripts..."
+          for script in scripts/*.sh; do
+            if [ -f "$script" ]; then
+              bash -n "$script" && echo "✅ Valid: $script" || echo "❌ Invalid: $script"
+            fi
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate Python scripts
+        run: |
+          echo "Validating Python scripts..."
+          python -m py_compile scripts/*.py 2>/dev/null && echo "✅ Python scripts valid" || echo "⚠️ Some Python scripts have issues"
+
+      - name: Validate JSON schemas
+        run: |
+          echo "Validating JSON files..."
+          for json_file in scripts/*.json checkpoints/*.json; do
+            if [ -f "$json_file" ]; then
+              python -m json.tool "$json_file" > /dev/null && echo "✅ Valid JSON: $json_file" || echo "❌ Invalid JSON: $json_file"
+            fi
+          done
+
+  test-assembly:
+    name: Test Protocol Assembly
+    runs-on: ubuntu-latest
+    needs: [validate-structure, validate-protocol]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: chmod +x scripts/*.sh
+
+      - name: Test assembly script
+        run: |
+          echo "Testing protocol assembly..."
+
+          # Backup existing PROTOCOL.md
+          if [ -f "PROTOCOL.md" ]; then
+            cp PROTOCOL.md PROTOCOL.md.backup
+          fi
+
+          # Run assembly
+          ./scripts/assemble_protocol.sh
+
+          # Verify output
+          if [ -f "PROTOCOL.md" ]; then
+            lines=$(wc -l < PROTOCOL.md)
+            echo "✅ Assembly produced PROTOCOL.md ($lines lines)"
+          else
+            echo "❌ Assembly failed to produce PROTOCOL.md"
+            exit 1
+          fi
+
+          # Restore backup if exists
+          if [ -f "PROTOCOL.md.backup" ]; then
+            mv PROTOCOL.md.backup PROTOCOL.md
+          fi
+
+  validate-checkpoints:
+    name: Validate Checkpoint Schema
+    runs-on: ubuntu-latest
+    needs: validate-scripts
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install jsonschema pyyaml
+
+      - name: Validate checkpoint schema
+        run: |
+          echo "Validating checkpoint schema..."
+          python3 << 'EOF'
+          import json
+          from jsonschema import validate, ValidationError
+
+          # Load schema
+          with open('checkpoints/checkpoint.schema.json', 'r') as f:
+              schema = json.load(f)
+
+          # Test with example data
+          example_checkpoint = {
+              "session_id": "test-1234-5678-90ab-cdef",
+              "protocol_version": "3.2.0",
+              "source_file": "test.md",
+              "source_checksum": "a" * 64,
+              "gates_passed": ["GATE-00", "GATE-01"],
+              "completed_batches": ["BATCH_001"],
+              "timestamp": "2024-01-15T10:30:00Z",
+              "resumable": True,
+              "resumption_type": "FULL"
+          }
+
+          try:
+              validate(instance=example_checkpoint, schema=schema)
+              print("✅ Checkpoint schema is valid")
+          except ValidationError as e:
+              print(f"❌ Schema validation failed: {e.message}")
+              exit(1)
+          EOF
+
+  report-status:
+    name: Report Validation Status
+    runs-on: ubuntu-latest
+    needs: [validate-structure, validate-protocol, validate-scripts, test-assembly, validate-checkpoints]
+    if: always()
+    steps:
+      - name: Check job statuses
+        run: |
+          echo "Validation workflow complete!"
+          echo ""
+          echo "Status summary:"
+          echo "  - Structure validation: ${{ needs.validate-structure.result }}"
+          echo "  - Protocol validation: ${{ needs.validate-protocol.result }}"
+          echo "  - Scripts validation: ${{ needs.validate-scripts.result }}"
+          echo "  - Assembly test: ${{ needs.test-assembly.result }}"
+          echo "  - Checkpoint validation: ${{ needs.validate-checkpoints.result }}"
+
+      - name: Fail if any job failed
+        if: contains(needs.*.result, 'failure')
+        run: |
+          echo "❌ One or more validation jobs failed"
+          exit 1

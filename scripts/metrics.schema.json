@@ -1,0 +1,194 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TITAN FUSE Metrics Output",
+  "description": "Structured metrics for monitoring and dashboards",
+  "type": "object",
+  "properties": {
+    "session": {
+      "type": "object",
+      "description": "Session metadata",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Session UUID"
+        },
+        "start_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "end_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "enum": ["COMPLETE", "PARTIAL", "FAILED", "IN_PROGRESS"]
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "description": "Source file information",
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "Source file name"
+        },
+        "lines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "chunks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "checksum": {
+          "type": "string"
+        }
+      }
+    },
+    "processing": {
+      "type": "object",
+      "description": "Processing statistics",
+      "properties": {
+        "issues_found": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "issues_fixed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "issues_deferred": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "issues_skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gaps": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gap_severity": {
+          "type": "object",
+          "properties": {
+            "SEV-1": { "type": "integer", "minimum": 0 },
+            "SEV-2": { "type": "integer", "minimum": 0 },
+            "SEV-3": { "type": "integer", "minimum": 0 },
+            "SEV-4": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "chunks_processed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "chunks_failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "batches_completed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "description": "Token budget tracking",
+      "properties": {
+        "tokens_used": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens_max": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "utilization_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "llm_query_calls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "avg_chunk_tokens": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "description": "Verification gate status",
+      "properties": {
+        "GATE-00": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
+        "GATE-01": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
+        "GATE-02": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
+        "GATE-03": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
+        "GATE-04": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
+        "GATE-05": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
+        "GATE-REPO-00": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
+        "GATE-REPO-01": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
+        "GATE-REPO-02": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "description": "Quality metrics",
+      "properties": {
+        "confidence_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "zero_drift_violations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "keep_preserved": {
+          "type": "boolean"
+        },
+        "idempotency_verified": {
+          "type": "boolean"
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "Generated artifact paths",
+      "properties": {
+        "index": { "type": "string" },
+        "symbol_map": { "type": "string" },
+        "change_log": { "type": "string" },
+        "decision_record": { "type": "string" },
+        "merged_output": { "type": "string" }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "description": "Error log",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp": { "type": "string", "format": "date-time" },
+          "phase": { "type": "string" },
+          "chunk": { "type": "string" },
+          "message": { "type": "string" },
+          "severity": { "type": "string" }
+        }
+      }
+    }
+  }
+}
