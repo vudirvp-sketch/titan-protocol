@@ -1,0 +1,503 @@
+# TITAN FUSE Protocol - Tools Configuration
+# TASK-001: Tool Orchestration & Capability Registry
+# Version: 1.0.0
+
+# =============================================================================
+# TRANSPORT CONFIGURATION
+# =============================================================================
+
+transports:
+  stdio:
+    enabled: true
+    timeout_default: 30
+    max_concurrent: 10
+
+  internal:
+    enabled: true
+    timeout_default: 60
+
+  mcp:
+    enabled: false
+    endpoint: null
+    timeout_default: 60
+
+  api:
+    enabled: false
+    base_url: null
+    auth_type: bearer
+    timeout_default: 30
+
+  websocket:
+    enabled: false
+    endpoint: null
+    reconnect: true
+    timeout_default: 60
+
+# =============================================================================
+# CAPABILITY CATEGORIES
+# =============================================================================
+
+categories:
+  fs:
+    name: Filesystem
+    description: File and directory operations
+    permissions: ["fs:read", "fs:write"]
+
+  web:
+    name: Web
+    description: Web and HTTP operations
+    permissions: ["web:fetch", "web:search"]
+
+  code:
+    name: Code
+    description: Code analysis and manipulation
+    permissions: ["code:read", "code:write", "code:execute"]
+
+  memory:
+    name: Memory
+    description: Session and state management
+    permissions: ["memory:read", "memory:write"]
+
+  llm:
+    name: LLM
+    description: Large Language Model operations
+    permissions: ["llm:query", "llm:embed"]
+
+  db:
+    name: Database
+    description: Database operations
+    permissions: ["db:read", "db:write", "db:query"]
+
+  system:
+    name: System
+    description: System-level operations
+    permissions: ["system:exec", "system:info"]
+
+# =============================================================================
+# REGISTERED CAPABILITIES
+# =============================================================================
+
+capabilities:
+  # -------------------------------------------------------------------------
+  # FILESYSTEM
+  # -------------------------------------------------------------------------
+
+  read_file:
+    category: fs
+    description: Read file contents
+    transport: internal
+    permissions: ["fs:read"]
+    schema:
+      input:
+        type: object
+        required: [path]
+        properties:
+          path:
+            type: string
+            description: File path to read
+          encoding:
+            type: string
+            default: utf-8
+      output:
+        type: object
+        required: [content]
+        properties:
+          content:
+            type: string
+          size:
+            type: integer
+          encoding:
+            type: string
+    rate_limit: 100
+    timeout: 10
+
+  write_file:
+    category: fs
+    description: Write content to file
+    transport: internal
+    permissions: ["fs:write"]
+    schema:
+      input:
+        type: object
+        required: [path, content]
+        properties:
+          path:
+            type: string
+          content:
+            type: string
+          encoding:
+            type: string
+            default: utf-8
+          mode:
+            type: string
+            enum: [write, append]
+            default: write
+      output:
+        type: object
+        required: [success]
+        properties:
+          success:
+            type: boolean
+          bytes_written:
+            type: integer
+    rate_limit: 50
+    timeout: 30
+
+  list_directory:
+    category: fs
+    description: List directory contents
+    transport: internal
+    permissions: ["fs:read"]
+    schema:
+      input:
+        type: object
+        required: [path]
+        properties:
+          path:
+            type: string
+          pattern:
+            type: string
+          recursive:
+            type: boolean
+            default: false
+      output:
+        type: object
+        required: [entries]
+        properties:
+          entries:
+            type: array
+            items:
+              type: object
+    rate_limit: 100
+    timeout: 10
+
+  # -------------------------------------------------------------------------
+  # WEB
+  # -------------------------------------------------------------------------
+
+  web_search:
+    category: web
+    description: Search the web for information
+    transport: api
+    permissions: ["web:search"]
+    schema:
+      input:
+        type: object
+        required: [query]
+        properties:
+          query:
+            type: string
+            minLength: 1
+          num_results:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      output:
+        type: object
+        required: [results]
+        properties:
+          results:
+            type: array
+            items:
+              type: object
+              properties:
+                url:
+                  type: string
+                title:
+                  type: string
+                snippet:
+                  type: string
+    rate_limit: 30
+    timeout: 60
+
+  web_fetch:
+    category: web
+    description: Fetch content from a URL
+    transport: api
+    permissions: ["web:fetch"]
+    schema:
+      input:
+        type: object
+        required: [url]
+        properties:
+          url:
+            type: string
+            pattern: "^https?://"
+          format:
+            type: string
+            enum: [html, text, markdown, json]
+            default: markdown
+      output:
+        type: object
+        required: [content]
+        properties:
+          content:
+            type: string
+          title:
+            type: string
+          metadata:
+            type: object
+    rate_limit: 20
+    timeout: 30
+
+  # -------------------------------------------------------------------------
+  # CODE
+  # -------------------------------------------------------------------------
+
+  grep_search:
+    category: code
+    description: Search for patterns in files
+    transport: stdio
+    permissions: ["code:read"]
+    schema:
+      input:
+        type: object
+        required: [pattern, path]
+        properties:
+          pattern:
+            type: string
+          path:
+            type: string
+          case_sensitive:
+            type: boolean
+            default: true
+          context_lines:
+            type: integer
+            minimum: 0
+            maximum: 10
+      output:
+        type: object
+        required: [matches]
+        properties:
+          matches:
+            type: array
+            items:
+              type: object
+          count:
+            type: integer
+    rate_limit: 100
+    timeout: 30
+
+  ast_parse:
+    category: code
+    description: Parse code into AST
+    transport: internal
+    permissions: ["code:read"]
+    schema:
+      input:
+        type: object
+        required: [code, language]
+        properties:
+          code:
+            type: string
+          language:
+            type: string
+            enum: [python, javascript, typescript, json, yaml]
+      output:
+        type: object
+        required: [ast]
+        properties:
+          ast:
+            type: object
+          symbols:
+            type: array
+    rate_limit: 50
+    timeout: 30
+
+  # -------------------------------------------------------------------------
+  # LLM
+  # -------------------------------------------------------------------------
+
+  llm_query:
+    category: llm
+    description: Query LLM with a prompt
+    transport: api
+    permissions: ["llm:query"]
+    schema:
+      input:
+        type: object
+        required: [prompt]
+        properties:
+          prompt:
+            type: string
+            minLength: 1
+          system_prompt:
+            type: string
+          max_tokens:
+            type: integer
+            minimum: 100
+            maximum: 8000
+            default: 2048
+          temperature:
+            type: number
+            minimum: 0
+            maximum: 2
+            default: 0.7
+      output:
+        type: object
+        required: [content]
+        properties:
+          content:
+            type: string
+          tokens_used:
+            type: integer
+          model:
+            type: string
+    rate_limit: 60
+    timeout: 120
+
+  # -------------------------------------------------------------------------
+  # MEMORY
+  # -------------------------------------------------------------------------
+
+  memory_get:
+    category: memory
+    description: Get value from session memory
+    transport: internal
+    permissions: ["memory:read"]
+    schema:
+      input:
+        type: object
+        required: [key]
+        properties:
+          key:
+            type: string
+          default:
+            type: [string, number, boolean, array, object, "null"]
+      output:
+        type: object
+        required: [value]
+        properties:
+          value: {}
+          found:
+            type: boolean
+    rate_limit: null
+    timeout: 5
+
+  memory_set:
+    category: memory
+    description: Set value in session memory
+    transport: internal
+    permissions: ["memory:write"]
+    schema:
+      input:
+        type: object
+        required: [key, value]
+        properties:
+          key:
+            type: string
+          value: {}
+          ttl_seconds:
+            type: integer
+            minimum: 0
+      output:
+        type: object
+        required: [success]
+        properties:
+          success:
+            type: boolean
+    rate_limit: null
+    timeout: 5
+
+  # -------------------------------------------------------------------------
+  # SYSTEM
+  # -------------------------------------------------------------------------
+
+  exec_command:
+    category: system
+    description: Execute a shell command
+    transport: stdio
+    permissions: ["system:exec"]
+    schema:
+      input:
+        type: object
+        required: [command]
+        properties:
+          command:
+            type: string
+          args:
+            type: array
+            items:
+              type: string
+          cwd:
+            type: string
+          env:
+            type: object
+          timeout:
+            type: integer
+            minimum: 1
+            maximum: 300
+            default: 30
+      output:
+        type: object
+        required: [exit_code]
+        properties:
+          exit_code:
+            type: integer
+          stdout:
+            type: string
+          stderr:
+            type: string
+          duration_ms:
+            type: integer
+    rate_limit: 20
+    timeout: 60
+
+# =============================================================================
+# ROUTER CONFIGURATION
+# =============================================================================
+
+router:
+  default_timeout: 30
+  max_retries: 2
+  retry_delay_ms: 100
+
+  fallback_chain:
+    - internal
+    - stdio
+    - api
+
+  metrics:
+    enabled: true
+    export_interval_seconds: 60
+
+# =============================================================================
+# PERMISSION PROFILES
+# =============================================================================
+
+permission_profiles:
+  read_only:
+    - fs:read
+    - web:fetch
+    - code:read
+    - memory:read
+    - llm:query
+
+  standard:
+    - fs:read
+    - fs:write
+    - web:fetch
+    - web:search
+    - code:read
+    - code:write
+    - memory:read
+    - memory:write
+    - llm:query
+
+  full:
+    - fs:read
+    - fs:write
+    - web:fetch
+    - web:search
+    - code:read
+    - code:write
+    - code:execute
+    - memory:read
+    - memory:write
+    - llm:query
+    - llm:embed
+    - db:read
+    - db:write
+    - system:exec
+    - system:info

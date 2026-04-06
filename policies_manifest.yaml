@@ -1,0 +1,303 @@
+# TITAN FUSE Protocol - Policy Manifest
+# TASK-003: Policy Engine & Autonomous Recovery Loops
+# Version: 1.0.0
+
+# =============================================================================
+# RETRY POLICIES
+# =============================================================================
+
+retry_policies:
+  default:
+    strategy: exponential_jitter
+    max_retries: 3
+    base_delay_ms: 100
+    max_delay_ms: 30000
+    multiplier: 2.0
+    jitter: 0.1
+    retryable_errors:
+      - TimeoutError
+      - ConnectionError
+      - IOError
+
+  aggressive:
+    strategy: exponential_jitter
+    max_retries: 5
+    base_delay_ms: 50
+    max_delay_ms: 10000
+    multiplier: 1.5
+    jitter: 0.2
+
+  conservative:
+    strategy: exponential
+    max_retries: 2
+    base_delay_ms: 1000
+    max_delay_ms: 60000
+    multiplier: 3.0
+
+  no_retry:
+    strategy: none
+    max_retries: 0
+
+# =============================================================================
+# BEHAVIOR POLICIES
+# =============================================================================
+
+policies:
+  # -------------------------------------------------------------------------
+  # ERROR HANDLING
+  # -------------------------------------------------------------------------
+
+  retry_on_timeout:
+    condition: on_timeout
+    action: retry
+    priority: 100
+    max_retries: 3
+    parameters:
+      retry_policy: default
+      log_level: warn
+
+  retry_on_connection_error:
+    condition: on_error
+    action: retry
+    priority: 90
+    max_retries: 5
+    parameters:
+      retry_policy: aggressive
+      error_patterns:
+        - "connection"
+        - "network"
+        - "ECONNREFUSED"
+
+  rollback_on_validation_fail:
+    condition: on_validation_fail
+    action: rollback
+    priority: 80
+    parameters:
+      verify_rollback: true
+      notify: true
+
+  rollback_on_critical_error:
+    condition: on_error
+    action: rollback
+    priority: 70
+    parameters:
+      severity_threshold: SEV-1
+      preserve_checkpoint: true
+
+  # -------------------------------------------------------------------------
+  # GATE HANDLING
+  # -------------------------------------------------------------------------
+
+  retry_on_gate_block:
+    condition: on_gate_block
+    action: retry
+    priority: 100
+    max_retries: 2
+    parameters:
+      auto_fix: true
+      fix_strategy: minimal
+
+  escalate_on_gate_fail:
+    condition: on_gate_block
+    action: escalate
+    priority: 50
+    max_retries: 3
+    parameters:
+      message: "Gate validation failed after retries"
+      require_acknowledgement: true
+
+  # -------------------------------------------------------------------------
+  # BUDGET HANDLING
+  # -------------------------------------------------------------------------
+
+  warn_on_budget_warning:
+    condition: on_budget_exceeded
+    action: notify
+    priority: 100
+    parameters:
+      threshold_pct: 90
+      message: "Budget threshold approaching"
+
+  pause_on_budget_exceeded:
+    condition: on_budget_exceeded
+    action: wait
+    priority: 90
+    parameters:
+      threshold_pct: 100
+      wait_for_approval: true
+
+  # -------------------------------------------------------------------------
+  # RECOVERY HANDLING
+  # -------------------------------------------------------------------------
+
+  auto_recovery_on_retry_exhausted:
+    condition: on_retry_exhausted
+    action: custom
+    priority: 100
+    parameters:
+      recovery_strategy: fallback
+      fallback_handler: "policy.fallback_handler"
+
+  escalate_on_recovery_fail:
+    condition: on_rollback
+    action: escalate
+    priority: 80
+    parameters:
+      message: "Recovery failed, manual intervention required"
+      severity: high
+
+# =============================================================================
+# RECOVERY STRATEGIES
+# =============================================================================
+
+recovery_strategies:
+  # -------------------------------------------------------------------------
+  # RETRY STRATEGY
+  # -------------------------------------------------------------------------
+
+  retry:
+    name: retry
+    action: retry
+    priority: 100
+    max_attempts: 3
+    description: "Retry the failed operation"
+
+  # -------------------------------------------------------------------------
+  # ROLLBACK STRATEGY
+  # -------------------------------------------------------------------------
+
+  rollback:
+    name: rollback
+    action: rollback
+    priority: 90
+    max_attempts: 1
+    description: "Rollback to last known good state"
+
+  # -------------------------------------------------------------------------
+  # RESTART PHASE STRATEGY
+  # -------------------------------------------------------------------------
+
+  restart_phase:
+    name: restart_phase
+    action: restart_phase
+    priority: 80
+    max_attempts: 2
+    description: "Restart current phase from beginning"
+
+  # -------------------------------------------------------------------------
+  # SKIP CHUNK STRATEGY
+  # -------------------------------------------------------------------------
+
+  skip_chunk:
+    name: skip_chunk
+    action: skip_chunk
+    priority: 70
+    max_attempts: 1
+    description: "Skip current chunk and mark as gap"
+    parameters:
+      mark_gap: true
+      gap_severity: SEV-3
+
+  # -------------------------------------------------------------------------
+  # FALLBACK STRATEGY
+  # -------------------------------------------------------------------------
+
+  fallback:
+    name: fallback
+    action: fallback
+    priority: 60
+    max_attempts: 1
+    description: "Use fallback operation"
+    parameters:
+      fallback_mode: degraded
+      notify_user: true
+
+  # -------------------------------------------------------------------------
+  # REINITIALIZE STRATEGY
+  # -------------------------------------------------------------------------
+
+  reinitialize:
+    name: reinitialize
+    action: reinitialize
+    priority: 50
+    max_attempts: 1
+    description: "Reinitialize session from scratch"
+    parameters:
+      preserve_inputs: true
+      clear_state: true
+
+  # -------------------------------------------------------------------------
+  # MANUAL INTERVENTION STRATEGY
+  # -------------------------------------------------------------------------
+
+  manual:
+    name: manual
+    action: manual
+    priority: 10
+    max_attempts: 0
+    description: "Escalate to manual intervention"
+    parameters:
+      require_acknowledgement: true
+      timeout_minutes: 60
+
+# =============================================================================
+# CIRCUIT BREAKER CONFIGURATION
+# =============================================================================
+
+circuit_breaker:
+  enabled: true
+  failure_threshold: 5
+  reset_timeout_ms: 60000
+  half_open_requests: 3
+
+  # Per-category thresholds
+  thresholds:
+    llm:
+      failure_threshold: 3
+      reset_timeout_ms: 120000
+    api:
+      failure_threshold: 5
+      reset_timeout_ms: 30000
+    fs:
+      failure_threshold: 10
+      reset_timeout_ms: 10000
+
+# =============================================================================
+# NOTIFICATION CONFIGURATION
+# =============================================================================
+
+notifications:
+  enabled: true
+
+  channels:
+    - type: log
+      level: warn
+    - type: event_bus
+      event_type: policy.triggered
+
+  # When to notify
+  triggers:
+    - policy_triggered
+    - recovery_started
+    - recovery_completed
+    - recovery_failed
+    - circuit_opened
+    - circuit_closed
+    - escalation_required
+
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
+
+logging:
+  level: info
+  include_context: true
+  include_stack_trace: false
+
+  # Log specific events
+  events:
+    policy_evaluation: debug
+    policy_triggered: info
+    retry_attempt: debug
+    recovery_action: info
+    circuit_state_change: warn
