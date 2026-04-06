@@ -86,7 +86,9 @@ jobs:
           # Check for balanced code blocks
           code_blocks=$(grep -c '^\s*```' PROTOCOL.md || true)
           if [ $((code_blocks % 2)) -ne 0 ]; then
-            echo "❌ Unbalanced code blocks in PROTOCOL.md"
+            echo "❌ Unbalanced code blocks in PROTOCOL.md (count: $code_blocks — must be even)"
+            echo "   Positions of all backtick fences:"
+            grep -n '^\s*```' PROTOCOL.md | tail -20
             exit 1
           fi
           echo "✅ Code blocks balanced: $code_blocks blocks"
@@ -205,6 +207,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: chmod +x scripts/*.sh
 
       - name: Reassemble PROTOCOL.md before validation
         run: ./scripts/assemble_protocol.sh
