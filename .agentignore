@@ -1,158 +1,47 @@
-# Agent Ignore File — TITAN FUSE Protocol
-# Analog of .gitignore for LLM agents
-# Files and patterns listed here should NOT be indexed or processed
-
-# =============================================================================
-# TEMPORARY WORKING FILES
-# =============================================================================
+# TITAN FUSE Agent Ignore
+# Files and patterns to skip during processing
 
 # Agent working directories
 /tmp/titan_ws_*/
-*.checkpoint.json.tmp
-
-# Intermediate artifacts (keep final only)
 WORK_DIR/
 working_copy/
-*.working
 
-# =============================================================================
-# DEBUG AND DRAFT OUTPUTS
-# =============================================================================
-
-# Debug files
+# Intermediate artifacts
+*.checkpoint.json.tmp
 *.debug.md
-*_debug.md
-debug_*.log
-
-# Draft outputs
 *_draft.md
 *_iter*.md
-*.draft
 
-# Temporary test outputs
-test_output_*.md
-tmp_*.md
-
-# =============================================================================
-# LOG FILES
-# =============================================================================
-
-logs/
-*.log
-debug_*.log
-error_*.log
-
-# =============================================================================
-# CHECKPOINT TEMPORARY FILES
-# =============================================================================
-
-checkpoints/*.tmp
-checkpoints/*.bak
-checkpoints/*.old
-
-# =============================================================================
-# OS AND EDITOR ARTIFACTS
-# =============================================================================
-
+# OS artifacts
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-*~
-
-# Editor directories
-.idea/
-.vscode/
 *.swp
 *.swo
+*~
+
+# IDE
+.vscode/
+.idea/
 *.sublime-*
 
-# =============================================================================
-# BUILD AND CACHE
-# =============================================================================
-
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Node modules (if any scripts use npm)
+# Build outputs
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# =============================================================================
-# SENSITIVE FILES (NEVER PROCESS)
-# =============================================================================
-
-# Secrets and credentials
+dist/
+build/
+__pycache__/
+*.pyc
 .env
-.env.*
-*.pem
-*.key
-secrets/
-credentials/
+.env.local
 
-# Private configurations
-*.private.*
-private/
+# Logs
+*.log
+logs/
 
-# =============================================================================
-# LARGE BINARY FILES
-# =============================================================================
+# Test outputs
+coverage/
+.nyc_output/
 
-# Images (unless specifically needed)
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.bmp
-*.ico
-*.svg
-
-# Documents
-*.pdf
-*.docx
-*.xlsx
-*.pptx
-
-# Archives
-*.zip
-*.tar
-*.gz
-*.rar
-*.7z
-
-# =============================================================================
-# EXAMPLE PATTERNS
-# =============================================================================
-
-# Example: ignore all .bak files
-# *.bak
-
-# Example: ignore specific directory
-# examples/large/
-
-# =============================================================================
-# END OF AGENT IGNORE
-# =============================================================================
+# Temporary files
+*.tmp
+*.temp
+.cache/

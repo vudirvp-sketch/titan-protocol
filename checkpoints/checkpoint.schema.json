@@ -1,211 +1,142 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "TITAN FUSE Checkpoint Format v2.1",
-  "description": "Enhanced checkpoint format with chunk-level recovery and policy state support",
+  "title": "TITAN FUSE Checkpoint v3.2.1",
+  "description": "Session persistence checkpoint for resumption with enhanced tracking",
   "type": "object",
-  "required": [
-    "session_id",
-    "protocol_version",
-    "source_file",
-    "source_checksum",
-    "gates_passed",
-    "completed_batches",
-    "timestamp",
-    "resumable",
-    "resumption_type"
-  ],
+  "required": ["session_id", "protocol_version", "source_file", "source_checksum", "gates_passed", "completed_batches", "open_issues", "chunk_cursor", "timestamp", "cursor_state"],
   "properties": {
     "session_id": {
       "type": "string",
-      "description": "Unique session identifier (UUID)",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      "format": "uuid",
+      "description": "Unique session identifier"
     },
     "protocol_version": {
       "type": "string",
-      "description": "Protocol version used for this session",
-      "pattern": "^\\d+\\.\\d+(\\.\\d+)?$"
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Protocol version used (semver)"
     },
     "source_file": {
       "type": "string",
-      "description": "Path to the source file being processed"
+      "description": "Path to source file being processed"
     },
     "source_checksum": {
       "type": "string",
-      "description": "SHA-256 checksum of the source file",
-      "pattern": "^[a-f0-9]{64}$"
+      "description": "SHA-256 checksum of source file"
+    },
+    "gates_passed": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["GATE-00", "GATE-01", "GATE-02", "GATE-03", "GATE-04", "GATE-05", "GATE-REPO-00", "GATE-REPO-01", "GATE-REPO-02"]
+      },
+      "description": "List of verification gates passed"
+    },
+    "completed_batches": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of completed batch IDs"
+    },
+    "open_issues": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of open issue IDs"
+    },
+    "chunk_cursor": {
+      "type": "string",
+      "description": "Current chunk position"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp"
+    },
+    "cursor_state": {
+      "type": "object",
+      "description": "NEW in v3.2.1: Cursor tracking state",
+      "required": ["current_file", "current_line", "current_chunk", "offset_delta"],
+      "properties": {
+        "current_file": {
+          "type": "string",
+          "description": "Currently processed file"
+        },
+        "current_line": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Current line number in file"
+        },
+        "current_chunk": {
+          "type": "string",
+          "description": "Current chunk ID"
+        },
+        "current_section": {
+          "type": "string",
+          "description": "Current section name (optional)"
+        },
+        "offset_delta": {
+          "type": "integer",
+          "description": "Lines added/removed in session"
+        }
+      }
     },
     "chunk_checksums": {
       "type": "object",
-      "description": "SHA-256 checksums for each chunk (enables partial recovery)",
       "additionalProperties": {
-        "type": "string",
-        "pattern": "^[a-f0-9]{64}$"
-      }
+        "type": "string"
+      },
+      "description": "Per-chunk checksums for partial recovery"
     },
-    "completed_chunks": {
-      "type": "array",
-      "description": "List of chunk IDs that have been fully processed",
-      "items": {
-        "type": "string",
-        "pattern": "^C\\d+$"
-      }
-    },
-    "pending_chunks": {
-      "type": "array",
-      "description": "List of chunk IDs still pending processing",
-      "items": {
-        "type": "string",
-        "pattern": "^C\\d+$"
-      }
-    },
-    "modification_map": {
+    "issue_dependency_graph": {
       "type": "object",
-      "description": "Track modifications per chunk for partial resumption",
+      "description": "NEW in v3.2.1: Issue dependency DAG",
       "additionalProperties": {
         "type": "object",
         "properties": {
-          "start": { "type": "integer", "minimum": 1 },
-          "end": { "type": "integer", "minimum": 1 },
-          "hash": { "type": "string" },
-          "modifications": {
+          "depends_on": {
             "type": "array",
             "items": {
-              "type": "object",
-              "properties": {
-                "line": { "type": "integer" },
-                "type": { "type": "string", "enum": ["add", "delete", "modify"] },
-                "description": { "type": "string" }
-              }
+              "type": "string"
             }
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["SEV-1", "SEV-2", "SEV-3", "SEV-4"]
           }
         }
       }
     },
-    "gates_passed": {
-      "type": "array",
-      "description": "List of verification gates that have been passed",
-      "items": {
-        "type": "string",
-        "pattern": "^GATE(-REPO)?-\\d+$"
-      }
-    },
-    "completed_batches": {
-      "type": "array",
-      "description": "List of batch IDs that have been completed",
-      "items": {
-        "type": "string",
-        "pattern": "^BATCH_\\d+$"
-      }
-    },
-    "open_issues": {
-      "type": "array",
-      "description": "List of open issue IDs",
-      "items": {
-        "type": "string"
-      }
-    },
-    "chunk_cursor": {
+    "file_inventory_path": {
       "type": "string",
-      "description": "Current chunk being processed",
-      "pattern": "^C\\d+$"
+      "description": "NEW in v3.2.1: Path to file_inventory.json"
     },
-    "timestamp": {
-      "type": "string",
-      "description": "ISO-8601 timestamp of last checkpoint update",
-      "format": "date-time"
-    },
-    "resumable": {
-      "type": "boolean",
-      "description": "Whether this checkpoint can be resumed"
-    },
-    "resumption_type": {
-      "type": "string",
-      "description": "Type of resumption possible",
-      "enum": ["FULL", "PARTIAL", "FRESH"]
-    },
-    "budget_used": {
-      "type": "integer",
-      "description": "Tokens used so far in this session",
-      "minimum": 0
-    },
-    "budget_max": {
-      "type": "integer",
-      "description": "Maximum tokens allowed for this session",
-      "minimum": 0
-    },
-    "budget_state": {
-      "type": "string",
-      "description": "FIX 06: Current budget state for policy context",
-      "enum": ["NORMAL", "BUDGET_WARNING", "BUDGET_EXCEEDED"],
-      "default": "NORMAL"
-    },
-    "source_line_count": {
-      "type": "integer",
-      "description": "Total lines in source file",
-      "minimum": 0
-    },
-    "chunk_count": {
-      "type": "integer",
-      "description": "Total number of chunks",
-      "minimum": 0
-    },
-    "issues_found": {
-      "type": "integer",
-      "description": "Total issues found during processing",
-      "minimum": 0
-    },
-    "issues_fixed": {
-      "type": "integer",
-      "description": "Issues that have been fixed",
-      "minimum": 0
-    },
-    "gaps": {
-      "type": "array",
-      "description": "List of gap markers in the output",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": { "type": "string" },
-          "chunk": { "type": "string" },
-          "severity": { "type": "string", "enum": ["SEV-1", "SEV-2", "SEV-3", "SEV-4"] },
-          "description": { "type": "string" }
+    "crossref_report": {
+      "type": "object",
+      "description": "NEW in v3.2.1: Cross-reference validation report",
+      "properties": {
+        "total_references": {
+          "type": "integer"
+        },
+        "resolved": {
+          "type": "integer"
+        },
+        "broken": {
+          "type": "integer"
         }
       }
     },
-    "policy_manifest_hash": {
+    "status": {
       "type": "string",
-      "description": "FIX 04: SHA-256 hash of the active policy manifest at checkpoint time",
-      "pattern": "^[a-f0-9]{64}$"
-    },
-    "policy_retry_state": {
-      "type": "object",
-      "description": "FIX 05: Retry state for policy engine - prevents infinite retry loops after session resume",
-      "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "retry_count": { "type": "integer", "minimum": 0 },
-          "last_policy_triggered": { "type": "string" },
-          "last_retry_timestamp": { "type": "string", "format": "date-time" }
-        },
-        "required": ["retry_count"]
-      }
-    },
-    "state_snapshot": {
-      "type": "object",
-      "description": "Current state snapshot from QUICK_ORIENT header",
-      "properties": {
-        "current_task": { "type": "string" },
-        "last_completed_batch": { "type": "string" },
-        "next_action": { "type": "string" },
-        "blocked_by": { "type": "string" },
-        "active_issues": { "type": "array", "items": { "type": "string" } },
-        "context_mode": { "type": "string", "enum": ["REPL", "DIRECT"] }
-      }
-    },
-    "metadata": {
-      "type": "object",
-      "description": "Additional metadata",
-      "additionalProperties": true
+      "enum": ["IN_PROGRESS", "COMPLETE", "ROLLBACK", "ABORTED", "READY"],
+      "default": "IN_PROGRESS"
     }
   }
 }

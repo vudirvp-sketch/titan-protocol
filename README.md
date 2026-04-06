@@ -10,7 +10,7 @@ ideal_reader_state: "learning about the protocol"
 
 # TITAN FUSE Protocol
 
-**Production-Grade Large-File Agent Protocol v3.2.0**
+**Production-Grade Large-File Agent Protocol v3.2.1**
 
 A deterministic LLM agent protocol for processing large files (5k–50k+ lines) with verification gates, rollback safety, and session persistence.
 
@@ -55,6 +55,13 @@ cp your-large-file.md inputs/
 - **Enhanced llm_query fallback**: 4-attempt progressive fallback chain
 - **Metrics export**: JSON output for monitoring integration
 - **Custom validators**: Extensible validation framework
+
+### New Modules (NEW in v3.2.1)
+- **FILE_INVENTORY**: File metadata collection before chunking (binary detection, encoding, checksums)
+- **CURSOR_TRACKING**: Enhanced position tracking with offset delta
+- **ISSUE_DEPENDENCY_GRAPH**: DAG for issue dependencies with topological ordering
+- **CROSSREF_VALIDATOR**: Reference validation module (section, anchor, code, import refs)
+- **DIAGNOSTICS_MODULE**: Systematic troubleshooting (Symptom → Root Cause → Solution matrix)
 
 ---
 
@@ -255,8 +262,8 @@ Override protocol defaults in `SKILL.md`:
 
 ```yaml
 ---
-skill_version: 2.0.0
-protocol_version: 3.2.0
+skill_version: 2.1.0
+protocol_version: 3.2.1
 constraints:
   max_files_per_session: 3
   max_tokens_per_session: 100000
@@ -396,6 +403,7 @@ MIT License - See LICENSE file for details.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 3.2.1 | 2026-04-07 | FILE_INVENTORY, CURSOR_TRACKING, ISSUE_DEPENDENCY_GRAPH, CROSSREF_VALIDATOR, DIAGNOSTICS_MODULE |
 | 3.2.0 | 2024-01-15 | Chunk-level recovery, enhanced llm_query, metrics |
 | 3.1.0 | 2024-01-01 | Session persistence, budget tracking |
 | 3.0.0 | 2023-12-15 | TIER -1 Bootstrap, environment offload |
@@ -411,3 +419,4 @@ MIT License - See LICENSE file for details.
 **Documentation**: Full protocol specification in `PROTOCOL.md`
 
 **Agent Entry Point**: `AGENTS.md`
+

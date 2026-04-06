@@ -1,8 +1,8 @@
 ---
 title: TITAN FUSE Agent Skill Configuration
-skill_version: 2.0.0
-protocol_version: 3.2.0
-extends: Large-File Agent Protocol v3.1
+skill_version: 2.1.0
+protocol_version: 3.2.1
+extends: Large-File Agent Protocol v3.2.1
 domain: large_file_processing; repo_bootstrap; agent_orchestration
 constraints:
   max_files_per_session: 3
@@ -228,10 +228,56 @@ If the agent ignores SKILL.md:
 3. Ensure file is in repository root
 4. Check protocol version compatibility
 
+## New Modules (v3.2.1)
+
+### FILE_INVENTORY
+```yaml
+file_inventory:
+  enabled: true
+  output_path: WORK_DIR/file_inventory.json
+  include_in_artifacts: true
+```
+
+### CURSOR_TRACKING
+```yaml
+cursor_tracking:
+  enabled: true
+  validate_post_patch: true
+  atomic_update: true
+```
+
+### ISSUE_DEPENDENCY_GRAPH
+```yaml
+issue_dependency_graph:
+  enabled: true
+  method: ast  # ast | regex
+  max_depth: 10
+  visualization: ascii  # ascii | graphviz
+```
+
+### CROSSREF_VALIDATOR
+```yaml
+crossref_validator:
+  enabled: true
+  run_post_gate00: true
+  run_post_chunk: true
+  run_gate04: true
+  cache_ref_index: true
+```
+
+### DIAGNOSTICS_MODULE
+```yaml
+diagnostics_module:
+  enabled: true
+  human_review_fallback: true
+  matrix_version: "3.2.1"
+```
+
 ## Version Compatibility
 
 | SKILL Version | Protocol Version | Compatible |
 |---------------|------------------|------------|
+| 2.1.0 | 3.2.1 | ✅ Full |
 | 2.0.0 | 3.2.0 | ✅ Full |
 | 1.5.0 | 3.1.0 | ✅ Full |
 | 1.0.0 | 3.0.0 | ⚠️ Partial |
@@ -239,3 +285,4 @@ If the agent ignores SKILL.md:
 ---
 
 *This configuration file extends and overrides protocol defaults where explicitly stated. It cannot override TIER 0 invariants (INVAR-01 through INVAR-04).*
+

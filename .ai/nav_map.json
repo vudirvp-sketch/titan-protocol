@@ -1,333 +1,74 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0",
-  "protocol_version": "3.2.0",
-  "generated": "2026-04-06T06:45:00Z",
-  "description": "Semantic navigation map for TITAN FUSE Protocol repository",
-
-  "entry_points": {
-    "new_agent": {
-      "path": "AGENTS.md",
-      "description": "Start here for agent navigation",
-      "prerequisites": [],
-      "first_files": ["AGENTS.md", "SKILL.md", "PROTOCOL.md"]
+  "version": "3.2.0",
+  "generated": "2026-04-07T00:00:00Z",
+  "aliases": {
+    "verification_gates": ["GATE-00", "GATE-01", "GATE-02", "GATE-03", "GATE-04", "GATE-05"],
+    "gates": ["verification_gates"],
+    "validation": ["verification_gates"],
+    "checks": ["verification_gates"],
+    "chunking": ["PRINCIPLE-04"],
+    "rollback": ["TIER 4"],
+    "failsafe": ["TIER 5"],
+    "bootstrap": ["TIER -1"],
+    "invariants": ["INVAR-01", "INVAR-02", "INVAR-03", "INVAR-04"]
+  },
+  "navigation": {
+    "quick_start": {
+      "file": "README.md",
+      "section": "quick-start"
     },
-    "new_developer": {
-      "path": "README.md",
-      "description": "Human-friendly overview and quick start",
-      "prerequisites": [],
-      "first_files": ["README.md", "AGENTS.md"]
+    "tier_structure": {
+      "file": "PROTOCOL.md",
+      "section": "tier-structure"
     },
-    "configure_session": {
-      "path": "SKILL.md",
-      "description": "Agent configuration and constraints",
-      "prerequisites": ["AGENTS.md"],
-      "related_files": ["config.yaml"]
+    "verification_gates": {
+      "file": "PROTOCOL.md",
+      "section": "verification-gates"
     },
-    "extend_protocol": {
-      "path": "skills/validators/",
-      "description": "Add custom validators",
-      "prerequisites": ["PROTOCOL.md"],
-      "related_files": ["scripts/validate_checkpoint.py"]
+    "session_limits": {
+      "file": "config.yaml",
+      "section": "session:"
     },
-    "troubleshoot": {
-      "path": "README.md#troubleshooting",
-      "description": "Debug common issues",
-      "prerequisites": [],
-      "related_files": ["checkpoints/checkpoint.schema.json"]
+    "custom_validators": {
+      "file": "skills/validators/",
+      "description": "Create .js file"
     },
     "resume_session": {
-      "path": "checkpoints/",
-      "description": "Resume interrupted session",
-      "prerequisites": ["checkpoint.json exists"],
-      "related_files": ["scripts/validate_checkpoint.py"]
+      "file": "checkpoints/",
+      "description": "Load checkpoint.json"
+    },
+    "protocol_version": {
+      "file": "VERSION"
+    },
+    "changelog": {
+      "file": "CHANGELOG.md"
     }
   },
-
-  "semantic_index": [
-    {
-      "concept": "verification_gates",
-      "aliases": ["gates", "validation", "checks", "GATE", "verification"],
-      "location": "PROTOCOL.md",
-      "section": "TIER 6 — VERIFICATION GATES SUMMARY",
-      "importance": "critical",
-      "when_to_use": "After each phase completion",
-      "description": "GATE-00 through GATE-05 verification gates"
+  "concepts": {
+    "deterministic_execution": {
+      "file": "PROTOCOL.base.md",
+      "section": "PRINCIPLE-01",
+      "description": "Every action has clear INPUT -> OUTPUT specification"
     },
-    {
-      "concept": "chunking",
-      "aliases": ["chunks", "chunk", "split", "segmentation", "PRINCIPLE-04"],
-      "location": "PROTOCOL.base.md",
-      "section": "PRINCIPLE-04: Chunking Strategy",
-      "importance": "critical",
-      "when_to_use": "When processing files >5000 lines",
-      "description": "Strategy for splitting large files into manageable chunks"
+    "tool_first_navigation": {
+      "file": "PROTOCOL.base.md",
+      "section": "PRINCIPLE-02",
+      "description": "Use grep, regex, AST, chunk before reading entire file"
     },
-    {
-      "concept": "rollback",
-      "aliases": ["rollback", "revert", "restore", "backup", "TIER 4"],
-      "location": "PROTOCOL.base.md",
-      "section": "TIER 4 — ROLLBACK PROTOCOL",
-      "importance": "high",
-      "when_to_use": "When validation fails or error occurs",
-      "description": "Backup and recovery procedures"
+    "phased_execution": {
+      "file": "PROTOCOL.base.md",
+      "section": "PRINCIPLE-03",
+      "description": "ANALYZE -> PLAN -> EXECUTE -> VALIDATE -> DELIVER"
     },
-    {
-      "concept": "failsafe",
-      "aliases": ["failsafe", "edge_case", "error_handling", "TIER 5"],
-      "location": "PROTOCOL.base.md",
-      "section": "TIER 5 — FAILSAFE PROTOCOL",
-      "importance": "high",
-      "when_to_use": "When encountering edge cases",
-      "description": "Edge case handling scenarios"
+    "zero_drift_guarantee": {
+      "file": "PROTOCOL.base.md",
+      "section": "INVAR-03",
+      "description": "Preserve original formatting, modify only targeted elements"
     },
-    {
-      "concept": "invariants",
-      "aliases": ["invariant", "INVAR", "rules", "constraints", "TIER 0"],
-      "location": "PROTOCOL.base.md",
-      "section": "TIER 0 — INVARIANTS",
-      "importance": "critical",
-      "when_to_use": "Before any modification",
-      "description": "Non-negotiable rules: anti-fabrication, S-5 veto, zero-drift, idempotency"
-    },
-    {
-      "concept": "anti_fabrication",
-      "aliases": ["no-fabrication", "hallucination", "INVAR-01", "grounding"],
-      "location": "PROTOCOL.base.md",
-      "section": "INVAR-01: Hard Invariants + Anti-Fabrication",
-      "importance": "critical",
-      "when_to_use": "Always - never fabricate data",
-      "description": "Mandate to mark absent data as [gap: not in sources]"
-    },
-    {
-      "concept": "zero_drift",
-      "aliases": ["zero-drift", "formatting", "preserve", "INVAR-03"],
-      "location": "PROTOCOL.base.md",
-      "section": "INVAR-03: Zero-Drift Guarantee",
-      "importance": "critical",
-      "when_to_use": "When modifying files",
-      "description": "Preserve original formatting, structure, tone"
-    },
-    {
-      "concept": "idempotency",
-      "aliases": ["idempotent", "INVAR-04", "patch", "deterministic"],
-      "location": "PROTOCOL.base.md",
-      "section": "INVAR-04: Patch Idempotency",
-      "importance": "critical",
-      "when_to_use": "When applying patches",
-      "description": "Patches must be idempotent - same result if applied twice"
-    },
-    {
-      "concept": "bootstrap",
-      "aliases": ["TIER -1", "initialization", "startup", "self-init"],
-      "location": "PROTOCOL.ext.md",
-      "section": "TIER -1 — BOOTSTRAP PHASE",
-      "importance": "high",
-      "when_to_use": "When agent enters repository",
-      "description": "Repository navigation and self-initialization"
-    },
-    {
-      "concept": "severity",
-      "aliases": ["SEV", "severity", "priority", "criticality", "PRINCIPLE-05"],
-      "location": "PROTOCOL.base.md",
-      "section": "PRINCIPLE-05: Unified Severity Scale",
-      "importance": "high",
-      "when_to_use": "When classifying issues",
-      "description": "SEV-1 (CRITICAL) through SEV-4 (LOW)"
-    },
-    {
-      "concept": "checkpoint",
-      "aliases": ["checkpoint", "session", "persistence", "resume"],
-      "location": "PROTOCOL.base.md",
-      "section": "Step 0.5: Session Checkpoint Init",
-      "importance": "high",
-      "when_to_use": "After each batch, for session persistence",
-      "description": "Session state persistence for resumption"
-    },
-    {
-      "concept": "patch_engine",
-      "aliases": ["patch", "GUARDIAN", "surgical", "modification", "edit"],
-      "location": "PROTOCOL.base.md",
-      "section": "Surgical Patch Engine (GUARDIAN)",
-      "importance": "critical",
-      "when_to_use": "When making file modifications",
-      "description": "Targeted replacement system with validation"
-    },
-    {
-      "concept": "llm_query",
-      "aliases": ["llm_query", "sub-query", "isolated", "chunk query"],
-      "location": "PROTOCOL.base.md",
-      "section": "llm_query Specification",
-      "importance": "medium",
-      "when_to_use": "For isolated sub-queries on chunks",
-      "description": "Specification for LLM queries on text chunks"
-    },
-    {
-      "concept": "output_format",
-      "aliases": ["output", "format", "TIER 3", "structure", "artifacts"],
-      "location": "PROTOCOL.base.md",
-      "section": "TIER 3 — OUTPUT FORMAT",
-      "importance": "high",
-      "when_to_use": "When generating final output",
-      "description": "Mandatory output structure and artifacts"
-    },
-    {
-      "concept": "phase_0",
-      "aliases": ["initialization", "setup", "PHASE 0", "indexing"],
-      "location": "PROTOCOL.base.md",
-      "section": "PHASE 0 — INITIALIZATION & INDEXING",
-      "importance": "critical",
-      "when_to_use": "First phase of any processing session",
-      "description": "Quick orient, environment offload, NAV_MAP, workspace isolation"
-    },
-    {
-      "concept": "phase_1",
-      "aliases": ["search", "discovery", "PHASE 1", "pattern detection"],
-      "location": "PROTOCOL.base.md",
-      "section": "PHASE 1 — SEARCH & DISCOVERY",
-      "importance": "high",
-      "when_to_use": "Second phase - pattern detection",
-      "description": "Target pattern detection and scanning"
-    },
-    {
-      "concept": "phase_2",
-      "aliases": ["analysis", "classification", "PHASE 2", "issue classification"],
-      "location": "PROTOCOL.base.md",
-      "section": "PHASE 2 — ANALYSIS & CLASSIFICATION",
-      "importance": "high",
-      "when_to_use": "Third phase - classify issues",
-      "description": "Issue classification with SEV levels"
-    },
-    {
-      "concept": "phase_3",
-      "aliases": ["planning", "PHASE 3", "execution plan"],
-      "location": "PROTOCOL.base.md",
-      "section": "PHASE 3 — PLANNING",
-      "importance": "high",
-      "when_to_use": "Fourth phase - create execution plan",
-      "description": "Execution plan, pathology registry, operation budget"
-    },
-    {
-      "concept": "phase_4",
-      "aliases": ["execution", "validation", "PHASE 4"],
-      "location": "PROTOCOL.base.md",
-      "section": "PHASE 4 — EXECUTION & VALIDATION",
-      "importance": "critical",
-      "when_to_use": "Fifth phase - execute and validate",
-      "description": "Apply changes, validate, commit or rollback"
-    },
-    {
-      "concept": "phase_5",
-      "aliases": ["delivery", "hygiene", "PHASE 5", "final"],
-      "location": "PROTOCOL.base.md",
-      "section": "PHASE 5 — DELIVERY & HYGIENE",
-      "importance": "critical",
-      "when_to_use": "Final phase - deliver and clean",
-      "description": "Document hygiene, artifact generation, optional full merge"
-    },
-    {
-      "concept": "pathology_registry",
-      "aliases": ["pathology", "registry", "defects", "issues", "bugs"],
-      "location": "PROTOCOL.base.md",
-      "section": "Pathology & Risk Registry",
-      "importance": "high",
-      "when_to_use": "Track all issues across phases",
-      "description": "Registry of all defects and their status"
-    },
-    {
-      "concept": "parallel_safe",
-      "aliases": ["parallel", "concurrent", "batch", "independent"],
-      "location": "PROTOCOL.base.md",
-      "section": "Parallel-Safe Definition",
-      "importance": "medium",
-      "when_to_use": "When planning batch execution",
-      "description": "Conditions for parallel-safe batch execution"
-    },
-    {
-      "concept": "budget",
-      "aliases": ["budget", "tokens", "time", "limits", "operation budget"],
-      "location": "PROTOCOL.base.md",
-      "section": "Operation Budget",
-      "importance": "high",
-      "when_to_use": "Track token and time usage",
-      "description": "Session budget management"
-    },
-    {
-      "concept": "validator",
-      "aliases": ["validator", "validation", "custom", "skills/validators"],
-      "location": "skills/validators/",
-      "section": "Custom validators directory",
-      "importance": "medium",
-      "when_to_use": "Add custom validation rules",
-      "description": "Extensible validation framework"
-    },
-    {
-      "concept": "metrics",
-      "aliases": ["metrics", "monitoring", "statistics", "output"],
-      "location": "outputs/metrics.json",
-      "section": "Generated metrics",
-      "importance": "medium",
-      "when_to_use": "For monitoring integration",
-      "description": "Session metrics output"
-    },
-    {
-      "concept": "configuration",
-      "aliases": ["config", "settings", "yaml", "config.yaml"],
-      "location": "config.yaml",
-      "section": "Full file",
-      "importance": "high",
-      "when_to_use": "Configure runtime defaults",
-      "description": "Runtime configuration file"
-    },
-    {
-      "concept": "skill_config",
-      "aliases": ["skill", "SKILL.md", "agent config", "directives"],
-      "location": "SKILL.md",
-      "section": "Full file",
-      "importance": "critical",
-      "when_to_use": "First file to read after AGENTS.md",
-      "description": "Agent skill configuration and constraints"
+    "anti_fabrication": {
+      "file": "PROTOCOL.base.md",
+      "section": "INVAR-01",
+      "description": "No fabrication - absent data marked as [gap: not in sources]"
     }
-  ],
-
-  "shortcuts": {
-    "start": {
-      "action": "jump_to_quick_start",
-      "files": ["AGENTS.md", "README.md#quick-start"],
-      "description": "Start processing a file"
-    },
-    "gates": {
-      "action": "show_verification_gates",
-      "files": ["PROTOCOL.md#verification-gates"],
-      "description": "View all verification gates"
-    },
-    "debug": {
-      "action": "open_troubleshooting",
-      "files": ["README.md#troubleshooting"],
-      "description": "Debug an issue"
-    },
-    "config": {
-      "action": "open_configuration",
-      "files": ["SKILL.md", "config.yaml"],
-      "description": "Configure agent behavior"
-    },
-    "extend": {
-      "action": "open_extension_docs",
-      "files": ["skills/validators/", "README.md#custom-validators"],
-      "description": "Extend the protocol"
-    },
-    "resume": {
-      "action": "check_checkpoint",
-      "files": ["checkpoints/checkpoint.json"],
-      "description": "Resume interrupted session"
-    }
-  },
-
-  "concept_relationships": {
-    "verification_gates": ["phase_0", "phase_1", "phase_2", "phase_3", "phase_4", "phase_5"],
-    "invariants": ["anti_fabrication", "zero_drift", "idempotency"],
-    "processing_pipeline": ["phase_0", "phase_1", "phase_2", "phase_3", "phase_4", "phase_5"],
-    "session_management": ["checkpoint", "budget", "configuration"],
-    "modification": ["patch_engine", "idempotency", "zero_drift"]
   }
 }

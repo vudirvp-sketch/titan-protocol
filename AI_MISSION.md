@@ -191,3 +191,4 @@ python scripts/test_navigation.py
 **Protocol Version:** See `VERSION` file in repository root.
 **Full Documentation:** `PROTOCOL.md`
 **Navigation Entry:** `AGENTS.md`
+

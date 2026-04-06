@@ -1,12 +1,12 @@
 ---
-title: TITAN FUSE Large-File Agent Protocol v3.1
+title: TITAN FUSE Large-File Agent Protocol v3.2.1
 mode: fuse
 domain: large_file_processing; agent_orchestration
 domain_profile: technical
 domain_volatility: V2
 consensus_score: 96
 optimized: production_grade
-input_languages: en
+input_languages: en, ru
 trace_mode: true
 purpose: "Base protocol specification (TIER 0-6) for deterministic large-file processing"
 audience: ["agents", "developers"]
@@ -15,10 +15,10 @@ related_files: ["PROTOCOL.ext.md", "SKILL.md", "config.yaml"]
 stable_sections: ["TIER 0 — INVARIANTS", "PRINCIPLE-05", "GATE-04 THRESHOLD RULES"]
 emotional_tone: "technical, precise, authoritative"
 ideal_reader_state: "implementing or debugging protocol behavior"
-changelog: v3.1 — fixes: EXECUTION_DIRECTIVE numbering, GATE-04 threshold, severity scale unification, llm_query spec, parallel_safe definition, double hygiene, checksum idempotency; additions: session persistence, tool matrix expansion, operation budget, idempotency guarantee
+changelog: v3.2.1 — additions: FILE_INVENTORY, CURSOR_TRACKING, ISSUE_DEPENDENCY_GRAPH, CROSSREF_VALIDATOR, DIAGNOSTICS_MODULE; v3.1 — fixes: EXECUTION_DIRECTIVE numbering, GATE-04 threshold, severity scale unification, llm_query spec, parallel_safe definition, double hygiene, checksum idempotency; additions: session persistence, tool matrix expansion, operation budget, idempotency guarantee
 ---
 
-# LARGE-FILE AGENT PROTOCOL — PRODUCTION-GRADE v3.1
+# LARGE-FILE AGENT PROTOCOL — PRODUCTION-GRADE v3.2.1
 
 ## DIRECTIVE
 
@@ -156,7 +156,25 @@ context_mode: <REPL | DIRECT>
 chunk_cursor: <current position>
 session_id: <uuid — for checkpoint linkage>
 
+# NEW in v3.2.1: CURSOR_TRACKING
+cursor:
+  current_file: <file_path>
+  current_line: <int>
+  current_chunk: <chunk_id>
+  current_section: <section_name>
+  offset_delta: <int>  # lines added/removed in current session
+
+# NEW in v3.2.1: FILE_INVENTORY reference
+file_inventory: <path to file_inventory.json>
+
 Update after EACH batch completion.
+Update cursor.state atomically with checkpoint.
+
+CURSOR_VALIDATION (NEW in v3.2.1):
+├─ cursor.line MUST match actual file line post-patch
+├─ offset_delta recalculated after each modification
+├─ Mismatch → ROLLBACK + log inconsistency
+└─ Cursor is immutable snapshot per chunk (not cumulative)
 ```
 
 #### Step 0.2: Environment Offload
@@ -204,6 +222,62 @@ RESULT TYPE:
   }
 ```
 
+#### Step 0.2.5: FILE_INVENTORY (NEW in v3.2.1)
+
+```yaml
+PURPOSE: Build file inventory BEFORE chunking for metadata transparency
+
+BEFORE chunking, build file inventory:
+
+FILE_INVENTORY = {
+  "files": [
+    {
+      "path": "<relative_path>",
+      "size_bytes": <int>,
+      "size_lines": <int>,
+      "type": "<text|binary|repomix|unknown>",
+      "encoding": "<utf-8|detected|unknown>",
+      "mtime": "<ISO-8601>",
+      "checksum": "<sha256[:16]>",
+      "chunk_count": <int>  # populated after Step 0.3
+    }
+  ],
+  "summary": {
+    "total_files": <int>,
+    "total_lines": <int>,
+    "text_files": <int>,
+    "binary_files": <int>,
+    "unknown_files": <int>
+  }
+}
+
+ACTIONS:
+  STEP 1: Detect file type
+    ├─ Use 'file' command for binary detection
+    ├─ Text files: proceed to encoding detection
+    └─ Binary files: skip + log [gap: binary_file — {path}]
+
+  STEP 2: Detect encoding
+    ├─ Try UTF-8 read first
+    ├─ On failure: use chardet (with confidence score)
+    └─ Log encoding with confidence in inventory
+
+  STEP 3: Calculate checksum
+    ├─ Use streaming SHA-256 for large files (>1MB)
+    ├─ Store first 16 chars of hash
+    └─ Enable checksum verification for resume
+
+  STEP 4: Store inventory
+    ├─ Write to WORK_DIR/file_inventory.json
+    └─ Include in final artifacts
+
+RULES:
+├─ Binary files → skip processing + log [gap: binary_file — {path}]
+├─ Encoding failure → log [gap: encoding_unresolvable — {path}] + skip
+├─ chardet confidence < 0.7 → warn + flag for human review
+└─ Checksum mismatch on resume → ABORT resumption + warn
+```
+
 #### Step 0.3: Build Navigation Map
 
 ```yaml
@@ -225,6 +299,60 @@ OUTPUT:
 ```
 
 > **GATE-00**: `NAV_MAP exists AND all chunks indexed` → PROCEED to Phase 1
+
+#### CROSSREF_VALIDATOR (NEW in v3.2.1)
+
+```yaml
+PURPOSE: Verify all internal references resolve correctly
+
+SCOPE:
+  ├─ Section references: "→ Section X" or "see Section X"
+  ├─ Anchor links: "#anchor-id" or "[text](#anchor)"
+  ├─ Code references: "function_name" (within same file)
+  ├─ Import references: "from module import X"
+  └─ External references: URLs, file paths
+
+VALIDATION_SEQUENCE:
+  STEP 1: Extract all references
+    regex_patterns:
+      section_ref: /→\s*(Section\s+\d+(\.\d+)?)/g
+      anchor_link: /\[([^\]]+)\]\(#([^)]+)\)/g
+      code_ref: /\b([a-z_][a-z0-9_]*)\b/gi  # then filter by SYMBOL_MAP
+      import_ref: /(?:from|import)\s+([a-zA-Z_][a-zA-Z0-9_.]*)/g
+      
+  STEP 2: Build reference index
+    REF_INDEX = {
+      "<reference>": {
+        "type": "<section|anchor|code|import|external>",
+        "source_location": "<file:line>",
+        "target_location": "<file:line | UNRESOLVED>"
+      }
+    }
+    
+  STEP 3: Validate each reference
+    FOR each ref in REF_INDEX:
+      IF ref.target_location == UNRESOLVED:
+        ├─ Log: [gap: broken_reference — {ref} at {source_location}]
+        └─ Add to BROKEN_REFS list
+        
+  STEP 4: Generate report
+    CROSSREF_REPORT = {
+      "total_references": <int>,
+      "resolved": <int>,
+      "broken": <int>,
+      "broken_details": [...]
+    }
+
+INTEGRATION_WITH_GATES:
+  ├─ Run after NAV_MAP construction (post GATE-00)
+  ├─ Run after each chunk completion
+  └─ Run in Phase 5 validation (GATE-04)
+
+PERFORMANCE:
+  ├─ Cache REF_INDEX per chunk
+  ├─ Incremental update on modifications
+  └─ Full rebuild only on NAV_MAP change
+```
 
 #### Step 0.4: Workspace Isolation
 
@@ -262,14 +390,22 @@ CHECKPOINT_STORE:
   └─ Format:
       {
         "session_id":          "<uuid>",
-        "protocol_version":    "3.1",
+        "protocol_version":    "3.2.1",
         "source_file":         "<path>",
         "source_checksum":     "<sha256 of SOURCE_FILE>",
         "gates_passed":        ["GATE-00", "GATE-01", ...],
         "completed_batches":   ["BATCH_001", ...],
         "open_issues":         ["ISSUE_ID", ...],
         "chunk_cursor":        "<chunk_id>",
-        "timestamp":           "<ISO-8601>"
+        "timestamp":           "<ISO-8601>",
+        "cursor_state": {
+          "current_file":      "<file_path>",
+          "current_line":      "<int>",
+          "current_chunk":     "<chunk_id>",
+          "current_section":   "<section_name>",
+          "offset_delta":      "<int>"
+        },
+        "issue_dependency_graph": { ... }
       }
 
 RESUMPTION:
@@ -429,6 +565,55 @@ RULES:
   - Aggregates all ISSUE_IDs across phases
   - Provides defect traceability
   - Severity uses PRINCIPLE-05 unified scale exclusively
+```
+
+#### ISSUE_DEPENDENCY_GRAPH (NEW in v3.2.1)
+
+```yaml
+PURPOSE: Build dependency graph for issues (not just batches)
+
+ISSUE_DEPENDENCY_GRAPH:
+  format: DAG (Directed Acyclic Graph)
+
+  construction:
+    method_primary: AST-based static analysis
+    method_fallback: regex-based symbol extraction
+    fallback_order: FILE_ORDER priority if AST unavailable
+
+  ISSUE_GRAPH:
+    ISSUE_ID_1:
+      depends_on: []  # no dependencies
+      blocks: [ISSUE_ID_2, ISSUE_ID_3]
+      severity: SEV-1
+    ISSUE_ID_2:
+      depends_on: [ISSUE_ID_1]
+      blocks: [ISSUE_ID_4]
+      severity: SEV-2
+    ISSUE_ID_3:
+      depends_on: [ISSUE_ID_1]
+      blocks: []
+      severity: SEV-3
+
+  TOPOLOGICAL_ORDER: [ISSUE_ID_1, ISSUE_ID_2, ISSUE_ID_3, ISSUE_ID_4]
+
+  CYCLE_DETECTION:
+    algorithm: DFS with coloring (white/gray/black)
+    max_depth: 10
+    IF cycle detected:
+      ├─ Log: [gap: circular_dependency — {issue_A} ↔ {issue_B}]
+      ├─ Break by: SEV priority first, then FILE_ORDER
+      └─ Flag for human review in PATHOLOGY_REGISTRY
+
+  VISUALIZATION:
+    format: ASCII art or GraphViz DOT
+    output: WORK_DIR/issue_dependency_graph.{txt,dot}
+
+RULES:
+├─ Build graph BEFORE batch assignment
+├─ Each batch must contain issues with no internal dependencies
+├─ Cross-batch dependencies → sequential batch order
+├─ Dependency changes REQUIRE re-validation of EXECUTION_PLAN
+└─ Include graph in EXECUTION_PLAN output
 ```
 
 #### Batch Constraints
@@ -845,6 +1030,85 @@ SCENARIOS:
       - Restore state and continue from chunk_cursor
 ```
 
+### DIAGNOSTICS_MODULE (NEW in v3.2.1)
+
+```yaml
+PURPOSE: Systematic troubleshooting for common failure patterns
+
+DIAGNOSTICS_MATRIX:
+  format: Symptom → Root Cause → Solution
+
+  entries:
+    - symptom: "grep confirms old pattern present after patch"
+      root_causes:
+        - "Regex pattern too greedy → matched beyond target"
+        - "Multiple occurrences → patch applied to wrong instance"
+      solutions:
+        - "Narrow regex with line anchors (^...$)"
+        - "Add context lines to patch specification"
+        
+    - symptom: "Cross-reference check fails"
+      root_causes:
+        - "Target section renamed during processing"
+        - "ANCHOR_ID collision between chunks"
+      solutions:
+        - "Run ANCHOR_INVENTORY after each chunk"
+        - "Use unique ANCHOR_PREFIX per chunk"
+        
+    - symptom: "Validation loop exceeds max iterations"
+      root_causes:
+        - "Patch introduces new violation while fixing old"
+        - "Complexity score increased beyond threshold"
+      solutions:
+        - "Split patch into smaller atomic changes"
+        - "Flag as NEEDS_HUMAN_REVIEW"
+        
+    - symptom: "Context overflow during chunk processing"
+      root_causes:
+        - "Chunk size too large for model context"
+        - "Accumulated state exceeds budget"
+      solutions:
+        - "Reduce chunk_size to 500-800 lines"
+        - "Force context compaction"
+        
+    - symptom: "Checkpoint resume fails with SOURCE_CHANGED"
+      root_causes:
+        - "File modified externally during session"
+        - "Multiple sessions writing to same file"
+      solutions:
+        - "ABORT — manual merge required"
+        - "Identify recoverable chunks via checksum"
+
+    - symptom: "CURSOR_TRACKING mismatch"
+      root_causes:
+        - "Parallel patches modified overlapping ranges"
+        - "offset_delta not updated atomically"
+      solutions:
+        - "Disable parallel for overlapping ranges"
+        - "Re-validate cursor.line post-patch"
+
+TEST_SCENARIOS:
+  scenario_1:
+    name: "Validation Loop Exhaustion"
+    trigger: "Validation finds 3 consecutive failures"
+    expected: "Diagnostics module identifies root cause from matrix"
+    
+  scenario_2:
+    name: "Token Budget Exhaustion"
+    trigger: "Session exceeds 90% token budget mid-batch"
+    expected: "Graceful suspension with checkpoint save"
+    
+  scenario_3:
+    name: "Circular Dependency Resolution"
+    trigger: "Issue dependency graph contains cycle"
+    expected: "Cycle detected, broken by priority, flagged for review"
+
+VERSIONING:
+  matrix_version: <protocol_version>
+  update_trigger: protocol version change
+  human_review_fallback: true for complex cases not in matrix
+```
+
 ---
 
 ## TIER 6 — VERIFICATION GATES SUMMARY
@@ -931,3 +1195,4 @@ This protocol synthesizes:
 - Unified Severity Scale (SEV-1..4 across all registries)
 
 Architecture: deterministic, verifiable, rollback-safe, session-resumable, production-grade.
+

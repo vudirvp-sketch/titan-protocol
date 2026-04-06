@@ -375,3 +375,4 @@ Invariant: MODE detection is deterministic — no ambiguous states permitted.
 
 Architecture extension: bootstrap-safe, repo-aware, backward-compatible with v3.1.
 ```
+
