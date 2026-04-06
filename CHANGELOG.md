@@ -86,6 +86,8 @@ SECURITY.md
 config.yaml (security, checkpoint, policy sections)
 VERSION (3.2.1 → 3.2.2)
 CHANGELOG.md (this entry)
+src/harness/orchestrator.py (workspace isolation, safe I/O)
+src/state/state_manager.py (session-scoped checkpoints)
 ```
 
 ## [3.2.0] - 2026-04-07

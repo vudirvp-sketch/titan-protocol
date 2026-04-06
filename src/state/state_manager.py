@@ -692,22 +692,36 @@ class StateManager:
 
     def save_checkpoint(self,
                         checkpoint_path: Optional[str] = None,
-                        binary: bool = False) -> Dict:
+                        binary: bool = False,
+                        session_id: Optional[str] = None) -> Dict:
         """
-        Save session checkpoint.
+        Save session checkpoint with session-scoped isolation.
 
         Args:
             checkpoint_path: Optional custom path
             binary: Use binary serialization (pickle) instead of JSON
+            session_id: Optional session ID for isolation
 
         Returns:
             Checkpoint info dictionary
+            
+        NEW in v3.2.2: Session-scoped checkpoint isolation.
+        Checkpoints are stored in checkpoints/{session_id}/checkpoint.json
+        with a symlink at checkpoints/latest.json for easy access.
         """
         if not self.current_session:
             return {"success": False, "error": "No active session"}
 
-        checkpoint_file = Path(checkpoint_path) if checkpoint_path else \
-                          self.checkpoints_dir / "checkpoint.json"
+        # Use provided session_id or current session's id
+        sid = session_id or self.current_session.id
+        
+        # NEW v3.2.2: Session-scoped directory
+        if checkpoint_path:
+            checkpoint_file = Path(checkpoint_path)
+        else:
+            checkpoint_dir = self.checkpoints_dir / sid
+            checkpoint_dir.mkdir(parents=True, exist_ok=True)
+            checkpoint_file = checkpoint_dir / "checkpoint.json"
 
         if binary:
             checkpoint_file = checkpoint_file.with_suffix(".bin")
@@ -720,30 +734,58 @@ class StateManager:
                 with open(checkpoint_file, "w") as f:
                     json.dump(self._session_to_dict(self.current_session), f, indent=2)
 
+            # NEW v3.2.2: Update latest symlink
+            latest_link = self.checkpoints_dir / "latest.json"
+            try:
+                if latest_link.exists() or latest_link.is_symlink():
+                    latest_link.unlink()
+                latest_link.symlink_to(checkpoint_file)
+            except OSError:
+                # Symlink may not be supported on all platforms
+                pass
+
             return {
                 "success": True,
                 "checkpoint_path": str(checkpoint_file),
                 "format": "binary" if binary else "json",
-                "session_id": self.current_session.id
+                "session_id": sid
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def resume_from_checkpoint(self, checkpoint_path: str, allow_unsafe: bool = False) -> Dict:
+    def resume_from_checkpoint(self, 
+                                checkpoint_path: str = None, 
+                                session_id: str = None,
+                                allow_unsafe: bool = False) -> Dict:
         """
         Resume session from checkpoint.
 
         Args:
-            checkpoint_path: Path to checkpoint file
+            checkpoint_path: Path to checkpoint file (optional)
+            session_id: Session ID to resume (optional)
             allow_unsafe: Allow loading pickle checkpoints (UNSAFE)
 
         Returns:
             Resume result dictionary
+            
+        NEW in v3.2.2: Supports session_id parameter and "latest" keyword.
         """
-        checkpoint_file = Path(checkpoint_path)
+        # Resolve checkpoint path
+        if session_id and not checkpoint_path:
+            checkpoint_file = self.checkpoints_dir / session_id / "checkpoint.json"
+        elif checkpoint_path == "latest":
+            checkpoint_file = self.checkpoints_dir / "latest.json"
+        elif checkpoint_path:
+            checkpoint_file = Path(checkpoint_path)
+        else:
+            return {"success": False, "error": "No checkpoint path or session_id provided"}
+
+        # Handle symlink for latest.json
+        if checkpoint_file.is_symlink():
+            checkpoint_file = checkpoint_file.resolve()
 
         if not checkpoint_file.exists():
-            return {"success": False, "error": "Checkpoint file not found"}
+            return {"success": False, "error": f"Checkpoint not found: {checkpoint_file}"}
 
         try:
             # Detect format and load

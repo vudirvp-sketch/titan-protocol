@@ -62,6 +62,9 @@ class Orchestrator:
 
         # Load configuration
         self.config = self._load_config()
+        
+        # NEW v3.2.2: Workspace isolation
+        self._enforce_workspace_isolation()
 
     def _load_config(self) -> Dict:
         """Load configuration from config.yaml."""
@@ -75,6 +78,63 @@ class Orchestrator:
                 "chunking": {"default_size": 1500},
                 "validation": {"max_patch_iterations": 2}
             }
+    
+    # =========================================================================
+    # WORKSPACE ISOLATION (Task 1.5)
+    # =========================================================================
+    
+    def _enforce_workspace_isolation(self) -> None:
+        """
+        Ensure all operations occur within workspace.
+        
+        NEW in v3.2.2: Workspace path enforcement for security.
+        """
+        security_config = self.config.get("security", {})
+        workspace = security_config.get("workspace_path")
+        
+        if workspace:
+            self.workspace_path = Path(workspace).resolve()
+            if not self.workspace_path.exists():
+                self.workspace_path.mkdir(parents=True, exist_ok=True)
+        else:
+            # Default to repo root
+            self.workspace_path = self.repo_root.resolve()
+        
+        # Store for later validation
+        self._allowed_paths = [
+            self.workspace_path,
+            self.inputs_dir,
+            self.outputs_dir
+        ]
+    
+    def _validate_path_in_workspace(self, path: Path) -> bool:
+        """Check if path is within allowed workspace."""
+        resolved = path.resolve()
+        return any(
+            str(resolved).startswith(str(allowed))
+            for allowed in self._allowed_paths
+        )
+    
+    def _safe_read(self, path: Path) -> str:
+        """
+        Safely read file with workspace validation.
+        
+        Raises PermissionError if path outside workspace.
+        """
+        if not self._validate_path_in_workspace(path):
+            raise PermissionError(f"[gap: workspace_violation] Path outside workspace: {path}")
+        return path.read_text()
+    
+    def _safe_write(self, path: Path, content: str) -> None:
+        """
+        Safely write file with workspace validation.
+        
+        Raises PermissionError if path outside workspace.
+        """
+        if not self._validate_path_in_workspace(path):
+            raise PermissionError(f"[gap: workspace_violation] Path outside workspace: {path}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
 
     # =========================================================================
     # GATE VALIDATION
