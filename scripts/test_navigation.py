@@ -365,7 +365,7 @@ def main():
 
     # Output JSON report
     report = {
-        "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+        "timestamp": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat().replace("+00:00", "Z"),
         "repo_root": str(repo_root),
         "summary": {
             "passed": tester.passed,

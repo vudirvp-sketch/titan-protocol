@@ -68,10 +68,12 @@ module.exports = {
 
     // Check critical patterns
     for (const pattern of this.criticalPatterns) {
+      pattern.lastIndex = 0; // FIX: Reset lastIndex for global regex
       const matches = content.match(pattern);
       if (matches) {
         const lines = content.split('\n');
         lines.forEach((line, index) => {
+          pattern.lastIndex = 0; // FIX: Reset before each test() call
           if (pattern.test(line)) {
             violations.push({
               line: index + 1,
@@ -88,10 +90,12 @@ module.exports = {
 
     // Check warning patterns
     for (const pattern of this.warningPatterns) {
+      pattern.lastIndex = 0; // FIX: Reset lastIndex for global regex
       const matches = content.match(pattern);
       if (matches) {
         const lines = content.split('\n');
         lines.forEach((line, index) => {
+          pattern.lastIndex = 0; // FIX: Reset before each test() call
           if (pattern.test(line)) {
             violations.push({
               line: index + 1,
@@ -108,10 +112,12 @@ module.exports = {
 
     // Check info patterns
     for (const pattern of this.infoPatterns) {
+      pattern.lastIndex = 0; // FIX: Reset lastIndex for global regex
       const matches = content.match(pattern);
       if (matches) {
         const lines = content.split('\n');
         lines.forEach((line, index) => {
+          pattern.lastIndex = 0; // FIX: Reset before each test() call
           if (pattern.test(line)) {
             violations.push({
               line: index + 1,

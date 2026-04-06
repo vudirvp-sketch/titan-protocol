@@ -931,4 +931,3 @@ This protocol synthesizes:
 - Unified Severity Scale (SEV-1..4 across all registries)
 
 Architecture: deterministic, verifiable, rollback-safe, session-resumable, production-grade.
-```

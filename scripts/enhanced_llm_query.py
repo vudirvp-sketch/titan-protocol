@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, List, Dict, Any, Callable
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Confidence(Enum):
@@ -37,7 +37,7 @@ class QueryResult:
     attempt: int
     fallback_used: bool
     fallback_reason: Optional[FallbackReason] = None
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 @dataclass
@@ -50,10 +50,13 @@ class FallbackConfig:
     timeout_seconds: float = 30.0
     enable_model_fallback: bool = True
     alternative_models: List[str] = field(default_factory=lambda: [
-        "primary",
-        "alternative-1",
-        "alternative-2"
+        "primary",  # TODO: Replace with actual model identifier
+        "alternative-1",  # TODO: Replace with actual model identifier
+        "alternative-2"  # TODO: Replace with actual model identifier
     ])
+    # WARNING: Default model names are placeholders.
+    # Set alternative_models to actual model identifiers before production use,
+    # or load from config.yaml
 
 
 class EnhancedLLMQuery:
@@ -244,7 +247,7 @@ class EnhancedLLMQuery:
             "chunk_id": chunk_id,
             "task": task[:200],  # Truncate for storage
             "reason": last_reason.value if last_reason else "UNKNOWN",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "attempts": attempt
         }
         self._gap_log.append(gap_entry)

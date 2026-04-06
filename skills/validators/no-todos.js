@@ -32,11 +32,17 @@ module.exports = {
     const violations = [];
 
     for (const pattern of this.patterns) {
-      const matches = content.match(new RegExp(pattern, 'g'));
+      // FIX: Use pattern.source to properly extract regex source
+      // and preserve flags from original pattern
+      const flags = pattern.flags || 'g';
+      const globalPattern = new RegExp(pattern.source, flags);
+      const matches = content.match(globalPattern);
       if (matches) {
         // Find line numbers
         const lines = content.split('\n');
         lines.forEach((line, index) => {
+          // FIX: Reset lastIndex before test() to avoid state issues
+          pattern.lastIndex = 0;
           if (pattern.test(line)) {
             violations.push({
               line: index + 1,
