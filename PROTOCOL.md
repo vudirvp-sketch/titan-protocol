@@ -1,6 +1,6 @@
 # TITAN FUSE PROTOCOL - ASSEMBLED
 
-<!-- Generated: 2026-04-06T06:24:06Z -->
+<!-- Generated: 2026-04-06T06:28:50Z -->
 <!-- Version: 3.2.0 -->
 <!-- Components: PROTOCOL.ext.md + PROTOCOL.base.md -->
 
@@ -1309,4 +1309,4 @@ Architecture: deterministic, verifiable, rollback-safe, session-resumable, produ
 
 ---
 <!-- END OF ASSEMBLED PROTOCOL -->
-<!-- Assembly timestamp: 2026-04-06T06:24:06Z -->
+<!-- Assembly timestamp: 2026-04-06T06:28:50Z -->
