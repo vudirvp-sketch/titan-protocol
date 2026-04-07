@@ -1,6 +1,6 @@
 {
   "session_id": "titan-upgrade-6b3fe165",
-  "protocol_version": "3.2.1",
+  "protocol_version": "3.3.0",
   "source_file": null,
   "source_checksum": null,
   "gates_passed": ["GATE-REPO-00", "GATE-REPO-01"],
