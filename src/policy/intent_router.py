@@ -8,14 +8,19 @@ ITEM-GATE-03: Pre-Intent Token Budget
 Adds token budget checking before intent classification to prevent
 resource exhaustion from overly large queries.
 
+ITEM-FEAT-55: IntentRouter Plugin Registry
+Allows config-driven registration of custom intent handlers
+without modifying core IntentRouter code.
+
 Author: TITAN FUSE Team
-Version: 3.3.0
+Version: 3.4.0
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Callable, Any
 from dataclasses import dataclass, field
 import re
 import logging
+import importlib
 
 
 # Default policy chains per intent
@@ -373,3 +378,264 @@ class IntentRouter:
         """
         self.token_limit = limit
         self._logger.info(f"Token limit updated to {limit}")
+
+
+class IntentPluginRegistry:
+    """
+    Registry for intent handler plugins.
+    
+    ITEM-FEAT-55: IntentRouter Plugin Registry.
+    
+    Allows config-driven registration of custom intent handlers
+    without modifying the core IntentRouter code. Plugins can
+    be loaded dynamically from Python modules.
+    
+    Usage:
+        registry = IntentPluginRegistry()
+        
+        # Register a plugin
+        def custom_handler(query: str) -> IntentResult:
+            # Custom classification logic
+            return IntentResult(
+                intent="custom",
+                confidence=0.9,
+                keywords_matched=[],
+                chain=["step1", "step2"]
+            )
+        
+        registry.register("custom_intent", custom_handler)
+        
+        # Get handler for an intent
+        handler = registry.get_handler("custom_intent")
+        result = handler("some query")
+        
+        # Load from config
+        config = {
+            "plugins": [
+                {"name": "code_audit", "handler": "src.plugins.code_audit:handle"}
+            ]
+        }
+        registry.load_from_config(config)
+    """
+    
+    def __init__(self):
+        """Initialize the plugin registry."""
+        self._plugins: Dict[str, Callable[[str], IntentResult]] = {}
+        self._plugin_info: Dict[str, Dict[str, Any]] = {}
+        self._logger = logging.getLogger(__name__)
+    
+    def register(self, name: str, handler: Callable[[str], IntentResult],
+                chain: List[str] = None, keywords: List[str] = None,
+                priority: int = 5, description: str = "") -> None:
+        """
+        Register a plugin handler.
+        
+        Args:
+            name: Plugin/intent name
+            handler: Callable that takes a query string and returns IntentResult
+            chain: Optional chain for this intent
+            keywords: Optional keywords for classification
+            priority: Priority for ambiguous matches
+            description: Plugin description
+        """
+        self._plugins[name] = handler
+        self._plugin_info[name] = {
+            "name": name,
+            "chain": chain or [],
+            "keywords": keywords or [],
+            "priority": priority,
+            "description": description,
+            "registered_at": logging.Formatter.default_msec_format
+        }
+        
+        self._logger.info(f"Registered intent plugin: {name}")
+    
+    def unregister(self, name: str) -> bool:
+        """
+        Unregister a plugin.
+        
+        Args:
+            name: Plugin name
+            
+        Returns:
+            True if plugin was removed
+        """
+        if name in self._plugins:
+            del self._plugins[name]
+            del self._plugin_info[name]
+            self._logger.info(f"Unregistered intent plugin: {name}")
+            return True
+        return False
+    
+    def get_handler(self, intent: str) -> Optional[Callable[[str], IntentResult]]:
+        """
+        Get handler for an intent.
+        
+        Args:
+            intent: Intent name
+            
+        Returns:
+            Handler callable or None
+        """
+        return self._plugins.get(intent)
+    
+    def has_handler(self, intent: str) -> bool:
+        """Check if handler exists for intent."""
+        return intent in self._plugins
+    
+    def list_plugins(self) -> List[str]:
+        """List all registered plugins."""
+        return list(self._plugins.keys())
+    
+    def get_plugin_info(self, name: str) -> Optional[Dict]:
+        """Get plugin information."""
+        return self._plugin_info.get(name)
+    
+    def load_from_config(self, config: Dict) -> List[str]:
+        """
+        Load plugins from configuration.
+        
+        Args:
+            config: Configuration with 'plugins' list
+            
+        Returns:
+            List of successfully loaded plugin names
+        """
+        loaded = []
+        plugins = config.get("plugins", [])
+        
+        for plugin_config in plugins:
+            try:
+                name = plugin_config.get("name")
+                handler_path = plugin_config.get("handler")
+                
+                if not name or not handler_path:
+                    self._logger.warning(
+                        f"Invalid plugin config: missing name or handler"
+                    )
+                    continue
+                
+                # Load handler dynamically
+                handler = self._load_handler(handler_path)
+                
+                if handler:
+                    self.register(
+                        name=name,
+                        handler=handler,
+                        chain=plugin_config.get("chain"),
+                        keywords=plugin_config.get("keywords"),
+                        priority=plugin_config.get("priority", 5),
+                        description=plugin_config.get("description", "")
+                    )
+                    loaded.append(name)
+                    
+            except Exception as e:
+                self._logger.error(
+                    f"Failed to load plugin {plugin_config.get('name')}: {e}"
+                )
+        
+        self._logger.info(f"Loaded {len(loaded)} plugins from config")
+        return loaded
+    
+    def _load_handler(self, handler_path: str) -> Optional[Callable]:
+        """
+        Load a handler from a module path.
+        
+        Args:
+            handler_path: Path like "module.submodule:function"
+            
+        Returns:
+            Handler callable or None
+        """
+        try:
+            if ":" in handler_path:
+                module_path, func_name = handler_path.rsplit(":", 1)
+            else:
+                module_path = handler_path
+                func_name = "handle"
+            
+            module = importlib.import_module(module_path)
+            handler = getattr(module, func_name)
+            
+            return handler
+            
+        except ImportError as e:
+            self._logger.error(f"Failed to import module {module_path}: {e}")
+            return None
+        except AttributeError as e:
+            self._logger.error(f"Handler {func_name} not found in {module_path}: {e}")
+            return None
+    
+    def classify_with_plugins(self, query: str, 
+                             fallback_router: IntentRouter = None) -> IntentResult:
+        """
+        Classify query using registered plugins.
+        
+        Tries each plugin in priority order until one returns
+        a confident result.
+        
+        Args:
+            query: Query string to classify
+            fallback_router: Fallback IntentRouter if no plugin matches
+            
+        Returns:
+            IntentResult from the best matching plugin or fallback
+        """
+        # Sort plugins by priority
+        sorted_plugins = sorted(
+            self._plugin_info.items(),
+            key=lambda x: x[1].get("priority", 5),
+            reverse=True
+        )
+        
+        for name, info in sorted_plugins:
+            handler = self._plugins.get(name)
+            if handler:
+                try:
+                    result = handler(query)
+                    if result and result.confidence > 0.5:
+                        self._logger.debug(
+                            f"Plugin {name} matched with confidence {result.confidence}"
+                        )
+                        return result
+                except Exception as e:
+                    self._logger.error(f"Plugin {name} error: {e}")
+        
+        # Fallback to standard router
+        if fallback_router:
+            return fallback_router.classify_intent(query)
+        
+        # No match
+        return IntentResult(
+            intent="MANUAL",
+            confidence=0.0,
+            keywords_matched=[],
+            chain=[],
+            reason="No plugin matched and no fallback router"
+        )
+    
+    def get_stats(self) -> Dict:
+        """Get registry statistics."""
+        return {
+            "total_plugins": len(self._plugins),
+            "plugins": list(self._plugins.keys()),
+            "plugin_info": self._plugin_info
+        }
+    
+    def clear(self) -> None:
+        """Clear all registered plugins."""
+        self._plugins.clear()
+        self._plugin_info.clear()
+        self._logger.info("Cleared all plugins")
+
+
+# Global plugin registry
+_global_registry: Optional[IntentPluginRegistry] = None
+
+
+def get_plugin_registry() -> IntentPluginRegistry:
+    """Get the global plugin registry."""
+    global _global_registry
+    if _global_registry is None:
+        _global_registry = IntentPluginRegistry()
+    return _global_registry

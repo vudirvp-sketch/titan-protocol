@@ -320,3 +320,90 @@ storage:
     prefix: titan
     project: null  # GCP project ID
     credentials_path: null  # Path to service account JSON
+
+# ========================================
+# v3.4.0 Configuration Additions
+# ========================================
+
+# ITEM-ARCH-09: Causal Event Ordering
+causal_ordering:
+  enabled: true
+  node_id: null  # Auto-generated if null
+  known_nodes: []  # List of known node IDs for vector clock
+
+# ITEM-ARCH-15: Model Version Fingerprint
+llm:
+  strict_version_check: false  # Raise error on model version mismatch
+  fingerprint_storage: state  # Where to store fingerprint
+
+# ITEM-ARCH-19: Semantic Tainting
+tainting:
+  enabled: true
+  confidence_threshold: 0.8  # Below this, data is auto-tainted
+
+# ITEM-CFG-04: Runtime Config Overlay
+runtime_overlay:
+  enabled: true
+  export_on_exit: true
+  export_path: outputs/evals.jsonl
+
+# ITEM-CFG-05: Manifest Cache Invalidation
+manifest:
+  cache_ttl_seconds: 300  # TTL for idle cache entries
+  max_cache_entries: 100
+
+# ITEM-CONFLICT-C: Chunk Size Bidirectional Optimization
+chunking_optimization:
+  min_chunk_size: 1000
+  max_chunk_size: 50000
+  shrink_threshold: 30000  # Files larger get smaller chunks
+  grow_threshold: 5000  # Files smaller get larger chunks
+
+# ITEM-CONFLICT-F: Model Fallback Trigger Conditions
+model_fallback_triggers:
+  timeout_ms: 30000
+  error_rate_threshold: 0.1  # 10% errors in window
+  error_rate_window_seconds: 60
+  token_limit_exceeded: true
+
+# ITEM-CONFLICT-K: Checksum Prefix Collision
+checksum:
+  prefix_length: 16  # For local/dev
+  production_min_length: 32  # Required in production
+
+# ITEM-CONFLICT-L: GraphViz Optional Dependency
+visualization:
+  mode: "ascii_only"  # "ascii_only" | "full"
+  graphviz_path: null  # Optional path to dot
+
+# ITEM-STOR-04: Log Rotation
+logging_rotation:
+  enabled: true
+  max_size_mb: 100
+  keep_count: 10
+  compress: true
+  max_age_days: 30
+
+# ITEM-OBS-01: Prometheus Metrics Endpoint (extended)
+prometheus:
+  enabled: false
+  port: 9090
+  path: /metrics
+
+# ITEM-FEAT-55: IntentRouter Plugin Registry
+intent_router:
+  plugins: []
+  # Example plugin configuration:
+  # - name: "code_audit"
+  #   handler: "src.plugins.code_audit:handle"
+  #   chain: ["security_scan", "style_check"]
+  #   priority: 8
+  # - name: "spec_generation"
+  #   handler: "src.plugins.spec_gen:handle"
+  #   chain: ["reference_collector", "doc_generator"]
+
+# ITEM-FEAT-111: DAG Checkpointing
+dag_checkpoint:
+  enabled: true
+  checkpoint_dir: .titan/dag_checkpoints
+  max_snapshots: 100
