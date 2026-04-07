@@ -239,3 +239,133 @@ Stage Summary:
 - ITEM-STOR-02: Checkpoint Session Isolation
 - ITEM-STOR-03: Checkpoint Encryption  
 - ITEM-STOR-05: Cursor Hash for Drift Detection
+
+---
+Task ID: 11
+Agent: Main Agent
+Task: ITEM-STOR-02 - Checkpoint Session Isolation
+
+Work Log:
+- Created src/state/checkpoint_manager.py with CheckpointManager class
+- Implemented namespace-based path isolation (checkpoints/{namespace}/{session_id}/)
+- Added CheckpointMetadata dataclass for session tracking
+- Implemented 'current' symlink for backward compatibility
+- Added multi-session support with list_sessions(), delete()
+- Added cleanup_old_sessions() for maintenance
+- Fixed gzip fallback path in checkpoint_serialization.py
+- Added session_exists() with multiple format support
+- Updated config.yaml with namespace_isolation settings
+
+Stage Summary:
+- CheckpointManager fully functional:
+  - save/load with session isolation
+  - Namespace-based directories
+  - Metadata tracking
+  - Backward compatibility via symlink
+  - Multi-session management
+  - Storage statistics
+
+---
+Task ID: 12
+Agent: Main Agent
+Task: ITEM-STOR-02 - Write tests for CheckpointManager
+
+Work Log:
+- Created tests/test_checkpoint_manager.py
+- TestCheckpointMetadata: 3 tests for metadata
+- TestCheckpointManagerLocal: 14 tests for local storage
+- TestCheckpointManagerFormats: 2 tests for format support
+- TestCheckpointManagerNamespace: 1 test for namespace isolation
+- TestCheckpointManagerFactory: 1 test for factory function
+- TestCheckpointManagerErrorHandling: 5 tests for error cases
+- TestCheckpointManagerBackwardCompat: 2 tests for backward compatibility
+
+Stage Summary:
+- 25 tests written, all passing:
+  - Session isolation verified
+  - Symlink functionality verified
+  - Multiple sessions isolated correctly
+  - Error handling validated
+
+---
+Task ID: 13
+Agent: Main Agent
+Task: ITEM-STOR-03 - Create CheckpointEncryption module
+
+Work Log:
+- Created src/storage/encryption.py with CheckpointEncryption class
+- Implemented AES-256-GCM authenticated encryption
+- Added key generation (generate_key())
+- Added key derivation from password (derive_key() with PBKDF2-HMAC-SHA256)
+- Implemented encrypt/decrypt with nonce handling
+- Added encrypt_with_nonce_prefix/decrypt_with_nonce_prefix convenience methods
+- Added SecretStore integration for key retrieval
+- Implemented AEAD support with associated_data
+- Added EncryptionAlgorithm enum for algorithm selection
+- Created convenience functions: encrypt_checkpoint, decrypt_checkpoint, generate_encryption_key, get_encryption
+
+Stage Summary:
+- CheckpointEncryption fully functional:
+  - 256-bit keys, 96-bit nonces
+  - Authenticated encryption (GCM mode)
+  - Key derivation with PBKDF2
+  - SecretStore integration
+  - AEAD support
+  - Fallback to 'none' when cryptography unavailable
+
+---
+Task ID: 14
+Agent: Main Agent
+Task: ITEM-STOR-03 - Write tests for CheckpointEncryption
+
+Work Log:
+- Created tests/test_checkpoint_encryption.py
+- TestEncryptionAlgorithm: 3 tests for enum parsing
+- TestCheckpointEncryption: 16 tests for core functionality
+- TestCheckpointEncryptionSecretStore: 1 test for SecretStore integration
+- TestConvenienceFunctions: 4 tests for convenience functions
+- TestEncryptionResults: 2 tests for result dataclasses
+- TestEncryptionErrors: 3 tests for error classes
+- TestEncryptionWithAssociatedData: 2 tests for AEAD
+
+Stage Summary:
+- 31 tests written, all passing:
+  - Encryption/decryption roundtrip verified
+  - Key generation and derivation tested
+  - Wrong key detection verified
+  - AEAD functionality tested
+  - Error handling validated
+
+---
+## OVERALL SUMMARY (Updated)
+
+### Completed: ITEM-STOR-01, ITEM-STOR-02, ITEM-STOR-03
+
+**Files Created:**
+- src/storage/__init__.py (updated)
+- src/storage/backend.py
+- src/storage/local_backend.py
+- src/storage/s3_backend.py
+- src/storage/gcs_backend.py
+- src/storage/factory.py
+- src/storage/encryption.py
+- src/state/checkpoint_manager.py
+- tests/test_storage.py (34 tests)
+- tests/test_checkpoint_manager.py (25 tests)
+- tests/test_checkpoint_encryption.py (31 tests)
+
+**Files Modified:**
+- config.yaml (added storage and encryption configuration)
+- src/state/__init__.py (added CheckpointManager exports)
+- src/state/checkpoint_serialization.py (added storage integration, fixed gzip fallback)
+- VERSION (updated to 3.3.0-storage-phase)
+
+**Test Results:**
+- 34/34 storage tests PASSING
+- 25/25 checkpoint manager tests PASSING
+- 31/31 encryption tests PASSING
+- Total: 90 tests PASSING
+
+**Next Steps:**
+- ITEM-STOR-05: Cursor Hash for Drift Detection
+- PHASE_5: Config and Observability

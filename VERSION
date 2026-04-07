@@ -66,4 +66,24 @@
 #   - Integration with checkpoint_serialization.py
 #   - Test suite in tests/test_storage.py
 #
-# Next: ITEM-STOR-02: Checkpoint Session Isolation
+# - ITEM-STOR-02: Checkpoint Session Isolation - COMPLETED
+#   - CheckpointManager class for session-isolated storage
+#   - Namespace-based path isolation (checkpoints/{namespace}/{session_id}/)
+#   - Backward compatibility via 'current' symlink
+#   - CheckpointMetadata for session tracking
+#   - Multi-session support with list_sessions(), delete()
+#   - Old session cleanup functionality
+#   - Test suite in tests/test_checkpoint_manager.py (25 tests)
+#
+# - ITEM-STOR-03: Checkpoint Encryption - COMPLETED
+#   - CheckpointEncryption class with AES-256-GCM
+#   - Key generation (generate_key())
+#   - Key derivation from password (derive_key() with PBKDF2)
+#   - encrypt/decrypt with nonce handling
+#   - encrypt_with_nonce_prefix/decrypt_with_nonce_prefix convenience methods
+#   - Integration with SecretStore for key retrieval
+#   - AEAD support with associated_data
+#   - EncryptionAlgorithm enum for algorithm selection
+#   - Test suite in tests/test_checkpoint_encryption.py (31 tests)
+#
+# Next: ITEM-STOR-05: Cursor Hash for Drift Detection

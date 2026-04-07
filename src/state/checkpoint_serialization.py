@@ -235,7 +235,12 @@ def _serialize_gzip(data: Dict, path: Path) -> SerializationResult:
     original_size = len(json_bytes)
     
     if path:
-        path = path.with_suffix('.json.gz')
+        # Replace any existing extension with .json.gz
+        # Handle double extensions like .json.zst
+        stem = path.stem
+        if stem.endswith('.json'):
+            stem = stem[:-5]  # Remove .json from stem
+        path = path.parent / f"{stem}.json.gz"
         path.parent.mkdir(parents=True, exist_ok=True)
         with gzip.open(path, 'wt') as f:
             json.dump(data, f, default=str, indent=2)

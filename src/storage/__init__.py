@@ -2,6 +2,7 @@
 Storage Module for TITAN FUSE Protocol.
 
 ITEM-STOR-01: StorageBackend Abstraction
+ITEM-STOR-03: Checkpoint Encryption
 
 This module provides a unified storage abstraction layer that supports
 multiple backends (local filesystem, S3, GCS) for checkpoint and state storage.
@@ -11,6 +12,7 @@ Key Components:
 - LocalStorageBackend: Local filesystem storage
 - S3StorageBackend: AWS S3 storage
 - GCSStorageBackend: Google Cloud Storage
+- CheckpointEncryption: AES-256-GCM encryption for checkpoints
 - get_storage_backend(): Factory function to create backends
 
 Usage:
@@ -38,6 +40,19 @@ from src.storage.factory import (
     get_default_storage_backend,
     validate_storage_config,
     create_storage_backend
+)
+from src.storage.encryption import (
+    CheckpointEncryption,
+    EncryptionAlgorithm,
+    EncryptionResult,
+    DecryptionResult,
+    EncryptionError,
+    KeyNotFoundError,
+    DecryptionError,
+    encrypt_checkpoint,
+    decrypt_checkpoint,
+    generate_encryption_key,
+    get_encryption
 )
 
 # Lazy imports for cloud backends (optional dependencies)
@@ -71,4 +86,17 @@ __all__ = [
     'get_default_storage_backend',
     'validate_storage_config',
     'create_storage_backend',
+
+    # ITEM-STOR-03: Encryption
+    'CheckpointEncryption',
+    'EncryptionAlgorithm',
+    'EncryptionResult',
+    'DecryptionResult',
+    'EncryptionError',
+    'KeyNotFoundError',
+    'DecryptionError',
+    'encrypt_checkpoint',
+    'decrypt_checkpoint',
+    'generate_encryption_key',
+    'get_encryption',
 ]
