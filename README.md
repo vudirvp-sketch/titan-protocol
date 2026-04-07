@@ -415,7 +415,7 @@ MIT License - See LICENSE file for details.
 **Protocol Status**: EARLY_ADOPTER
 
 > ⚠️ **Adoption Notice**: This protocol is in EARLY_ADOPTER stage. Architecture is sound but requires:
-> - Passing all Tier 1 fixes (see AUDIT_REPORT.md)
+> - All Tier 1 fixes applied
 > - Verified integration with target LLM platform
 > - Minimum one full checkpoint recovery test
 > - Independent audit or validation signals
