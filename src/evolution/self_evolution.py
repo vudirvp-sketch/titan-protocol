@@ -375,6 +375,7 @@ class SelfEvolutionEngine:
         self._min_confidence = config.get("min_confidence", 0.7)
         self._analysis_window_days = config.get("analysis_window_days", 7)
         self._min_patterns_for_skill = config.get("min_patterns_for_skill", 3)
+        self._reusability_threshold = config.get("reusability_threshold", 0.7)
         
         # Internal state
         self._pending_proposals: Dict[str, SkillDraft] = {}

@@ -22,7 +22,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Callable
 
 # Import from scoring module
-from ..scoring.adaptive_weights import (
+from src.scoring.adaptive_weights import (
     AdaptiveWeightEngine,
     WeightProfile,
     WeightedScore,
@@ -31,7 +31,7 @@ from ..scoring.adaptive_weights import (
 )
 
 # Import from decision module
-from ..decision.conflict_resolver import (
+from src.decision.conflict_resolver import (
     ConflictResolver,
     ConflictMetrics,
     Decision as ConflictDecision,
@@ -39,7 +39,7 @@ from ..decision.conflict_resolver import (
 )
 
 # Import from agents module
-from ..agents.scout_matrix import (
+from src.agents.scout_matrix import (
     ScoutPipeline,
     ScoutOutput,
     AnalysisContext,
