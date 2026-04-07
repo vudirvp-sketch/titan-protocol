@@ -85,5 +85,22 @@ __all__ = [
     'GVSIOR_AVAILABLE',
     
     # Factory function
-    'get_sandbox_by_type'
+    'get_sandbox_by_type',
+    
+    # Gate lint (ITEM-GATE-01)
+    'GateLinter',
+    'LintFinding',
+    'LintResult',
+    'lint_gate_configuration',
+    'check_early_exit_required'
 ]
+
+# ITEM-GATE-01: Gate lint for early exit validation
+from .gate_lint import (
+    GateLinter,
+    LintFinding,
+    LintResult,
+    LintSeverity,
+    lint_gate_configuration,
+    check_early_exit_required
+)

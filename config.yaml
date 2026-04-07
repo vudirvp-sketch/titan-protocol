@@ -214,6 +214,9 @@ model_fallback:
   - local-high-end
   degradation_mode: reduced_capability
 
+# ITEM-GATE-05: Model downgrade control
+model_downgrade_allowed: false  # Only true for fast_prototype mode
+
 # ITEM-ARCH-02: Event Journal for crash recovery
 event_journal:
   enabled: true
@@ -248,3 +251,42 @@ approval:
   release_locks_on_wait: true
   lock_ttl_seconds: 300
   force_resume_allowed: false  # Security: require cursor validation
+
+# ITEM-GATE-02: Mode-based gate sensitivity
+gate_sensitivity:
+  deterministic:
+    fail_on_any_gap: true
+    warn_threshold_pct: 5
+    max_sev1_gaps: 0
+    max_sev2_gaps: 0
+    max_sev3_gaps: 0
+    max_sev4_gaps: 0
+    allow_advisory_pass: false
+    allow_unsafe: false
+    confidence_override: false
+  guided_autonomy:
+    fail_on_any_gap: false
+    warn_threshold_pct: 15
+    max_sev1_gaps: 0
+    max_sev2_gaps: 2
+    max_sev3_gaps: 5
+    max_sev4_gaps: 10
+    allow_advisory_pass: true
+    allow_unsafe: false
+    confidence_override: true
+  fast_prototype:
+    fail_on_any_gap: false
+    warn_threshold_pct: 30
+    max_sev1_gaps: 0
+    max_sev2_gaps: 5
+    max_sev3_gaps: 10
+    max_sev4_gaps: 20
+    allow_advisory_pass: true
+    allow_unsafe: true
+    confidence_override: true
+
+# ITEM-GATE-03: Pre-intent token budget
+pre_intent:
+  token_limit: 5000
+  fallback_mode: MANUAL
+  ambiguity_threshold: 0.5

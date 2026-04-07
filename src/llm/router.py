@@ -4,14 +4,36 @@ Model Router for TITAN FUSE Protocol.
 Provides model routing with fallback chain support for
 config-driven root/leaf model selection.
 
+ITEM-GATE-05: Model Downgrade Determinism
+Controls model downgrade behavior based on execution mode.
+In deterministic mode, downgrade is blocked to ensure reproducibility.
+
 Author: TITAN FUSE Team
-Version: 3.2.3
+Version: 3.3.0
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Literal
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 import logging
+
+
+class ExecutionStrictness(Enum):
+    """Execution strictness levels."""
+    DETERMINISTIC = "deterministic"
+    GUIDED_AUTONOMY = "guided_autonomy"
+    FAST_PROTOTYPE = "fast_prototype"
+
+
+class BudgetExhaustedError(Exception):
+    """Raised when budget is exhausted and downgrade is not allowed."""
+    pass
+
+
+class DowngradeViolationError(Exception):
+    """Raised when downgrade violates deterministic constraints."""
+    pass
 
 
 @dataclass
@@ -55,6 +77,23 @@ class FallbackState:
     total_fallbacks: int = 0
 
 
+@dataclass
+class BudgetStatus:
+    """Current budget status."""
+    total_budget: int = 100000
+    used: int = 0
+    remaining: int = 100000
+    exhausted: bool = False
+    
+    def to_dict(self) -> Dict:
+        return {
+            "total_budget": self.total_budget,
+            "used": self.used,
+            "remaining": self.remaining,
+            "exhausted": self.exhausted
+        }
+
+
 class ModelRouter:
     """
     Route LLM calls with fallback chain.
@@ -65,6 +104,17 @@ class ModelRouter:
     Root model: Used for orchestration (Phases 0-3, 5)
     Leaf model: Used for chunk processing (Phase 4)
 
+    ITEM-GATE-05: Model Downgrade Determinism
+    
+    In deterministic mode, model downgrade is blocked to ensure
+    reproducible results. If budget is exhausted, the operation
+    fails rather than silently downgrading.
+    
+    Mode-specific behavior:
+    - deterministic: Blocks downgrade, raises BudgetExhaustedError
+    - guided_autonomy: Allows downgrade to first fallback model
+    - fast_prototype: Allows downgrade to cheapest model
+    
     Usage:
         config = {
             "model_routing": {
@@ -74,10 +124,12 @@ class ModelRouter:
             "model_fallback": {
                 "enabled": True,
                 "chain": ["claude-3", "local-model"]
-            }
+            },
+            "model_downgrade_allowed": True,  # Only for fast_prototype
+            "mode": {"current": "guided_autonomy"}
         }
         router = ModelRouter(config)
-        model = router.get_model_for_phase(4)  # Returns leaf model
+        model = router.get_model(strictness="deterministic", budget_status)
     """
 
     # Phases that use root model (orchestration)
@@ -100,6 +152,10 @@ class ModelRouter:
         self.fallback_enabled = fb_config.get("enabled", False)
         self.fallback_state = FallbackState()
 
+        # ITEM-GATE-05: Downgrade control
+        self.downgrade_allowed = config.get("model_downgrade_allowed", False)
+        self.strictness = self._get_strictness_from_config()
+        
         # Triggers for fallback
         self.triggers = fb_config.get("triggers", {})
         self.timeout_ms = self.triggers.get("timeout_ms", 30000)
@@ -110,13 +166,32 @@ class ModelRouter:
             "root_calls": 0,
             "leaf_calls": 0,
             "fallback_calls": 0,
-            "total_tokens": 0
+            "total_tokens": 0,
+            "downgrade_attempts": 0,
+            "downgrade_blocks": 0
         }
 
         self._logger.info(
             f"ModelRouter initialized: root={self.root_model.model}, "
-            f"leaf={self.leaf_model.model}, fallback_enabled={self.fallback_enabled}"
+            f"leaf={self.leaf_model.model}, fallback_enabled={self.fallback_enabled}, "
+            f"downgrade_allowed={self.downgrade_allowed}, strictness={self.strictness.value}"
         )
+    
+    def _get_strictness_from_config(self) -> ExecutionStrictness:
+        """Get execution strictness from configuration."""
+        mode = self.config.get("mode", {}).get("current", "direct")
+        
+        mode_mapping = {
+            "deterministic": ExecutionStrictness.DETERMINISTIC,
+            "guided_autonomy": ExecutionStrictness.GUIDED_AUTONOMY,
+            "guided-autonomy": ExecutionStrictness.GUIDED_AUTONOMY,
+            "fast_prototype": ExecutionStrictness.FAST_PROTOTYPE,
+            "fast-prototype": ExecutionStrictness.FAST_PROTOTYPE,
+            "fast": ExecutionStrictness.FAST_PROTOTYPE,
+            "direct": ExecutionStrictness.GUIDED_AUTONOMY
+        }
+        
+        return mode_mapping.get(mode.lower(), ExecutionStrictness.GUIDED_AUTONOMY)
 
     def _parse_model(self, cfg: Any) -> ModelConfig:
         """Parse model configuration from various formats."""
@@ -148,6 +223,103 @@ class ModelRouter:
             return self.root_model
         self._usage_stats["leaf_calls"] += 1
         return self.leaf_model
+    
+    def get_model(self, strictness: str = None,
+                  budget_status: BudgetStatus = None) -> ModelConfig:
+        """
+        ITEM-GATE-05: Get model with strictness-aware downgrade control.
+        
+        This method enforces deterministic constraints on model selection.
+        In deterministic mode, budget exhaustion results in an error rather
+        than silent downgrade.
+        
+        Args:
+            strictness: Override strictness level ("deterministic", 
+                       "guided_autonomy", "fast_prototype")
+            budget_status: Current budget status
+            
+        Returns:
+            ModelConfig for the appropriate model
+            
+        Raises:
+            BudgetExhaustedError: If budget exhausted in deterministic mode
+            DowngradeViolationError: If downgrade attempted in deterministic mode
+        """
+        # Determine strictness level
+        if strictness:
+            strictness_enum = ExecutionStrictness(strictness)
+        else:
+            strictness_enum = self.strictness
+        
+        # Check budget status
+        budget_exhausted = budget_status and budget_status.exhausted
+        
+        if budget_exhausted:
+            return self._handle_budget_exhaustion(strictness_enum, budget_status)
+        
+        # Normal operation - return root model
+        return self.root_model
+    
+    def _handle_budget_exhaustion(self, strictness: ExecutionStrictness,
+                                   budget_status: BudgetStatus) -> ModelConfig:
+        """
+        Handle budget exhaustion based on strictness level.
+        
+        ITEM-GATE-05: Different modes handle budget exhaustion differently.
+        """
+        self._usage_stats["downgrade_attempts"] += 1
+        
+        if strictness == ExecutionStrictness.DETERMINISTIC:
+            # DETERMINISTIC: Block downgrade
+            self._usage_stats["downgrade_blocks"] += 1
+            self._logger.error(
+                "[gap: deterministic_mode_downgrade] "
+                "Budget exhausted in deterministic mode. "
+                "Downgrade is blocked to ensure reproducibility. "
+                "Use --fast flag for auto-downgrade capability."
+            )
+            raise BudgetExhaustedError(
+                "Budget exhausted in deterministic mode. "
+                "Model downgrade is not allowed in deterministic mode to ensure "
+                "reproducibility. Use a less strict mode (--guided or --fast) "
+                "to enable auto-downgrade, or increase budget."
+            )
+        
+        elif strictness == ExecutionStrictness.GUIDED_AUTONOMY:
+            # GUIDED_AUTONOMY: Allow downgrade to first fallback
+            if self.fallback_chain:
+                self._logger.warning(
+                    f"[model_downgrade] Budget exhausted. "
+                    f"Downgrading to first fallback model: {self.fallback_chain[0]}"
+                )
+                return ModelConfig.from_string(self.fallback_chain[0])
+            else:
+                self._logger.error(
+                    "[model_router] Budget exhausted but no fallback chain configured"
+                )
+                raise BudgetExhaustedError(
+                    "Budget exhausted and no fallback chain available. "
+                    "Configure model_fallback.chain in config.yaml."
+                )
+        
+        elif strictness == ExecutionStrictness.FAST_PROTOTYPE:
+            # FAST_PROTOTYPE: Allow downgrade to cheapest model
+            if self.fallback_chain:
+                cheapest = self.fallback_chain[-1]
+                self._logger.info(
+                    f"[model_downgrade] Budget exhausted in fast_prototype mode. "
+                    f"Using cheapest fallback model: {cheapest}"
+                )
+                return ModelConfig.from_string(cheapest)
+            else:
+                self._logger.warning(
+                    "[model_router] Budget exhausted, no fallback. "
+                    "Continuing with root model."
+                )
+                return self.root_model
+        
+        # Default: return root model
+        return self.root_model
 
     def should_fallback(self, error: Optional[Exception] = None,
                         latency_ms: int = 0,
@@ -191,12 +363,23 @@ class ModelRouter:
         """
         Activate next fallback model.
 
+        ITEM-GATE-05: Checks strictness before allowing fallback.
+        
         Args:
             reason: Reason for fallback
 
         Returns:
-            Next model in fallback chain, or None if exhausted
+            Next model in fallback chain, or None if exhausted/blocked
         """
+        # Check if fallback is allowed in current mode
+        if self.strictness == ExecutionStrictness.DETERMINISTIC:
+            if not self.downgrade_allowed:
+                self._logger.error(
+                    "[gap: deterministic_mode_downgrade] "
+                    "Fallback blocked in deterministic mode"
+                )
+                return None
+        
         if not self.fallback_chain:
             self._logger.warning("Fallback requested but no fallback chain configured")
             return None
@@ -238,6 +421,8 @@ class ModelRouter:
                 "last_fallback_time": self.fallback_state.last_fallback_time,
                 "total_fallbacks": self.fallback_state.total_fallbacks
             },
+            "downgrade_allowed": self.downgrade_allowed,
+            "strictness": self.strictness.value,
             "usage_stats": self._usage_stats
         }
 
@@ -252,8 +437,74 @@ class ModelRouter:
             "leaf_calls": self._usage_stats["leaf_calls"],
             "fallback_calls": self._usage_stats["fallback_calls"],
             "total_tokens": self._usage_stats["total_tokens"],
+            "downgrade_attempts": self._usage_stats["downgrade_attempts"],
+            "downgrade_blocks": self._usage_stats["downgrade_blocks"],
             "fallback_rate": (
                 self._usage_stats["fallback_calls"] /
                 max(1, self._usage_stats["root_calls"] + self._usage_stats["leaf_calls"])
             )
         }
+    
+    def validate_downgrade_config(self) -> List[str]:
+        """
+        Validate downgrade configuration for current mode.
+        
+        ITEM-GATE-05: Returns list of warnings/errors.
+        
+        Returns:
+            List of validation messages
+        """
+        issues = []
+        
+        # Check deterministic mode with downgrade enabled
+        if (self.strictness == ExecutionStrictness.DETERMINISTIC and 
+            self.downgrade_allowed):
+            issues.append(
+                "[WARNING] model_downgrade_allowed=true in deterministic mode. "
+                "This setting has no effect in deterministic mode - downgrade is always blocked."
+            )
+        
+        # Check for missing fallback chain
+        if self.fallback_enabled and not self.fallback_chain:
+            issues.append(
+                "[WARNING] Fallback enabled but no fallback chain configured. "
+                "Add models to model_fallback.chain in config.yaml."
+            )
+        
+        return issues
+
+
+def create_model_router(config: Dict) -> ModelRouter:
+    """
+    Factory function to create a ModelRouter.
+    
+    Args:
+        config: Configuration dictionary
+        
+    Returns:
+        ModelRouter instance
+    """
+    return ModelRouter(config)
+
+
+def get_model_for_operation(strictness: str,
+                            budget_status: BudgetStatus,
+                            config: Dict) -> ModelConfig:
+    """
+    Convenience function to get model for an operation.
+    
+    ITEM-GATE-05: Provides strictness-aware model selection.
+    
+    Args:
+        strictness: Execution strictness level
+        budget_status: Current budget status
+        config: Configuration dictionary
+        
+    Returns:
+        ModelConfig for the operation
+        
+    Raises:
+        BudgetExhaustedError: If budget exhausted in deterministic mode
+    """
+    router = ModelRouter(config)
+    return router.get_model(strictness=strictness, budget_status=budget_status)

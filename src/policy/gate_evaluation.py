@@ -292,6 +292,118 @@ class Gate04Evaluator:
         }
 
 
+    def should_early_exit(self, gaps: List[Gap], confidence: str = "MEDIUM") -> bool:
+        """
+        ITEM-GATE-01: Determine if early exit from Gate-04 should occur.
+        
+        This method is called BEFORE Phase 4 (SEV-4 batch processing).
+        If HIGH confidence and no critical gaps are present, the system
+        can skip SEV-4 batch processing with an ADVISORY_PASS.
+        
+        This prevents wasting resources on SEV-4 batch processing when
+        the result is already determined.
+        
+        Args:
+            gaps: List of gaps to evaluate
+            confidence: Confidence level ("HIGH", "MEDIUM", "LOW")
+            
+        Returns:
+            True if early exit should occur (skip SEV-4 processing)
+        """
+        # Only HIGH confidence can trigger early exit
+        if confidence != "HIGH":
+            return False
+        
+        # Check if advisory pass is allowed
+        allow_advisory = self.config.get("gate04", {}).get("allow_advisory_pass", True)
+        if not allow_advisory:
+            return False
+        
+        # Check for blocking gaps (SEV-1 and SEV-2)
+        sev1_gaps = [g for g in gaps if g.severity == Severity.SEV_1 and not g.resolved]
+        sev2_gaps = [g for g in gaps if g.severity == Severity.SEV_2 and not g.resolved]
+        max_sev2 = self.config.get("gate04", {}).get("max_sev2_gaps", 0)
+        
+        # If any SEV-1 gaps exist, no early exit
+        if sev1_gaps:
+            self._logger.debug(
+                f"Early exit blocked: {len(sev1_gaps)} SEV-1 gaps present"
+            )
+            return False
+        
+        # If SEV-2 gaps exceed threshold, no early exit
+        if len(sev2_gaps) > max_sev2:
+            self._logger.debug(
+                f"Early exit blocked: {len(sev2_gaps)} SEV-2 gaps > {max_sev2} threshold"
+            )
+            return False
+        
+        # All critical gaps resolved or below threshold
+        # Can early exit with advisory pass
+        sev3_gaps = [g for g in gaps if g.severity == Severity.SEV_3 and not g.resolved]
+        sev4_gaps = [g for g in gaps if g.severity == Severity.SEV_4 and not g.resolved]
+        
+        self._logger.info(
+            f"[gate04_early_exit] HIGH confidence with no critical gaps. "
+            f"Skipping SEV-4 batch processing. "
+            f"SEV-3: {len(sev3_gaps)}, SEV-4: {len(sev4_gaps)}"
+        )
+        
+        return True
+    
+    def evaluate_with_early_exit(self, gaps: List[Gap], 
+                                  confidence: str = "MEDIUM",
+                                  phase: int = 0) -> Gate04Result:
+        """
+        ITEM-GATE-01: Evaluate Gate-04 with early exit support.
+        
+        This method should be called at the START of each phase to check
+        if processing can be skipped. For Phase 4 specifically, if early
+        exit conditions are met, SEV-4 batch processing is skipped.
+        
+        Usage in orchestrator:
+            # Before Phase 4
+            result = evaluator.evaluate_with_early_exit(gaps, confidence, phase=4)
+            if result.result == GateResult.ADVISORY_PASS:
+                # Skip SEV-4 batch processing
+                logger.info("Skipping Phase 4 due to early exit")
+                return result
+        
+        Args:
+            gaps: List of gaps to evaluate
+            confidence: Confidence level
+            phase: Current processing phase (0-5)
+            
+        Returns:
+            Gate04Result with evaluation outcome
+        """
+        # Check for early exit before Phase 4
+        if phase >= 4 and self.should_early_exit(gaps, confidence):
+            sev3_gaps = [g for g in gaps if g.severity == Severity.SEV_3 and not g.resolved]
+            sev4_gaps = [g for g in gaps if g.severity == Severity.SEV_4 and not g.resolved]
+            
+            return Gate04Result(
+                result=GateResult.ADVISORY_PASS,
+                reason=f"Early exit: HIGH confidence with no critical gaps. "
+                       f"Skipped SEV-4 batch processing. "
+                       f"SEV-3: {len(sev3_gaps)}, SEV-4: {len(sev4_gaps)}",
+                sev3_gaps=sev3_gaps,
+                sev4_gaps=sev4_gaps,
+                confidence=confidence,
+                advisory_warnings=[
+                    f"Early exit bypassed SEV-4 batch processing",
+                    f"SEV-3 gap: {g.gap_id} - {g.description}" 
+                    for g in sev3_gaps
+                ] + [
+                    f"SEV-4 gap: {g.gap_id} - {g.description}" 
+                    for g in sev4_gaps
+                ]
+            )
+        
+        # Standard evaluation
+        return self.evaluate(gaps, confidence)
+
+
 def evaluate_gate_04(gaps: List[Dict[str, Any]], 
                      confidence: str = "MEDIUM",
                      config: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -318,3 +430,44 @@ def evaluate_gate_04(gaps: List[Dict[str, Any]],
     
     result = evaluator.evaluate(gap_objects, confidence)
     return result.to_dict()
+
+
+def check_gate_04_early_exit(gaps: List[Dict[str, Any]],
+                              confidence: str = "MEDIUM",
+                              config: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    ITEM-GATE-01: Check if Gate-04 should early exit before Phase 4.
+    
+    Convenience function to be called in orchestrator before Phase 4.
+    
+    Args:
+        gaps: List of gap dictionaries
+        confidence: Confidence level
+        config: Configuration dictionary
+        
+    Returns:
+        Dict with 'should_skip_phase4' flag and evaluation result
+    """
+    evaluator = Gate04Evaluator(config)
+    
+    # Convert dict gaps to Gap objects
+    gap_objects = []
+    for g in gaps:
+        if isinstance(g, dict):
+            gap_objects.append(Gap.from_dict(g))
+        elif isinstance(g, Gap):
+            gap_objects.append(g)
+    
+    should_skip = evaluator.should_early_exit(gap_objects, confidence)
+    
+    if should_skip:
+        result = evaluator.evaluate_with_early_exit(gap_objects, confidence, phase=4)
+        return {
+            "should_skip_phase4": True,
+            "result": result.to_dict()
+        }
+    
+    return {
+        "should_skip_phase4": False,
+        "result": None
+    }

@@ -1,6 +1,24 @@
 # TITAN FUSE Protocol - LLM Module
-"""LLM routing and model management."""
+"""
+LLM routing and model management.
 
-from .router import ModelRouter, ModelConfig, FallbackState
+ITEM-GATE-05: Model Downgrade Determinism
+"""
 
-__all__ = ['ModelRouter', 'ModelConfig', 'FallbackState']
+from .router import (
+    ModelRouter, ModelConfig, FallbackState, BudgetStatus,
+    ExecutionStrictness, BudgetExhaustedError, DowngradeViolationError,
+    create_model_router, get_model_for_operation
+)
+
+__all__ = [
+    'ModelRouter', 
+    'ModelConfig', 
+    'FallbackState',
+    'BudgetStatus',
+    'ExecutionStrictness',
+    'BudgetExhaustedError',
+    'DowngradeViolationError',
+    'create_model_router',
+    'get_model_for_operation'
+]

@@ -1,9 +1,9 @@
-3.3.0-arch-phase
+3.3.0-gates-phase
 
 # TITAN Protocol Version
-# This version indicates PHASE_2 (ARCHITECTURE_CRITICAL) completion
+# This version indicates PHASE_3 (GATES_ENHANCEMENT) completion
 # 
-# Completed in this version:
+# Completed versions:
 # PHASE_1 (SECURITY_CRITICAL):
 # - ITEM-SEC-01: VM2 Sandbox Replacement (WASM/gVisor)
 # - ITEM-SEC-02: Serialization Safety Fix (JSON+zstd)
@@ -32,4 +32,27 @@
 #   - Lock release during wait
 #   - CursorDriftError detection
 #
-# Next: PHASE_3 (GATES_ENHANCEMENT)
+# PHASE_3 (GATES_ENHANCEMENT):
+# - ITEM-GATE-01: Gate-04 Early Exit Fix
+#   - Confidence check before Phase 4
+#   - should_early_exit() method
+#   - evaluate_with_early_exit() method
+#   - GateLinter for validation
+# - ITEM-GATE-02: Mode-Based Gate Sensitivity
+#   - GateBehaviorModifier class
+#   - Sensitivity configs per mode (deterministic, guided_autonomy, fast_prototype)
+#   - apply_mode_rules() for result modification
+# - ITEM-GATE-03: Pre-Intent Token Budget
+#   - Token counting in IntentRouter
+#   - Budget check before classification
+#   - Fallback to MANUAL mode on budget exceeded
+# - ITEM-GATE-04: Split Pre/Post Exec Gates
+#   - GateManager class
+#   - Pre-exec gates: Policy Check, Access Control, Resource Availability, etc.
+#   - Post-exec gates: Output Structure, Invariant Validation, etc.
+# - ITEM-GATE-05: Model Downgrade Determinism
+#   - ExecutionStrictness enum
+#   - BudgetExhaustedError for deterministic mode
+#   - Mode-aware downgrade control in ModelRouter
+#
+# Next: PHASE_4 (STORAGE_ENHANCEMENT)
