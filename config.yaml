@@ -290,3 +290,28 @@ pre_intent:
   token_limit: 5000
   fallback_mode: MANUAL
   ambiguity_threshold: 0.5
+
+# ITEM-STOR-01: Storage Backend Configuration
+storage:
+  backend: local  # Options: local, s3, gcs
+  namespace: default  # Namespace for path isolation
+  # Local filesystem configuration
+  local:
+    base_path: .titan/storage
+    create_dirs: true
+  # AWS S3 configuration (optional)
+  s3:
+    bucket: null  # Required if backend is s3
+    prefix: titan
+    region: us-east-1
+    credentials:
+      access_key: null  # Use AWS_ACCESS_KEY_ID env var
+      secret_key: null  # Use AWS_SECRET_ACCESS_KEY env var
+      session_token: null
+    endpoint_url: null  # For S3-compatible services
+  # Google Cloud Storage configuration (optional)
+  gcs:
+    bucket: null  # Required if backend is gcs
+    prefix: titan
+    project: null  # GCP project ID
+    credentials_path: null  # Path to service account JSON

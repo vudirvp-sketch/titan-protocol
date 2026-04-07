@@ -8,11 +8,16 @@ ITEM-073 Implementation:
 - Safety gate: PICKLE_UNSAFE requires --unsafe CLI flag
 - Zstd compression for production use
 
+ITEM-STOR-01 Integration:
+- StorageBackend integration for cloud storage
+- serialize_checkpoint_to_storage() using StorageBackend
+- deserialize_checkpoint_from_storage() using StorageBackend
+
 Default: JSON + zstd compression (safe, recommended)
 Fast mode: pickle with --unsafe flag (not recommended for untrusted sources)
 
 Author: TITAN FUSE Team
-Version: 3.2.3
+Version: 3.3.0
 """
 
 import json
@@ -466,3 +471,249 @@ def load_checkpoint(path: Path, allow_unsafe: bool = False) -> Dict:
         raise ValueError(result.error)
     
     return data
+
+
+# =============================================================================
+# ITEM-STOR-01: StorageBackend Integration
+# =============================================================================
+
+def serialize_checkpoint_to_storage(
+    data: Dict,
+    backend,  # StorageBackend instance
+    path: str,
+    format: SerializationFormat = SerializationFormat.JSON_ZSTD,
+    unsafe_mode: bool = False,
+    metadata: Dict[str, str] = None
+) -> SerializationResult:
+    """
+    Serialize checkpoint data to a StorageBackend.
+    
+    This function serializes checkpoint data and stores it using the
+    provided StorageBackend, enabling cloud storage (S3, GCS) support.
+    
+    Args:
+        data: Checkpoint data dictionary
+        backend: StorageBackend instance (Local, S3, or GCS)
+        path: Relative path within storage backend
+        format: Serialization format (default: JSON_ZSTD)
+        unsafe_mode: Set True to allow PICKLE_UNSAFE format
+        metadata: Optional metadata to store with checkpoint
+        
+    Returns:
+        SerializationResult with success status and metadata
+        
+    Example:
+        from src.storage import get_storage_backend
+        
+        backend = get_storage_backend(config)
+        result = serialize_checkpoint_to_storage(
+            checkpoint_data, 
+            backend, 
+            "checkpoints/session-123/checkpoint.json"
+        )
+    """
+    logger = logging.getLogger(__name__)
+    
+    # Safety gate for pickle format
+    if format == SerializationFormat.PICKLE_UNSAFE and not unsafe_mode:
+        error_msg = (
+            "[gap: unsafe_serialization_requires_explicit_flag] "
+            "PICKLE_UNSAFE format requires --unsafe CLI flag."
+        )
+        logger.error(error_msg)
+        return SerializationResult(
+            success=False,
+            format=format,
+            error=error_msg
+        )
+    
+    # Add serialization metadata
+    data['_serialization'] = {
+        'format': format.value,
+        'timestamp': datetime.utcnow().isoformat() + 'Z',
+        'safe': format.is_safe,
+        'storage_backend': backend.__class__.__name__
+    }
+    
+    try:
+        if format == SerializationFormat.JSON_ZSTD:
+            serialized_data = _serialize_to_bytes_json_zstd(data)
+        elif format == SerializationFormat.JSON:
+            serialized_data = _serialize_to_bytes_json(data)
+        elif format == SerializationFormat.PICKLE_UNSAFE:
+            serialized_data = _serialize_to_bytes_pickle(data)
+        else:
+            return SerializationResult(
+                success=False,
+                format=format,
+                error=f"Unsupported format: {format}"
+            )
+        
+        # Prepare storage metadata
+        storage_metadata = metadata or {}
+        storage_metadata['format'] = format.value
+        storage_metadata['checksum'] = hashlib.sha256(serialized_data).hexdigest()[:16]
+        
+        # Save using storage backend
+        saved_path = backend.save(path, serialized_data, storage_metadata)
+        
+        return SerializationResult(
+            success=True,
+            path=Path(saved_path) if saved_path else None,
+            format=format,
+            size_bytes=len(serialized_data),
+            checksum=storage_metadata['checksum'],
+            compression_ratio=1.0  # Calculated separately if needed
+        )
+        
+    except Exception as e:
+        logger.error(f"Storage serialization failed: {e}")
+        return SerializationResult(
+            success=False,
+            format=format,
+            error=str(e)
+        )
+
+
+def deserialize_checkpoint_from_storage(
+    backend,  # StorageBackend instance
+    path: str,
+    format: SerializationFormat = None,
+    unsafe_mode: bool = False
+) -> Tuple[Dict, SerializationResult]:
+    """
+    Deserialize checkpoint data from a StorageBackend.
+    
+    This function loads and deserializes checkpoint data from the
+    provided StorageBackend, enabling cloud storage (S3, GCS) support.
+    
+    Args:
+        backend: StorageBackend instance (Local, S3, or GCS)
+        path: Relative path within storage backend
+        format: Serialization format (auto-detected if not provided)
+        unsafe_mode: Set True to allow PICKLE_UNSAFE format
+        
+    Returns:
+        Tuple of (deserialized_data, SerializationResult)
+        
+    Example:
+        from src.storage import get_storage_backend
+        
+        backend = get_storage_backend(config)
+        data, result = deserialize_checkpoint_from_storage(
+            backend,
+            "checkpoints/session-123/checkpoint.json"
+        )
+        if result.success:
+            print(f"Loaded checkpoint: {data}")
+    """
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Check if path exists
+        if not backend.exists(path):
+            return {}, SerializationResult(
+                success=False,
+                path=Path(path),
+                error=f"Checkpoint not found in storage: {path}"
+            )
+        
+        # Load from storage backend
+        data = backend.load(path)
+        
+        # Auto-detect format from path if not provided
+        if format is None:
+            format = _detect_format_from_path(path)
+        
+        # Deserialize based on format
+        if format == SerializationFormat.JSON_ZSTD:
+            result_data = _deserialize_json_zstd(data)
+        elif format == SerializationFormat.JSON:
+            result_data = json.loads(data.decode('utf-8'))
+        elif format == SerializationFormat.PICKLE_UNSAFE:
+            if not unsafe_mode:
+                error_msg = (
+                    "[gap: unsafe_serialization_requires_explicit_flag] "
+                    "Pickle checkpoint requires --unsafe flag."
+                )
+                logger.error(error_msg)
+                return {}, SerializationResult(
+                    success=False,
+                    format=format,
+                    path=Path(path),
+                    error=error_msg
+                )
+            result_data = pickle.loads(data)
+        else:
+            # Try JSON first
+            try:
+                result_data = json.loads(data.decode('utf-8'))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return {}, SerializationResult(
+                    success=False,
+                    error=f"Unable to deserialize: {path}"
+                )
+        
+        return result_data, SerializationResult(
+            success=True,
+            path=Path(path),
+            format=format,
+            size_bytes=len(data)
+        )
+        
+    except Exception as e:
+        logger.error(f"Storage deserialization failed: {e}")
+        return {}, SerializationResult(
+            success=False,
+            path=Path(path),
+            error=str(e)
+        )
+
+
+def _serialize_to_bytes_json_zstd(data: Dict) -> bytes:
+    """Serialize to JSON + Zstd bytes."""
+    if not ZSTD_AVAILABLE:
+        # Fallback to plain JSON
+        return _serialize_to_bytes_json(data)
+    
+    json_bytes = json.dumps(data, default=str, indent=2).encode('utf-8')
+    cctx = zstd.ZstdCompressor(level=3)
+    return cctx.compress(json_bytes)
+
+
+def _serialize_to_bytes_json(data: Dict) -> bytes:
+    """Serialize to plain JSON bytes."""
+    return json.dumps(data, default=str, indent=2).encode('utf-8')
+
+
+def _serialize_to_bytes_pickle(data: Dict) -> bytes:
+    """Serialize to pickle bytes (UNSAFE)."""
+    return pickle.dumps(data)
+
+
+def _detect_format_from_path(path: str) -> SerializationFormat:
+    """Detect serialization format from path string."""
+    path_lower = path.lower()
+    
+    if path_lower.endswith('.zst') or path_lower.endswith('.json.zst'):
+        return SerializationFormat.JSON_ZSTD
+    elif path_lower.endswith('.pkl'):
+        return SerializationFormat.PICKLE_UNSAFE
+    elif path_lower.endswith('.gz'):
+        return SerializationFormat.JSON
+    else:
+        return SerializationFormat.JSON
+
+
+def get_checkpoint_storage_path(session_id: str, filename: str = "checkpoint.json") -> str:
+    """
+    Get standard checkpoint path for a session.
+    
+    Args:
+        session_id: Session identifier
+        filename: Checkpoint filename
+        
+    Returns:
+        Path like: checkpoints/{session_id}/{filename}
+    """
+    return f"checkpoints/{session_id}/{filename}"
