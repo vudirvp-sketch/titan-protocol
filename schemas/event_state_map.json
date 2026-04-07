@@ -1,0 +1,351 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TITAN Event-State Transition Map",
+  "description": "Defines valid state transitions for each event type in TITAN FUSE Protocol (ITEM-OBS-06)",
+  "version": "3.3.0",
+  
+  "event_state_map": {
+    "GATE_PASS": {
+      "state_transition": "advance_phase",
+      "state_mutations": [
+        "gates.{gate_id}.status = PASS",
+        "gates.{gate_id}.passed_at = timestamp"
+      ],
+      "valid_pre_states": ["pending", "in_progress"],
+      "invalid_pre_states": ["completed", "failed"],
+      "emits_gaps": false
+    },
+    
+    "GATE_FAIL": {
+      "state_transition": "halt",
+      "state_mutations": [
+        "gates.{gate_id}.status = FAIL",
+        "gates.{gate_id}.failed_at = timestamp",
+        "session.status = BLOCKED",
+        "session.blocked_by = gate_id"
+      ],
+      "valid_pre_states": ["pending", "in_progress"],
+      "invalid_pre_states": ["completed"],
+      "emits_gaps": true,
+      "gap_tags": ["gate_blocked"]
+    },
+    
+    "GATE_WARN": {
+      "state_transition": "warn_continue",
+      "state_mutations": [
+        "gates.{gate_id}.status = WARN",
+        "gates.{gate_id}.warnings += 1"
+      ],
+      "valid_pre_states": ["pending", "in_progress"],
+      "invalid_pre_states": ["completed", "failed"],
+      "emits_gaps": false
+    },
+    
+    "PHASE_START": {
+      "state_transition": "start_phase",
+      "state_mutations": [
+        "session.current_phase = phase_id",
+        "phase.{phase_id}.started_at = timestamp",
+        "phase.{phase_id}.status = in_progress"
+      ],
+      "valid_pre_states": ["initialized", "phase_complete"],
+      "invalid_pre_states": ["phase_in_progress"],
+      "emits_gaps": false
+    },
+    
+    "PHASE_COMPLETE": {
+      "state_transition": "complete_phase",
+      "state_mutations": [
+        "phase.{phase_id}.status = completed",
+        "phase.{phase_id}.completed_at = timestamp",
+        "session.phases_completed += 1"
+      ],
+      "valid_pre_states": ["in_progress"],
+      "invalid_pre_states": ["completed", "failed"],
+      "emits_gaps": false
+    },
+    
+    "CHUNK_START": {
+      "state_transition": "start_chunk",
+      "state_mutations": [
+        "chunks.{chunk_id}.status = in_progress",
+        "chunks.{chunk_id}.started_at = timestamp"
+      ],
+      "valid_pre_states": ["pending"],
+      "invalid_pre_states": ["in_progress", "completed"],
+      "emits_gaps": false
+    },
+    
+    "CHUNK_PROCESSED": {
+      "state_transition": "continue",
+      "state_mutations": [
+        "chunks.{chunk_id}.tokens_processed += token_count",
+        "session.total_tokens += token_count"
+      ],
+      "valid_pre_states": ["in_progress"],
+      "invalid_pre_states": ["completed", "failed"],
+      "emits_gaps": false
+    },
+    
+    "CHUNK_COMPLETE": {
+      "state_transition": "complete_chunk",
+      "state_mutations": [
+        "chunks.{chunk_id}.status = completed",
+        "chunks.{chunk_id}.completed_at = timestamp",
+        "session.chunks_completed += 1"
+      ],
+      "valid_pre_states": ["in_progress"],
+      "invalid_pre_states": ["completed"],
+      "emits_gaps": false
+    },
+    
+    "CHECKPOINT_SAVED": {
+      "state_transition": "persist_state",
+      "state_mutations": [
+        "session.last_checkpoint = timestamp",
+        "session.checkpoint_count += 1"
+      ],
+      "valid_pre_states": ["*"],
+      "invalid_pre_states": [],
+      "emits_gaps": false
+    },
+    
+    "CURSOR_UPDATED": {
+      "state_transition": "update_cursor",
+      "state_mutations": [
+        "cursor.position = new_position",
+        "cursor.last_updated = timestamp"
+      ],
+      "valid_pre_states": ["*"],
+      "invalid_pre_states": [],
+      "emits_gaps": false
+    },
+    
+    "CURSOR_DRIFT": {
+      "state_transition": "drift_detected",
+      "state_mutations": [
+        "session.drift_detected = true",
+        "session.drift_details = drift_info"
+      ],
+      "valid_pre_states": ["*"],
+      "invalid_pre_states": [],
+      "emits_gaps": true,
+      "gap_tags": ["external_modification_during_wait"]
+    },
+    
+    "BUDGET_WARNING": {
+      "state_transition": "budget_warn",
+      "state_mutations": [
+        "session.budget_status = warning",
+        "session.budget_remaining_pct = percentage"
+      ],
+      "valid_pre_states": ["*"],
+      "invalid_pre_states": [],
+      "emits_gaps": false
+    },
+    
+    "BUDGET_EXCEEDED": {
+      "state_transition": "halt",
+      "state_mutations": [
+        "session.status = BLOCKED",
+        "session.blocked_by = budget",
+        "session.budget_status = exceeded"
+      ],
+      "valid_pre_states": ["*"],
+      "invalid_pre_states": [],
+      "emits_gaps": true,
+      "gap_tags": ["budget_exceeded"]
+    },
+    
+    "SESSION_START": {
+      "state_transition": "start_session",
+      "state_mutations": [
+        "session.status = in_progress",
+        "session.started_at = timestamp"
+      ],
+      "valid_pre_states": ["initialized"],
+      "invalid_pre_states": ["in_progress", "completed", "blocked"],
+      "emits_gaps": false
+    },
+    
+    "SESSION_END": {
+      "state_transition": "end_session",
+      "state_mutations": [
+        "session.status = completed",
+        "session.ended_at = timestamp"
+      ],
+      "valid_pre_states": ["in_progress"],
+      "invalid_pre_states": ["completed", "failed"],
+      "emits_gaps": false
+    },
+    
+    "SESSION_ABORT": {
+      "state_transition": "abort_session",
+      "state_mutations": [
+        "session.status = aborted",
+        "session.aborted_at = timestamp",
+        "session.abort_reason = reason"
+      ],
+      "valid_pre_states": ["in_progress", "blocked"],
+      "invalid_pre_states": ["completed"],
+      "emits_gaps": true,
+      "gap_tags": ["session_abort"]
+    },
+    
+    "SECURITY_VIOLATION": {
+      "state_transition": "security_halt",
+      "state_mutations": [
+        "session.status = BLOCKED",
+        "session.blocked_by = security",
+        "session.security_incident = true"
+      ],
+      "valid_pre_states": ["*"],
+      "invalid_pre_states": [],
+      "emits_gaps": true,
+      "gap_tags": ["security_violation"]
+    },
+    
+    "ANOMALY_DETECTED": {
+      "state_transition": "anomaly_record",
+      "state_mutations": [
+        "session.anomalies += 1",
+        "session.last_anomaly = anomaly_details"
+      ],
+      "valid_pre_states": ["*"],
+      "invalid_pre_states": [],
+      "emits_gaps": false
+    },
+    
+    "EVENT_HANDLER_FAILURE": {
+      "state_transition": "handler_error",
+      "state_mutations": [
+        "session.handler_failures += 1",
+        "session.last_error = error_details"
+      ],
+      "valid_pre_states": ["*"],
+      "invalid_pre_states": [],
+      "emits_gaps": true,
+      "gap_tags": ["handler_failure"]
+    },
+    
+    "ISSUE_FOUND": {
+      "state_transition": "record_issue",
+      "state_mutations": [
+        "issues.{issue_id}.status = found",
+        "issues.{issue_id}.found_at = timestamp"
+      ],
+      "valid_pre_states": ["*"],
+      "invalid_pre_states": [],
+      "emits_gaps": false
+    },
+    
+    "ISSUE_FIXED": {
+      "state_transition": "resolve_issue",
+      "state_mutations": [
+        "issues.{issue_id}.status = fixed",
+        "issues.{issue_id}.fixed_at = timestamp",
+        "session.issues_resolved += 1"
+      ],
+      "valid_pre_states": ["found"],
+      "invalid_pre_states": ["fixed"],
+      "emits_gaps": false
+    },
+    
+    "INVENTORY_READY": {
+      "state_transition": "inventory_complete",
+      "state_mutations": [
+        "inventory.status = ready",
+        "inventory.file_count = count"
+      ],
+      "valid_pre_states": ["pending", "scanning"],
+      "invalid_pre_states": ["ready"],
+      "emits_gaps": false
+    },
+    
+    "TOKEN_COUNT": {
+      "state_transition": "update_metrics",
+      "state_mutations": [
+        "metrics.total_tokens = count"
+      ],
+      "valid_pre_states": ["*"],
+      "invalid_pre_states": [],
+      "emits_gaps": false
+    },
+    
+    "CACHE_HIT": {
+      "state_transition": "cache_metric",
+      "state_mutations": [
+        "metrics.cache_hits += 1"
+      ],
+      "valid_pre_states": ["*"],
+      "invalid_pre_states": [],
+      "emits_gaps": false
+    },
+    
+    "CACHE_MISS": {
+      "state_transition": "cache_metric",
+      "state_mutations": [
+        "metrics.cache_misses += 1"
+      ],
+      "valid_pre_states": ["*"],
+      "invalid_pre_states": [],
+      "emits_gaps": false
+    }
+  },
+  
+  "state_machine": {
+    "session": {
+      "initial": "initialized",
+      "states": ["initialized", "in_progress", "blocked", "completed", "aborted"],
+      "transitions": {
+        "initialized -> in_progress": ["SESSION_START"],
+        "in_progress -> blocked": ["GATE_FAIL", "BUDGET_EXCEEDED", "SECURITY_VIOLATION"],
+        "in_progress -> completed": ["SESSION_END"],
+        "in_progress -> aborted": ["SESSION_ABORT"],
+        "blocked -> in_progress": ["GATE_PASS", "issue_resolved"],
+        "blocked -> aborted": ["SESSION_ABORT"]
+      }
+    },
+    
+    "phase": {
+      "initial": "pending",
+      "states": ["pending", "in_progress", "completed"],
+      "transitions": {
+        "pending -> in_progress": ["PHASE_START"],
+        "in_progress -> completed": ["PHASE_COMPLETE"]
+      }
+    },
+    
+    "chunk": {
+      "initial": "pending",
+      "states": ["pending", "in_progress", "completed", "failed"],
+      "transitions": {
+        "pending -> in_progress": ["CHUNK_START"],
+        "in_progress -> completed": ["CHUNK_COMPLETE"],
+        "in_progress -> failed": ["CHUNK_FAIL"]
+      }
+    },
+    
+    "gate": {
+      "initial": "pending",
+      "states": ["pending", "in_progress", "pass", "warn", "fail"],
+      "transitions": {
+        "pending -> in_progress": ["GATE_EVALUATION_START"],
+        "in_progress -> pass": ["GATE_PASS"],
+        "in_progress -> warn": ["GATE_WARN"],
+        "in_progress -> fail": ["GATE_FAIL"]
+      }
+    }
+  },
+  
+  "validation_rules": {
+    "strict_mode": {
+      "enabled": true,
+      "on_invalid_transition": "emit_gap_and_block"
+    },
+    "permissive_mode": {
+      "enabled": false,
+      "on_invalid_transition": "log_warning"
+    }
+  }
+}

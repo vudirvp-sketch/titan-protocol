@@ -369,3 +369,130 @@ Stage Summary:
 **Next Steps:**
 - ITEM-STOR-05: Cursor Hash for Drift Detection
 - PHASE_5: Config and Observability
+
+---
+Task ID: 15
+Agent: Main Agent
+Task: ITEM-OBS-02 - Event Severity Filtering
+
+Work Log:
+- Enhanced src/events/event_bus.py with severity-based dispatch:
+  - Added EVENT_SEVERITY_MAP for event type to severity mapping
+  - Added DispatchBehavior enum (SYNC_BLOCK, SYNC_TIMEOUT, ASYNC_FIRE, ASYNC_DROP)
+  - Implemented get_severity_for_event() for auto-severity determination
+  - Implemented get_dispatch_behavior() for severity-to-behavior mapping
+- Updated Event dataclass:
+  - Auto-determine severity from event_type via __post_init__
+  - Severity defaults to INFO for unknown events
+- Updated EventBus class:
+  - Added async dispatch infrastructure (Queue, ThreadPoolExecutor)
+  - Added _min_severity for filtering
+  - Added subscribe_min_severity() for threshold subscriptions
+  - Added unsubscribe_severity() method
+  - Implemented hybrid dispatch:
+    - _dispatch_sync_block() for CRITICAL events
+    - _dispatch_sync_timeout() for WARN events
+    - _dispatch_async_fire() for INFO events
+    - _dispatch_async_drop() for DEBUG events (droppable under load)
+  - Added shutdown() for graceful termination
+  - Enhanced get_stats() with severity metrics
+- Expanded EventTypes class with additional event types
+- Fixed syntax error in src/policy/gate_evaluation.py
+
+Stage Summary:
+- Event severity filtering fully functional:
+  - CRITICAL: Sync dispatch, blocks until handlers complete
+  - WARN: Sync dispatch with configurable timeout
+  - INFO: Async dispatch, fire-and-forget
+  - DEBUG: Async dispatch, may be dropped under load
+- 33 tests passing in tests/test_event_bus.py
+
+---
+Task ID: 16
+Agent: Main Agent
+Task: ITEM-OBS-06 - Event-State Transition Contract
+
+Work Log:
+- Created schemas/event_state_map.json with:
+  - event_state_map: definitions for 24 event types
+  - state_machine: state definitions for session, phase, chunk, gate
+  - validation_rules: strict_mode and permissive_mode configs
+- Created src/observability/state_validator.py with:
+  - TransitionResult enum (VALID, INVALID, WARNING, UNKNOWN_EVENT)
+  - StateMutation, StateSnapshot, TransitionValidation dataclasses
+  - StateTransitionValidator class with:
+    - validate_transition() for pre-validation
+    - apply_transition() for validation + mutation
+    - get_valid_events() for current state
+    - replay_events() for state rebuild
+    - get_stats() for statistics
+  - validate_event_transition() convenience function
+  - get_state_transition_map() utility function
+- Updated src/observability/__init__.py with new exports
+- Created tests/test_state_transitions.py with 25 tests
+
+Stage Summary:
+- State transition contract fully implemented:
+  - 24 event types mapped with state mutations
+  - State machine definitions for session, phase, chunk, gate
+  - Pre-state validation for invalid transitions
+  - Gap tag collection for security events
+- 25 tests passing in tests/test_state_transitions.py
+
+---
+Task ID: 17
+Agent: Main Agent
+Task: Update VERSION to 3.3.0 (TIER_2_COMPLETE)
+
+Work Log:
+- Updated VERSION file from 3.3.0-config-phase to 3.3.0
+- Added ITEM-OBS-02 completion details
+- Added ITEM-OBS-06 completion details
+- Marked PHASE_5 as COMPLETED
+- Marked TIER_2_COMPLETE
+
+Stage Summary:
+- VERSION updated to 3.3.0
+- All 5 phases complete:
+  - PHASE_1: SECURITY_CRITICAL (5 items)
+  - PHASE_2: ARCHITECTURE_CRITICAL (4 items)
+  - PHASE_3: GATES_ENHANCEMENT (5 items)
+  - PHASE_4: STORAGE_ENHANCEMENT (4 items)
+  - PHASE_5: CONFIG_AND_OBSERVABILITY (3 items)
+- Total: 21 items implemented
+- Total tests: 200+ across all modules
+
+---
+## FINAL SUMMARY - TIER_2_COMPLETE (v3.3.0)
+
+### Phase 5 Completed (This Session):
+
+**ITEM-OBS-02: Event Severity Filtering**
+- Files Created/Modified:
+  - src/events/event_bus.py (enhanced)
+  - tests/test_event_bus.py (new, 33 tests)
+  
+**ITEM-OBS-06: Event-State Transition Contract**
+- Files Created:
+  - schemas/event_state_map.json (new)
+  - src/observability/state_validator.py (new)
+  - tests/test_state_transitions.py (new, 25 tests)
+- Files Modified:
+  - src/observability/__init__.py
+
+### All Phases Summary:
+
+| Phase | Items | Status |
+|-------|-------|--------|
+| PHASE_1: SECURITY_CRITICAL | 5 | ✅ COMPLETED |
+| PHASE_2: ARCHITECTURE_CRITICAL | 4 | ✅ COMPLETED |
+| PHASE_3: GATES_ENHANCEMENT | 5 | ✅ COMPLETED |
+| PHASE_4: STORAGE_ENHANCEMENT | 4 | ✅ COMPLETED |
+| PHASE_5: CONFIG_AND_OBSERVABILITY | 3 | ✅ COMPLETED |
+| **TOTAL** | **21** | **TIER_2_COMPLETE** |
+
+### Test Summary:
+- tests/test_event_bus.py: 33 tests PASSING
+- tests/test_state_transitions.py: 25 tests PASSING
+- Total new tests: 58
+- Project total: 200+ tests

@@ -391,7 +391,8 @@ class Gate04Evaluator:
                 sev4_gaps=sev4_gaps,
                 confidence=confidence,
                 advisory_warnings=[
-                    f"Early exit bypassed SEV-4 batch processing",
+                    "Early exit bypassed SEV-4 batch processing"
+                ] + [
                     f"SEV-3 gap: {g.gap_id} - {g.description}" 
                     for g in sev3_gaps
                 ] + [
