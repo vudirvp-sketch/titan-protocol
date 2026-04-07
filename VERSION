@@ -1,7 +1,7 @@
-3.3.0-storage-phase
+3.3.0-config-phase
 
 # TITAN Protocol Version
-# This version indicates PHASE_4 (STORAGE_ENHANCEMENT) in progress
+# This version indicates PHASE_4-5 completion in progress
 # 
 # Completed versions:
 # PHASE_1 (SECURITY_CRITICAL):
@@ -55,7 +55,7 @@
 #   - BudgetExhaustedError for deterministic mode
 #   - Mode-aware downgrade control in ModelRouter
 #
-# PHASE_4 (STORAGE_ENHANCEMENT) - IN PROGRESS:
+# PHASE_4 (STORAGE_ENHANCEMENT) - COMPLETED:
 # - ITEM-STOR-01: StorageBackend Abstraction - COMPLETED
 #   - StorageBackend abstract base class
 #   - LocalStorageBackend implementation
@@ -86,4 +86,26 @@
 #   - EncryptionAlgorithm enum for algorithm selection
 #   - Test suite in tests/test_checkpoint_encryption.py (31 tests)
 #
-# Next: ITEM-STOR-05: Cursor Hash for Drift Detection
+# - ITEM-STOR-05: Cursor Hash for Drift Detection - COMPLETED
+#   - CursorTracker class with SHA-256 hash computation
+#   - CursorState dataclass for state snapshots
+#   - DriftResult dataclass for verification results
+#   - compute_hash() for state hashing
+#   - verify_cursor() for drift detection
+#   - EventBus integration for CURSOR_DRIFT events
+#   - Checkpoint serialization integration
+#   - add_cursor_hash_to_checkpoint() function
+#   - verify_checkpoint_cursor_hash() function
+#   - Test suite in tests/test_cursor_tracking.py (34 tests)
+#
+# PHASE_5 (CONFIG_AND_OBSERVABILITY) - IN PROGRESS:
+# - ITEM-CFG-01: Config Schema Validation - COMPLETED
+#   - ConfigSchemaValidator class with JSON Schema draft-07
+#   - ValidationResult dataclass for validation results
+#   - Schema updated to v3.3.0 with all new fields
+#   - Semantic validation for storage backends
+#   - Model routing validation
+#   - Gap tag emission for invalid configs
+#   - Test suite in tests/test_config_validation.py (21 tests)
+#
+# Next: ITEM-OBS-02: Event Severity Filtering

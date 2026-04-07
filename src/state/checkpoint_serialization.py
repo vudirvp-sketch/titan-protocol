@@ -722,3 +722,130 @@ def get_checkpoint_storage_path(session_id: str, filename: str = "checkpoint.jso
         Path like: checkpoints/{session_id}/{filename}
     """
     return f"checkpoints/{session_id}/{filename}"
+
+
+# =============================================================================
+# ITEM-STOR-05: Cursor Hash for Drift Detection
+# =============================================================================
+
+def add_cursor_hash_to_checkpoint(data: Dict) -> Dict:
+    """
+    Add cursor_hash field to checkpoint data.
+    
+    ITEM-STOR-05: Computes SHA-256 hash of checkpoint state
+    for drift detection on resume.
+    
+    Args:
+        data: Checkpoint data dictionary
+        
+    Returns:
+        Checkpoint data with cursor_hash field added
+    """
+    from .cursor import compute_state_hash
+    
+    # Create a copy without the cursor_hash field for hash computation
+    hash_data = {k: v for k, v in data.items() if k != "cursor_hash"}
+    
+    # Compute hash
+    cursor_hash = compute_state_hash(hash_data)
+    
+    # Add to checkpoint
+    result = data.copy()
+    result["cursor_hash"] = cursor_hash
+    
+    return result
+
+
+def verify_checkpoint_cursor_hash(data: Dict) -> Dict:
+    """
+    Verify cursor hash in checkpoint data.
+    
+    ITEM-STOR-05: Validates that checkpoint has not been
+    externally modified.
+    
+    Args:
+        data: Checkpoint data dictionary with cursor_hash field
+        
+    Returns:
+        Dict with 'valid' boolean and optional 'error' message
+    """
+    from .cursor import compute_state_hash
+    
+    expected_hash = data.get("cursor_hash")
+    
+    if not expected_hash:
+        return {
+            "valid": True,
+            "warning": "No cursor_hash in checkpoint (pre-3.3.0 format)"
+        }
+    
+    # Create a copy without the cursor_hash field for hash computation
+    hash_data = {k: v for k, v in data.items() if k != "cursor_hash"}
+    
+    # Compute hash
+    actual_hash = compute_state_hash(hash_data)
+    
+    if actual_hash != expected_hash:
+        return {
+            "valid": False,
+            "error": "[gap: checkpoint_cursor_hash_mismatch]",
+            "expected_hash": expected_hash,
+            "actual_hash": actual_hash,
+            "message": "Checkpoint may have been externally modified"
+        }
+    
+    return {
+        "valid": True,
+        "cursor_hash": actual_hash
+    }
+
+
+def deserialize_checkpoint_with_verification(
+    data: bytes = None,
+    path: Path = None,
+    format: SerializationFormat = None,
+    unsafe_mode: bool = False,
+    verify_cursor_hash: bool = True
+) -> Tuple[Dict, SerializationResult]:
+    """
+    Deserialize checkpoint with cursor hash verification.
+    
+    ITEM-STOR-05: Enhanced deserialization that verifies
+    cursor hash before returning data.
+    
+    Args:
+        data: Serialized data bytes (mutually exclusive with path)
+        path: Path to checkpoint file (mutually exclusive with data)
+        format: Serialization format (auto-detected if not provided)
+        unsafe_mode: Set True to allow PICKLE_UNSAFE format
+        verify_cursor_hash: Set True to verify cursor hash (default: True)
+        
+    Returns:
+        Tuple of (deserialized_data, SerializationResult)
+    """
+    # Deserialize using standard function
+    result_data, result = deserialize_checkpoint(
+        data=data,
+        path=path,
+        format=format,
+        unsafe_mode=unsafe_mode
+    )
+    
+    if not result.success:
+        return result_data, result
+    
+    # Verify cursor hash if present
+    if verify_cursor_hash and result_data:
+        verification = verify_checkpoint_cursor_hash(result_data)
+        
+        if not verification.get("valid"):
+            result.success = False
+            result.error = verification.get("error", "Cursor hash verification failed")
+            return result_data, result
+        
+        # Add verification info to result
+        if hasattr(result, 'verification'):
+            result.verification = verification
+    
+    return result_data, result
+

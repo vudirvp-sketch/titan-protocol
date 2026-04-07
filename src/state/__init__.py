@@ -2,14 +2,24 @@
 """State management, assessment, and cursor tracking."""
 
 from .assessment import AssessmentScore, SignalStrength, ReadinessTier
-from .state_manager import SessionState, ReasoningStep, EvidenceType, BudgetManager, BudgetAllocation, CursorTracker
+from .state_manager import SessionState, ReasoningStep, EvidenceType, BudgetManager, BudgetAllocation
+from .cursor import (
+    CursorTracker,
+    CursorState,
+    DriftResult,
+    compute_state_hash,
+    verify_state_integrity
+)
 from .checkpoint_serialization import (
     SerializationFormat,
     SerializationResult,
     serialize_checkpoint,
     deserialize_checkpoint,
     serialize_checkpoint_to_storage,
-    deserialize_checkpoint_from_storage
+    deserialize_checkpoint_from_storage,
+    add_cursor_hash_to_checkpoint,
+    verify_checkpoint_cursor_hash,
+    deserialize_checkpoint_with_verification
 )
 from .checkpoint_manager import (
     CheckpointManager,
@@ -26,7 +36,12 @@ __all__ = [
     'EvidenceType',
     'BudgetManager',
     'BudgetAllocation',
+    # ITEM-STOR-05: Cursor tracking
     'CursorTracker',
+    'CursorState',
+    'DriftResult',
+    'compute_state_hash',
+    'verify_state_integrity',
     # ITEM-SEC-02: Checkpoint serialization
     'SerializationFormat',
     'SerializationResult',
@@ -34,6 +49,10 @@ __all__ = [
     'deserialize_checkpoint',
     'serialize_checkpoint_to_storage',
     'deserialize_checkpoint_from_storage',
+    # ITEM-STOR-05: Cursor hash for checkpoint
+    'add_cursor_hash_to_checkpoint',
+    'verify_checkpoint_cursor_hash',
+    'deserialize_checkpoint_with_verification',
     # ITEM-STOR-02: Checkpoint manager
     'CheckpointManager',
     'CheckpointMetadata',

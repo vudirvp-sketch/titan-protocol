@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "TITAN FUSE Protocol Configuration Schema",
-  "description": "Configuration schema for TITAN FUSE Protocol v3.2.3",
+  "description": "Configuration schema for TITAN FUSE Protocol v3.3.0",
   "type": "object",
   "properties": {
     "session": {
@@ -82,7 +82,14 @@
         "interval_tokens": {"type": "integer"},
         "interval_seconds": {"type": "integer"},
         "compression": {"type": "string", "enum": ["none", "gzip", "zstd"]},
-        "security": {"type": "string"}
+        "security": {"type": "string"},
+        "serialization": {"type": "string", "enum": ["json_zstd", "json", "pickle_unsafe"]},
+        "encryption": {"type": "string"},
+        "encryption_key_path": {"type": "string"},
+        "namespace_isolation": {"type": "boolean"},
+        "namespace": {"type": "string"},
+        "auto_cleanup": {"type": "boolean"},
+        "cleanup_interval_days": {"type": "integer"}
       }
     },
     "output": {
@@ -119,6 +126,9 @@
       "type": "object",
       "properties": {
         "mode": {"type": "string", "enum": ["interactive", "callback", "auto-reject"]},
+        "release_locks_on_wait": {"type": "boolean"},
+        "lock_ttl_seconds": {"type": "integer"},
+        "force_resume_allowed": {"type": "boolean"},
         "callback": {
           "type": "object",
           "properties": {
@@ -162,6 +172,16 @@
         "disabled": {
           "type": "array",
           "items": {"type": "string"}
+        },
+        "sandbox_enabled": {"type": "boolean"},
+        "sandbox_type": {"type": "string", "enum": ["wasm", "gvisor", "subprocess", "none"]},
+        "sandbox_config": {
+          "type": "object",
+          "properties": {
+            "memory_limit_mb": {"type": "integer"},
+            "timeout_ms": {"type": "integer"},
+            "max_output_size": {"type": "integer"}
+          }
         }
       }
     },
@@ -175,24 +195,8 @@
     "model_routing": {
       "type": "object",
       "properties": {
-        "root_model": {
-          "type": "object",
-          "properties": {
-            "provider": {"type": "string"},
-            "model": {"type": "string"},
-            "max_tokens": {"type": "integer"},
-            "temperature": {"type": "number"}
-          }
-        },
-        "leaf_model": {
-          "type": "object",
-          "properties": {
-            "provider": {"type": "string"},
-            "model": {"type": "string"},
-            "max_tokens": {"type": "integer"},
-            "temperature": {"type": "number"}
-          }
-        },
+        "root_model": {"type": "string"},
+        "leaf_model": {"type": "string"},
         "track_costs": {"type": "boolean"},
         "log_model_usage": {"type": "boolean"},
         "validation": {
@@ -223,6 +227,7 @@
         "degradation_mode": {"type": "string"}
       }
     },
+    "model_downgrade_allowed": {"type": "boolean"},
     "budget": {
       "type": "object",
       "properties": {
@@ -296,7 +301,11 @@
         },
         "max_input_file_size_mb": {"type": "integer"},
         "max_total_input_size_mb": {"type": "integer"},
-        "secrets_scan": {"type": "boolean"}
+        "secrets_scan": {"type": "boolean"},
+        "secrets_baseline": {"type": "string"},
+        "fail_on_detection": {"type": "boolean"},
+        "workspace_path": {"type": ["string", "null"]},
+        "redos_timeout_ms": {"type": "integer"}
       }
     },
     "development": {
@@ -315,6 +324,195 @@
         "file": {"type": ["string", "null"]},
         "timestamps": {"type": "boolean"},
         "include_session_id": {"type": "boolean"}
+      }
+    },
+    "repository": {
+      "type": "object",
+      "properties": {
+        "directories": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "required_files": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "backend": {"type": "string", "enum": ["keyring", "vault", "env"]},
+        "prefix": {"type": "string"}
+      }
+    },
+    "audit": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "signing_key_path": {"type": "string"},
+        "trail_path": {"type": "string"},
+        "sign_critical_events": {"type": "boolean"}
+      }
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "max_recursion_depth": {"type": "integer"}
+      }
+    },
+    "intent_classifier": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "method": {"type": "string"},
+        "confidence_threshold": {"type": "number"},
+        "log_all": {"type": "boolean"}
+      }
+    },
+    "anomaly_detection": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "baseline_sessions": {"type": "integer"},
+        "threshold_multiplier": {"type": "number"},
+        "action": {"type": "string"}
+      }
+    },
+    "event_journal": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "path": {"type": "string"},
+        "max_size_mb": {"type": "integer"}
+      }
+    },
+    "locks": {
+      "type": "object",
+      "properties": {
+        "backend": {"type": "string", "enum": ["file", "redis", "etcd"]},
+        "lock_dir": {"type": "string"},
+        "redis": {
+          "type": "object",
+          "properties": {
+            "host": {"type": "string"},
+            "port": {"type": "integer"},
+            "db": {"type": "integer"},
+            "password": {"type": ["string", "null"]},
+            "key_prefix": {"type": "string"}
+          }
+        },
+        "etcd": {
+          "type": "object",
+          "properties": {
+            "host": {"type": "string"},
+            "port": {"type": "integer"},
+            "key_prefix": {"type": "string"}
+          }
+        }
+      }
+    },
+    "gate04": {
+      "type": "object",
+      "properties": {
+        "confidence_override": {"type": "boolean"},
+        "max_sev2_gaps": {"type": "integer"},
+        "allow_advisory_pass": {"type": "boolean"}
+      }
+    },
+    "gate_sensitivity": {
+      "type": "object",
+      "properties": {
+        "deterministic": {
+          "type": "object",
+          "properties": {
+            "fail_on_any_gap": {"type": "boolean"},
+            "warn_threshold_pct": {"type": "integer"},
+            "max_sev1_gaps": {"type": "integer"},
+            "max_sev2_gaps": {"type": "integer"},
+            "max_sev3_gaps": {"type": "integer"},
+            "max_sev4_gaps": {"type": "integer"},
+            "allow_advisory_pass": {"type": "boolean"},
+            "allow_unsafe": {"type": "boolean"},
+            "confidence_override": {"type": "boolean"}
+          }
+        },
+        "guided_autonomy": {
+          "type": "object",
+          "properties": {
+            "fail_on_any_gap": {"type": "boolean"},
+            "warn_threshold_pct": {"type": "integer"},
+            "max_sev1_gaps": {"type": "integer"},
+            "max_sev2_gaps": {"type": "integer"},
+            "max_sev3_gaps": {"type": "integer"},
+            "max_sev4_gaps": {"type": "integer"},
+            "allow_advisory_pass": {"type": "boolean"},
+            "allow_unsafe": {"type": "boolean"},
+            "confidence_override": {"type": "boolean"}
+          }
+        },
+        "fast_prototype": {
+          "type": "object",
+          "properties": {
+            "fail_on_any_gap": {"type": "boolean"},
+            "warn_threshold_pct": {"type": "integer"},
+            "max_sev1_gaps": {"type": "integer"},
+            "max_sev2_gaps": {"type": "integer"},
+            "max_sev3_gaps": {"type": "integer"},
+            "max_sev4_gaps": {"type": "integer"},
+            "allow_advisory_pass": {"type": "boolean"},
+            "allow_unsafe": {"type": "boolean"},
+            "confidence_override": {"type": "boolean"}
+          }
+        }
+      }
+    },
+    "pre_intent": {
+      "type": "object",
+      "properties": {
+        "token_limit": {"type": "integer"},
+        "fallback_mode": {"type": "string"},
+        "ambiguity_threshold": {"type": "number"}
+      }
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "backend": {"type": "string", "enum": ["local", "s3", "gcs"]},
+        "namespace": {"type": "string"},
+        "local": {
+          "type": "object",
+          "properties": {
+            "base_path": {"type": "string"},
+            "create_dirs": {"type": "boolean"}
+          }
+        },
+        "s3": {
+          "type": "object",
+          "properties": {
+            "bucket": {"type": ["string", "null"]},
+            "prefix": {"type": "string"},
+            "region": {"type": "string"},
+            "credentials": {
+              "type": "object",
+              "properties": {
+                "access_key": {"type": ["string", "null"]},
+                "secret_key": {"type": ["string", "null"]},
+                "session_token": {"type": ["string", "null"]}
+              }
+            },
+            "endpoint_url": {"type": ["string", "null"]}
+          }
+        },
+        "gcs": {
+          "type": "object",
+          "properties": {
+            "bucket": {"type": ["string", "null"]},
+            "prefix": {"type": "string"},
+            "project": {"type": ["string", "null"]},
+            "credentials_path": {"type": ["string", "null"]}
+          }
+        }
       }
     }
   }

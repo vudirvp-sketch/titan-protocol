@@ -9,8 +9,13 @@ ITEM-120 Implementation:
 - Environment variable injection pattern
 - No credentials in session state or checkpoints
 
+ITEM-STOR-05 Implementation:
+- cursor_hash field in SessionState
+- CursorTracker integration for drift detection
+- Hash verification on resume
+
 Author: TITAN FUSE Team
-Version: 3.2.3
+Version: 3.3.0
 """
 
 from dataclasses import dataclass, field
@@ -25,6 +30,7 @@ import re
 from types import SimpleNamespace
 
 from .assessment import AssessmentScore
+from .cursor import CursorTracker, CursorState, DriftResult, compute_state_hash
 
 
 class CredentialManager:
@@ -368,66 +374,6 @@ class BudgetManager:
         return tokens <= self.get_available_budget(severity)
 
 
-class CursorTracker:
-    """Track cursor position with hash verification."""
-
-    def __init__(self):
-        self.cursor_hash: Optional[str] = None
-        self.last_patch_hash: Optional[str] = None
-        self._patch_history: List[str] = []
-        self._current_line: int = 0
-        self._current_chunk: Optional[str] = None
-        self._offset_delta: int = 0
-
-    def update_cursor_hash(self, patch_content: str) -> str:
-        """Update cursor hash after patch application."""
-        combined = f"{self.last_patch_hash or 'init'}:{patch_content}"
-        self.cursor_hash = hashlib.sha256(combined.encode()).hexdigest()[:32]
-        self.last_patch_hash = self.cursor_hash
-        self._patch_history.append(self.cursor_hash)
-        return self.cursor_hash
-
-    def verify_cursor_hash(self, expected_hash: str) -> Dict:
-        """Verify cursor hash on resume."""
-        if self.cursor_hash != expected_hash:
-            return {
-                "valid": False,
-                "gap": "[gap: cursor_drift_detected]",
-                "expected": expected_hash,
-                "actual": self.cursor_hash,
-                "patch_count": len(self._patch_history)
-            }
-        return {"valid": True}
-
-    def update_position(self, line: int = None, chunk: str = None, offset: int = None) -> None:
-        """Update cursor position."""
-        if line is not None:
-            self._current_line = line
-        if chunk is not None:
-            self._current_chunk = chunk
-        if offset is not None:
-            self._offset_delta = offset
-
-    def get_state(self) -> Dict:
-        """Get cursor state for checkpoint."""
-        return {
-            "cursor_hash": self.cursor_hash,
-            "last_patch_hash": self.last_patch_hash,
-            "patch_count": len(self._patch_history),
-            "current_line": self._current_line,
-            "current_chunk": self._current_chunk,
-            "offset_delta": self._offset_delta
-        }
-
-    def restore_state(self, state: Dict) -> None:
-        """Restore cursor state from checkpoint."""
-        self.cursor_hash = state.get("cursor_hash")
-        self.last_patch_hash = state.get("last_patch_hash")
-        self._current_line = state.get("current_line", 0)
-        self._current_chunk = state.get("current_chunk")
-        self._offset_delta = state.get("offset_delta", 0)
-
-
 @dataclass
 class SessionState:
     """
@@ -486,6 +432,7 @@ class SessionState:
 
     # Cursor tracking
     cursor_tracker: CursorTracker = field(default_factory=CursorTracker)
+    cursor_hash: Optional[str] = None  # ITEM-STOR-05: SHA-256 of last patch applied
 
     # Reasoning steps
     reasoning_steps: List[ReasoningStep] = field(default_factory=list)
@@ -580,10 +527,41 @@ class SessionState:
             "tokens_used": self.tokens_used,
             "budget_status": self.budget_manager.get_status() if self.budget_manager else None,
             "assessment_score": self.assessment_score.to_dict() if self.assessment_score else None,
+            "cursor_hash": self.cursor_hash,  # ITEM-STOR-05: For drift detection
             "cursor_state": self.cursor_tracker.get_state(),
             "gaps": self.gaps,
             "updated_at": self.updated_at
         }
+    
+    def compute_cursor_hash(self) -> str:
+        """
+        Compute cursor hash from current state.
+        
+        ITEM-STOR-05: Compute SHA-256 hash for drift detection.
+        
+        Returns:
+            Cursor hash string
+        """
+        state_snapshot = self.get_state_snapshot()
+        # Remove cursor_hash itself to avoid circular dependency
+        state_snapshot.pop("cursor_hash", None)
+        self.cursor_hash = compute_state_hash(state_snapshot)
+        return self.cursor_hash
+    
+    def verify_cursor_hash(self, expected_hash: str) -> DriftResult:
+        """
+        Verify cursor hash against expected value.
+        
+        ITEM-STOR-05: Detect external modifications.
+        
+        Args:
+            expected_hash: Expected cursor hash from checkpoint
+            
+        Returns:
+            DriftResult with validation status
+        """
+        current_hash = self.compute_cursor_hash()
+        return self.cursor_tracker.verify_cursor(expected_hash)
 
     def to_json(self) -> str:
         """Serialize to JSON."""
