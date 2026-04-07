@@ -213,3 +213,38 @@ model_fallback:
   - secondary-frontier
   - local-high-end
   degradation_mode: reduced_capability
+
+# ITEM-ARCH-02: Event Journal for crash recovery
+event_journal:
+  enabled: true
+  path: .titan/event_journal.jsonl
+  max_size_mb: 100
+
+# ITEM-ARCH-03: Distributed Locking
+locks:
+  backend: file  # Options: file, redis, etcd
+  lock_dir: .titan/locks
+  # Redis backend config:
+  redis:
+    host: localhost
+    port: 6379
+    db: 0
+    password: null
+    key_prefix: "titan:lock:"
+  # etcd backend config:
+  etcd:
+    host: localhost
+    port: 2379
+    key_prefix: "/titan/lock/"
+
+# ITEM-ARCH-04: Gate-04 severity-based blocking
+gate04:
+  confidence_override: false  # HIGH confidence cannot override SEV-1/SEV-2
+  max_sev2_gaps: 0  # Any unresolved SEV-2 blocks
+  allow_advisory_pass: true  # Allow advisory pass for SEV-3/SEV-4
+
+# ITEM-ARCH-07: Approval Loop configuration  
+approval:
+  release_locks_on_wait: true
+  lock_ttl_seconds: 300
+  force_resume_allowed: false  # Security: require cursor validation

@@ -1,13 +1,35 @@
-3.3.0-sec-phase
+3.3.0-arch-phase
 
 # TITAN Protocol Version
-# This version indicates PHASE_1 (SECURITY_CRITICAL) completion
+# This version indicates PHASE_2 (ARCHITECTURE_CRITICAL) completion
 # 
 # Completed in this version:
+# PHASE_1 (SECURITY_CRITICAL):
 # - ITEM-SEC-01: VM2 Sandbox Replacement (WASM/gVisor)
 # - ITEM-SEC-02: Serialization Safety Fix (JSON+zstd)
 # - ITEM-SEC-03: SecretStore Implementation
 # - ITEM-SEC-04: Secret Scanning Integration (GATE-00)
 # - ITEM-SEC-05: Tamper-Evident Logging (Ed25519)
 #
-# Next: PHASE_2 (ARCHITECTURE_CRITICAL)
+# PHASE_2 (ARCHITECTURE_CRITICAL):
+# - ITEM-ARCH-02: EventBus WAL for Crash Recovery
+#   - EventJournal with sync/async writes
+#   - RecoveryManager for state rebuild
+#   - EventBus integration
+# - ITEM-ARCH-03: Distributed Locking with TTL
+#   - LockBackend abstract interface
+#   - FileLockBackend implementation
+#   - RedisLockBackend implementation
+#   - EtcdLockBackend implementation
+#   - DeadlockDetector
+# - ITEM-ARCH-04: Gate-04 SEV-1 Override Fix
+#   - Gate04Evaluator with severity-based blocking
+#   - SEV-1 always blocks
+#   - SEV-2 threshold blocking
+#   - SEV-3/SEV-4 advisory pass
+# - ITEM-ARCH-07: Release-on-Wait Pattern
+#   - ApprovalLoop with cursor validation
+#   - Lock release during wait
+#   - CursorDriftError detection
+#
+# Next: PHASE_3 (GATES_ENHANCEMENT)

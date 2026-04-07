@@ -4,16 +4,25 @@ Event Bus for TITAN FUSE Protocol.
 Provides event-driven architecture with severity-based dispatch
 and handler failure escalation.
 
+ITEM-ARCH-02: Integration with EventJournal for crash recovery.
+- EventJournal.append() called before event handlers execute
+- CRITICAL and WARN events: sync write
+- INFO and DEBUG events: async write (buffered)
+
 Author: TITAN FUSE Team
-Version: 3.2.3
+Version: 3.3.0
 """
 
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Callable, Any, Optional
+from typing import Dict, List, Callable, Any, Optional, TYPE_CHECKING
 import logging
 import traceback
+from pathlib import Path
+
+if TYPE_CHECKING:
+    from ..state.event_journal import EventJournal
 
 
 class EventSeverity(Enum):
@@ -97,8 +106,9 @@ class EventBus:
         bus.emit(Event("GATE_PASS", {"gate_id": "GATE-00"}, EventSeverity.INFO))
     """
 
-    def __init__(self, config: Dict = None):
+    def __init__(self, config: Dict = None, journal: 'EventJournal' = None):
         self.config = config or {}
+        self._journal = journal  # ITEM-ARCH-02: Event journal for WAL
         self._handlers: Dict[str, List[Callable]] = {}
         self._severity_handlers: Dict[EventSeverity, List[Callable]] = {}
         self._logger = logging.getLogger(__name__)
@@ -139,13 +149,26 @@ class EventBus:
             return True
         return False
 
-    def emit(self, event: Event) -> None:
+    def emit(self, event: Event, state_hash: str = "") -> None:
         """
         Emit event with handler failure escalation.
 
+        ITEM-ARCH-02: Event is written to journal BEFORE handlers execute.
+        This ensures crash recovery can replay unprocessed events.
+
         Args:
             event: Event to emit
+            state_hash: Optional hash of current state for recovery
         """
+        # ITEM-ARCH-02: Write to journal BEFORE handlers execute
+        if self._journal:
+            sync = event.severity in (EventSeverity.CRITICAL, EventSeverity.WARN)
+            self._journal.append(
+                event=event.to_dict(),
+                state_hash=state_hash,
+                sync=sync
+            )
+
         # Record in history
         self._event_history.append(event)
         if len(self._event_history) > self._max_history:
@@ -246,18 +269,44 @@ class EventBus:
         """Clear event history."""
         self._event_history.clear()
 
+    def set_journal(self, journal: 'EventJournal') -> None:
+        """
+        ITEM-ARCH-02: Set the event journal for WAL.
+
+        Args:
+            journal: EventJournal instance
+        """
+        self._journal = journal
+        self._logger.info("Event journal attached to EventBus")
+
+    def get_journal(self) -> Optional['EventJournal']:
+        """Get the current event journal."""
+        return self._journal
+
+    def flush_journal(self) -> None:
+        """Flush buffered events to journal."""
+        if self._journal:
+            self._journal.sync_flush()
+
     def get_stats(self) -> Dict:
         """Get event bus statistics."""
         severity_counts = {}
         for sev in EventSeverity:
             severity_counts[sev.name] = len([e for e in self._event_history if e.severity == sev])
 
-        return {
+        stats = {
             "total_events": len(self._event_history),
             "handler_count": sum(len(h) for h in self._handlers.values()),
             "severity_handlers": {s.name: len(h) for s, h in self._severity_handlers.items()},
-            "severity_distribution": severity_counts
+            "severity_distribution": severity_counts,
+            "journal_enabled": self._journal is not None
         }
+
+        # Add journal stats if available
+        if self._journal:
+            stats["journal"] = self._journal.get_stats()
+
+        return stats
 
 
 # Pre-defined event types
