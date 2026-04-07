@@ -1,0 +1,135 @@
+# TITAN Protocol Skill Catalog
+# Version: 1.0.0
+# Generated: 2026-04-08T00:00:00Z
+#
+# ITEM-SKILL-01: Skill catalog with reusable patterns and validation chains.
+# Each skill defines:
+#   - skill_id: Unique identifier
+#   - description: Human-readable purpose
+#   - applicable_to: Task types this skill handles
+#   - reusable_patterns: Shared implementation patterns
+#   - ui_component: Optional UI component path
+#   - role_hints: Typical user roles
+#   - required_tools: Tools needed for execution
+#   - prompt_template: Optional prompt template path
+#   - validation_chain: Validators for skill execution
+
+version: "1.0.0"
+generated_at: "2026-04-08T00:00:00Z"
+
+skills:
+  # =============================================================================
+  # RLM Deterministic Chunking
+  # =============================================================================
+  # Purpose: Process large files (5k-50k+ lines) without hallucinations
+  # Uses AST-based boundary detection and semantic markers for safe chunking
+  # Applicable to code audits, plan reviews, and specification generation
+  # =============================================================================
+  - skill_id: "rlm_deterministic_chunking"
+    description: "Process 5k-50k+ line files without hallucinations using AST-based boundary detection and semantic markers"
+    applicable_to:
+      - "AUDIT_CODE"
+      - "REVIEW_PLAN"
+      - "GENERATE_SPEC"
+    reusable_patterns:
+      - pattern_name: "chunk_boundary_detection"
+        implementation: "AST_based+semantic_markers"
+        validation_chain:
+          - "ast_parser"
+          - "schema_check"
+      - pattern_name: "context_compression"
+        implementation: "core_0%_periphery_20%"
+        validation_chain:
+          - "crossref_validator"
+    ui_component: "widgets/context_mapper.py"
+    role_hints:
+      - "senior-python-dev"
+      - "architect"
+    required_tools:
+      - "ast_parser"
+      - "diff_applier"
+    prompt_template: "prompts/rlm_chunk.j2"
+    validation_chain:
+      - "schema_check"
+      - "crossref_validator"
+      - "gate_04_confidence"
+    metadata:
+      min_lines: 5000
+      max_lines: 50000
+      chunk_strategy: "semantic_boundary"
+
+  # =============================================================================
+  # Semantic Taint Tracking
+  # =============================================================================
+  # Purpose: Track data flow for security-sensitive operations
+  # Uses data flow graphs to trace taint propagation from sources to sinks
+  # Essential for security audits and thorough code reviews
+  # =============================================================================
+  - skill_id: "semantic_taint_tracking"
+    description: "Track data flow for security-sensitive operations using taint propagation analysis"
+    applicable_to:
+      - "SECURITY_AUDIT"
+      - "CODE_REVIEW"
+    reusable_patterns:
+      - pattern_name: "taint_propagation"
+        implementation: "data_flow_graph"
+        validation_chain:
+          - "taint_validator"
+    ui_component: null
+    role_hints:
+      - "security-engineer"
+    required_tools:
+      - "taint_analyzer"
+    prompt_template: "prompts/taint_track.j2"
+    validation_chain:
+      - "taint_validator"
+      - "security_gate"
+    metadata:
+      taint_sources:
+        - "user_input"
+        - "network_data"
+        - "file_read"
+      taint_sinks:
+        - "sql_query"
+        - "command_exec"
+        - "file_write"
+
+  # =============================================================================
+  # Multi-Agent Coordination
+  # =============================================================================
+  # Purpose: Parallel execution with dependency resolution
+  # Uses dependency DAG for parallel task decomposition and execution
+  # Applicable to refactoring, migrations, and feature implementations
+  # =============================================================================
+  - skill_id: "multi_agent_coordination"
+    description: "Parallel execution with dependency resolution using DAG-based decomposition"
+    applicable_to:
+      - "REFACTOR"
+      - "MIGRATION"
+      - "FEATURE_IMPLEMENTATION"
+    reusable_patterns:
+      - pattern_name: "parallel_decomposition"
+        implementation: "dependency_dag"
+        validation_chain:
+          - "cycle_detector"
+          - "resource_checker"
+      - pattern_name: "task_synchronization"
+        implementation: "barrier_sync"
+        validation_chain:
+          - "deadlock_detector"
+    ui_component: null
+    role_hints:
+      - "tech-lead"
+      - "architect"
+    required_tools:
+      - "dependency_resolver"
+      - "parallel_executor"
+    prompt_template: null
+    validation_chain:
+      - "cycle_detector"
+      - "resource_checker"
+      - "deadlock_detector"
+    metadata:
+      max_parallel_tasks: 10
+      sync_strategy: "barrier"
+      timeout_seconds: 300

@@ -5,6 +5,7 @@ Policy routing, intent classification, and gate evaluation.
 ITEM-ARCH-04: Gate-04 SEV-1 Override Fix
 ITEM-GATE-01: Gate-04 Early Exit Fix
 ITEM-GATE-02: Mode-Based Gate Sensitivity
+ITEM-POLICY-01: PolicyResolver for EQUIP Stage
 """
 
 from .intent_router import IntentRouter, IntentResult, INTENT_CHAINS
@@ -19,6 +20,12 @@ from .gate_evaluation import (
 from .gate_behavior import (
     GateBehaviorModifier, GateSensitivityConfig, ExecutionMode,
     ModifiedGateResult, get_gate_behavior_modifier, apply_gate_mode_rules
+)
+from .policy_resolver import (
+    PolicyResolver, ConflictType, Conflict, ResolutionStatus,
+    ResolutionResult, Skill, Constraints, Constraint, ToolConstraint,
+    BudgetConstraint, create_policy_resolver, resolve_skill_policy,
+    lint_skills
 )
 
 __all__ = [
@@ -52,5 +59,20 @@ __all__ = [
     'ExecutionMode',
     'ModifiedGateResult',
     'get_gate_behavior_modifier',
-    'apply_gate_mode_rules'
+    'apply_gate_mode_rules',
+    
+    # Policy resolver (ITEM-POLICY-01)
+    'PolicyResolver',
+    'ConflictType',
+    'Conflict',
+    'ResolutionStatus',
+    'ResolutionResult',
+    'Skill',
+    'Constraints',
+    'Constraint',
+    'ToolConstraint',
+    'BudgetConstraint',
+    'create_policy_resolver',
+    'resolve_skill_policy',
+    'lint_skills',
 ]

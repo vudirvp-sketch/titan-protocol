@@ -178,6 +178,14 @@ chunking_limits:
   enforce_secondary_limits: true
 policy:
   max_recursion_depth: 3
+  # v3.6.0: ITEM-POLICY-01: PolicyResolver
+  resolver:
+    enabled: true
+    strict_mode: false  # Block on conflicts if true
+    allowed_conflict_severities:
+      - "WARN"
+      - "INFO"
+    auto_resolve: false  # Auto-resolve trivial conflicts
 
 recursion:
   max_recursion_depth: 3
@@ -235,6 +243,22 @@ event_journal:
 events:
   wildcard_warning_threshold: 10
   max_wildcard_handlers: 50
+  # v3.6.0: ITEM-RESILIENCE-01: Dead Letter Queue
+  dead_letter_queue:
+    enabled: true
+    max_size: 10000
+    persistence: true
+    storage_backend: "local"  # local | s3 | gcs
+    retry_policy:
+      max_retries: 3
+      base_delay_ms: 1000
+      exponential_backoff: true
+    cleanup:
+      max_age_hours: 72
+      auto_purge: true
+  sync_operations:
+    default_timeout_ms: 5000
+    max_timeout_ms: 30000
 
 # ITEM-ARCH-03: Distributed Locking
 locks:
@@ -486,3 +510,41 @@ guardian:
   log_decisions: true
   conflict_detection: true
   auto_resolve: true
+
+# ========================================
+# v3.6.0 Configuration Additions (Phase 15-17)
+# ========================================
+
+# ITEM-FEEDBACK-01: FeedbackLoop
+feedback:
+  enabled: true
+  min_samples_for_adjustment: 50
+  adjustment_threshold: 0.05  # Minimum change to trigger
+  max_allowed_degradation: 0.05  # 5%
+  learning_rate: 0.1
+  target_success_rate: 0.8
+  catalog_versioning:
+    enabled: true
+    max_versions: 100
+    retention_days: 365
+  dry_run:
+    enabled: true
+    history_window_days: 30
+
+# ITEM-FEEDBACK-02: SelfEvolutionEngine
+evolution:
+  enabled: true
+  min_success_rate_for_pattern: 0.8
+  min_sessions_for_pattern: 5
+  auto_propose_skills: false  # Require human approval
+  skill_draft_review: true
+
+# ITEM-SKILL-01: SkillLibrary
+skills:
+  catalog_path: "skills/catalog.yaml"
+  auto_register: true
+  synergy_tracking: true
+  min_applicable_to: 2  # Each skill applicable to >= 2 tasks
+  validation:
+    on_startup: true
+    strict_mode: false

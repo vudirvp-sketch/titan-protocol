@@ -39,6 +39,7 @@ from queue import Queue, Full
 
 if TYPE_CHECKING:
     from ..state.event_journal import EventJournal
+    from .dead_letter_queue import DeadLetterQueue, DLQStats, RetryResult
 
 
 # ITEM-OBS-02: Event type to severity mapping
@@ -238,6 +239,38 @@ class Event:
         return f"{marker} [{self.event_type}] {self.severity.name if self.severity else 'UNKNOWN'}"
 
 
+@dataclass
+class SyncResult:
+    """
+    Result of synchronous event dispatch.
+
+    ITEM-RESILIENCE-02: Captures results from emit_sync() for inline operations.
+    """
+    event_id: str
+    completed: bool = False
+    timeout: bool = False
+    handler_results: List[Dict[str, Any]] = field(default_factory=list)
+    total_ms: int = 0
+    error: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "event_id": self.event_id,
+            "completed": self.completed,
+            "timeout": self.timeout,
+            "handler_results": self.handler_results,
+            "total_ms": self.total_ms,
+            "error": self.error
+        }
+
+    @property
+    def success(self) -> bool:
+        """Returns True if completed without timeout and all handlers succeeded."""
+        return self.completed and not self.timeout and all(
+            r.get("success", False) for r in self.handler_results
+        )
+
+
 # ITEM-OBS-02: Dispatch behavior configuration
 class DispatchBehavior(Enum):
     """How events should be dispatched based on severity."""
@@ -321,6 +354,11 @@ class EventBus:
         self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="eventbus-")
         self._dropped_debug_count = 0
         self._async_enabled = self.config.get("async_enabled", True)
+        # ITEM-RESILIENCE-02: Sync emit counter
+        self._sync_emit_count = 0
+
+        # ITEM-RESILIENCE-01: Dead Letter Queue
+        self._dlq: Optional['DeadLetterQueue'] = None
 
         # Minimum severity to dispatch (for filtering)
         self._min_severity = self._parse_min_severity(
@@ -643,6 +681,89 @@ class EventBus:
         self.emit(event)
         return event
 
+    def emit_sync(self, event: Event, timeout_ms: int = 5000) -> 'SyncResult':
+        """
+        Sync dispatch with blocking until completion or timeout.
+
+        ITEM-RESILIENCE-02: For inline operations that need synchronous responses.
+        Used for inline validation, immediate feedback, and low-latency operations.
+
+        Args:
+            event: Event to emit
+            timeout_ms: Maximum time to wait in milliseconds (default: 5000)
+
+        Returns:
+            SyncResult with handler results and timing info
+        """
+        import time
+
+        self._sync_emit_count += 1
+        result = SyncResult(event_id=event.event_id)
+        start_time = time.time()
+        timeout_seconds = timeout_ms / 1000.0
+
+        # Write to journal if available
+        if self._journal:
+            self._journal.append(
+                event=event.to_dict(),
+                state_hash="",
+                sync=True
+            )
+
+        # Record in history
+        self._event_history.append(event)
+        if len(self._event_history) > self._max_history:
+            self._event_history = self._event_history[-self._max_history:]
+
+        # Sync dispatch with timeout
+        handlers = self._get_handlers(event.event_type)
+
+        for handler in handlers:
+            remaining_ms = timeout_ms - int((time.time() - start_time) * 1000)
+            if remaining_ms <= 0:
+                result.timeout = True
+                result.error = "Timeout exceeded before all handlers completed"
+                break
+
+            try:
+                handler_result = handler(event)
+                result.handler_results.append({
+                    "handler": getattr(handler, '__name__', str(handler)),
+                    "result": handler_result,
+                    "success": True
+                })
+            except Exception as e:
+                result.handler_results.append({
+                    "handler": getattr(handler, '__name__', str(handler)),
+                    "error": str(e),
+                    "success": False
+                })
+
+        # Also dispatch to severity handlers
+        for handler in self._severity_handlers.get(event.severity, []):
+            remaining_ms = timeout_ms - int((time.time() - start_time) * 1000)
+            if remaining_ms <= 0:
+                result.timeout = True
+                break
+
+            try:
+                handler(event)
+                result.handler_results.append({
+                    "handler": getattr(handler, '__name__', str(handler)),
+                    "success": True
+                })
+            except Exception as e:
+                result.handler_results.append({
+                    "handler": getattr(handler, '__name__', str(handler)),
+                    "error": str(e),
+                    "success": False
+                })
+
+        result.completed = True
+        result.total_ms = int((time.time() - start_time) * 1000)
+
+        return result
+
     def _safe_dispatch(self, handler: Callable, event: Event) -> None:
         """Dispatch with failure handling."""
         try:
@@ -651,9 +772,19 @@ class EventBus:
             self._handle_handler_failure(handler, e, event)
 
     def _handle_handler_failure(self, handler: Callable, error: Exception, event: Event) -> None:
-        """Handle handler failure with escalation."""
+        """Handle handler failure with escalation and DLQ integration."""
         handler_name = getattr(handler, '__name__', str(handler))
         self._logger.error(f"Handler {handler_name} failed: {error}\n{traceback.format_exc()}")
+
+        # ITEM-RESILIENCE-01: Enqueue to DLQ if available
+        dlq_id = None
+        if self._dlq is not None:
+            dlq_id = self._dlq.enqueue(event, error, {
+                "handler": handler_name,
+                "event_type": event.event_type
+            })
+            event.data["dlq_id"] = dlq_id
+            self._logger.info(f"Event {event.event_id} enqueued to DLQ: {dlq_id}")
 
         # Emit failure event
         failure_event = Event(
@@ -664,7 +795,8 @@ class EventBus:
                 "original_event_id": event.event_id,
                 "error": str(error),
                 "error_type": type(error).__name__,
-                "traceback": traceback.format_exc()
+                "traceback": traceback.format_exc(),
+                "dlq_id": dlq_id
             },
             severity=EventSeverity.CRITICAL,
             source="EventBus"
@@ -720,6 +852,75 @@ class EventBus:
         self._journal = journal
         self._logger.info("Event journal attached to EventBus")
 
+    def set_dlq(self, dlq: 'DeadLetterQueue') -> None:
+        """
+        ITEM-RESILIENCE-01: Set the Dead Letter Queue.
+
+        Args:
+            dlq: DeadLetterQueue instance
+        """
+        self._dlq = dlq
+        self._logger.info("Dead Letter Queue attached to EventBus")
+
+    def retry_dlq_event(self, dlq_event_id: str) -> 'RetryResult':
+        """
+        ITEM-RESILIENCE-01: Retry a failed event from the DLQ.
+
+        Args:
+            dlq_event_id: ID of the failed event in DLQ
+
+        Returns:
+            RetryResult from the DLQ
+
+        Raises:
+            RuntimeError: If DLQ is not configured
+            ValueError: If event not found
+        """
+        if not self._dlq:
+            raise RuntimeError("Dead Letter Queue not configured")
+
+        from .dead_letter_queue import RetryResult
+
+        failed_event = self._dlq.get_event(dlq_event_id)
+        if not failed_event:
+            raise ValueError(f"Event {dlq_event_id} not found in DLQ")
+
+        result = self._dlq.retry(dlq_event_id)
+
+        if result.success:
+            # Re-emit the original event
+            self.emit(failed_event.original_event)
+            self._logger.info(f"Successfully retried DLQ event: {dlq_event_id}")
+        else:
+            self._logger.warning(f"DLQ retry failed: {result.error_message}")
+
+        return result
+
+    def _recover_dlq_events(self) -> int:
+        """
+        ITEM-RESILIENCE-01: Recover events from DLQ on startup.
+
+        Returns:
+            Number of events recovered
+        """
+        if not self._dlq:
+            return 0
+
+        pending = self._dlq._load_pending()
+        recovered = 0
+
+        for failed_event in pending:
+            if failed_event.can_retry():
+                result = self._dlq.retry(failed_event.event_id)
+                if result.success:
+                    self.emit(failed_event.original_event)
+                    recovered += 1
+
+        if recovered > 0:
+            self._logger.info(f"Recovered {recovered} events from DLQ")
+
+        return recovered
+
     def get_journal(self) -> Optional['EventJournal']:
         """Get the current event journal."""
         return self._journal
@@ -751,11 +952,17 @@ class EventBus:
             "wildcard_handler_count": len(self._handlers.get("*", [])),
             "wildcard_warning_threshold": self._wildcard_warning_threshold,
             "max_wildcard_handlers": self._max_wildcard_handlers,
+            # ITEM-RESILIENCE-02: Sync operation metrics
+            "sync_emit_count": self._sync_emit_count,
         }
 
         # Add journal stats if available
         if self._journal:
             stats["journal"] = self._journal.get_stats()
+
+        # ITEM-RESILIENCE-01: Add DLQ stats if available
+        if self._dlq is not None:
+            stats["dlq"] = self._dlq.get_stats().to_dict()
 
         return stats
 
