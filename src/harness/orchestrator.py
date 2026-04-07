@@ -4,13 +4,25 @@ Orchestrator for TITAN FUSE Protocol.
 Provides mode-specific gate behavior and execution coordination.
 
 Author: TITAN FUSE Team
-Version: 3.2.3
+Version: 3.3.0
+
+ITEM-SEC-04: Secret scanning integrated with GATE-00
 """
 
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from enum import Enum
+from pathlib import Path
 import logging
+
+# ITEM-SEC-04: Import secret scanner for GATE-00
+try:
+    from security.secret_scanner import SecretScanner, run_secret_scan
+    SECRET_SCAN_AVAILABLE = True
+except ImportError:
+    SECRET_SCAN_AVAILABLE = False
+    SecretScanner = None
+    run_secret_scan = None
 
 
 class ExecutionMode(Enum):
@@ -244,7 +256,8 @@ class Orchestrator:
         details = {"gate": gate_id, "checks": []}
         
         if gate_id == "GATE-00":
-            # GATE-00: NAV_MAP exists, all chunks indexed
+            # ITEM-SEC-04: GATE-00 now includes secret scanning
+            # Original: NAV_MAP exists, all chunks indexed
             has_source = session.get("source_file") is not None
             has_chunks = len(session.get("chunks", {})) > 0
             
@@ -259,7 +272,54 @@ class Orchestrator:
                 "message": f"{len(session.get('chunks', {}))} chunks indexed" if has_chunks else "No chunks"
             })
             
-            passed = has_source and has_chunks
+            # ITEM-SEC-04: Secret scanning check
+            secrets_ok = True
+            secrets_findings = []
+            
+            if SECRET_SCAN_AVAILABLE and self.config.get('security', {}).get('secrets_scan', True):
+                inputs_dir = session.get("inputs_dir") or (self.repo_root / "inputs" if self.repo_root else Path("inputs"))
+                
+                if isinstance(inputs_dir, str):
+                    inputs_dir = Path(inputs_dir)
+                
+                if inputs_dir.exists():
+                    # Run secret scan
+                    scan_result = run_secret_scan(inputs_dir, self.config)
+                    
+                    secrets_findings = scan_result.get('findings', [])
+                    secrets_ok = scan_result.get('secrets_found', 0) == 0
+                    
+                    details["checks"].append({
+                        "name": "secret_scan",
+                        "passed": secrets_ok,
+                        "message": f"Secret scan: {scan_result.get('secrets_found', 0)} potential secrets found"
+                    })
+                    
+                    # Emit gap tag if secrets found
+                    if not secrets_ok:
+                        self._logger.warning(
+                            "[gap: secrets_detected_in_inputs] "
+                            f"Found {scan_result.get('secrets_found', 0)} potential secrets in inputs/"
+                        )
+                        
+                        # Check if blocked by config
+                        if self.config.get('security', {}).get('fail_on_detection', True):
+                            details["secrets_blocked"] = True
+                            details["findings"] = secrets_findings[:5]  # Limit to first 5
+                else:
+                    details["checks"].append({
+                        "name": "secret_scan",
+                        "passed": True,
+                        "message": "No inputs directory to scan"
+                    })
+            else:
+                details["checks"].append({
+                    "name": "secret_scan",
+                    "passed": True,
+                    "message": "Secret scanning not available or disabled"
+                })
+            
+            passed = has_source and has_chunks and secrets_ok
             details["status"] = "PASS" if passed else "FAIL"
             return passed, details
             

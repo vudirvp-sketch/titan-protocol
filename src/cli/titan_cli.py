@@ -656,6 +656,146 @@ class TitanCLI:
             "artifacts": result.get("artifacts", [])
         }, success=result.get("success", False))
 
+    def cmd_audit_verify(self, audit_path: Optional[str] = None,
+                         public_key: Optional[str] = None) -> int:
+        """
+        Verify audit trail integrity and signatures.
+
+        ITEM-SEC-05: Audit verification command.
+
+        Args:
+            audit_path: Path to audit trail file (uses default if not provided)
+            public_key: Optional public key hex for signature verification
+
+        Returns:
+            Exit code (0 if valid)
+        """
+        # Determine audit path
+        if audit_path:
+            audit_file = Path(audit_path)
+        else:
+            audit_file = self.repo_root / ".titan" / "audit_trail.json"
+
+        if not audit_file.exists():
+            return self._output({
+                "command": "audit-verify",
+                "error": f"Audit trail not found: {audit_file}"
+            }, success=False)
+
+        try:
+            with open(audit_file) as f:
+                audit_data = json.load(f)
+        except json.JSONDecodeError as e:
+            return self._output({
+                "command": "audit-verify",
+                "error": f"Invalid audit trail JSON: {e}"
+            }, success=False)
+
+        results = {
+            "file": str(audit_file),
+            "valid": True,
+            "errors": [],
+            "warnings": [],
+            "events_checked": 0,
+            "signatures_verified": 0,
+            "signatures_failed": 0
+        }
+
+        # Import audit modules
+        try:
+            from events.audit_trail import AuditTrail
+            from events.audit_signer import AuditSigner, verify_audit_event
+            AUDIT_AVAILABLE = True
+        except ImportError:
+            AUDIT_AVAILABLE = False
+
+        events = audit_data.get("events", [])
+        results["events_checked"] = len(events)
+
+        if not events:
+            return self._output({
+                "command": "audit-verify",
+                **results,
+                "message": "No events to verify"
+            })
+
+        # Verify hash chain integrity
+        for i, event in enumerate(events):
+            # Check required fields
+            if "event_hash" not in event:
+                results["errors"].append({
+                    "type": "missing_hash",
+                    "event_index": i
+                })
+                results["valid"] = False
+                continue
+
+            # Check chain linkage
+            if i > 0:
+                expected_previous = events[i - 1].get("event_hash")
+                actual_previous = event.get("previous_hash")
+                if expected_previous != actual_previous:
+                    results["errors"].append({
+                        "type": "chain_broken",
+                        "event_index": i,
+                        "expected": expected_previous,
+                        "actual": actual_previous
+                    })
+                    results["valid"] = False
+
+            # Verify signature if present
+            if "signature" in event and AUDIT_AVAILABLE:
+                try:
+                    pk = bytes.fromhex(public_key) if public_key else None
+                    if verify_audit_event(event, pk):
+                        results["signatures_verified"] += 1
+                    else:
+                        results["signatures_failed"] += 1
+                        results["warnings"].append({
+                            "type": "signature_invalid",
+                            "event_index": i,
+                            "event_id": event.get("event_id")
+                        })
+                except Exception as e:
+                    results["warnings"].append({
+                        "type": "signature_error",
+                        "event_index": i,
+                        "error": str(e)
+                    })
+
+        # Verify Merkle root
+        if AUDIT_AVAILABLE:
+            try:
+                trail = AuditTrail()
+                trail.import_trail(audit_data)
+                integrity = trail.verify_integrity()
+
+                if not integrity.get("valid"):
+                    results["errors"].extend(integrity.get("errors", []))
+                    results["valid"] = False
+
+                results["merkle_root"] = trail.get_merkle_root()
+            except Exception as e:
+                results["warnings"].append({
+                    "type": "merkle_verification_error",
+                    "error": str(e)
+                })
+
+        # Summary
+        results["summary"] = {
+            "status": "PASS" if results["valid"] else "FAIL",
+            "events": results["events_checked"],
+            "signatures_ok": results["signatures_verified"],
+            "signatures_failed": results["signatures_failed"],
+            "errors": len(results["errors"]),
+            "warnings": len(results["warnings"])
+        }
+
+        return self._output({
+            "command": "audit-verify",
+            **results
+        }, success=results["valid"])
+
 
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser for TITAN CLI."""
@@ -736,6 +876,11 @@ def create_parser() -> argparse.ArgumentParser:
                                choices=["json", "markdown", "html"])
     export_parser.add_argument("--output", "-o", help="Output directory")
 
+    # ITEM-SEC-05: audit-verify command
+    audit_parser = subparsers.add_parser("audit-verify", help="Verify audit trail integrity")
+    audit_parser.add_argument("audit_path", nargs="?", help="Path to audit trail file")
+    audit_parser.add_argument("--public-key", "-k", help="Public key hex for signature verification")
+
     return parser
 
 
@@ -785,6 +930,10 @@ def main() -> int:
         "export": lambda: cli.cmd_export(
             format=args.format,
             output_dir=args.output
+        ),
+        "audit-verify": lambda: cli.cmd_audit_verify(
+            audit_path=getattr(args, 'audit_path', None),
+            public_key=getattr(args, 'public_key', None)
         )
     }
 

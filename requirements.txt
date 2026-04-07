@@ -1,8 +1,14 @@
 # TITAN FUSE Protocol - Requirements
-# Version: 3.2.0
+# Version: 3.3.0
 
 # Core dependencies
 pyyaml>=6.0
+
+# ITEM-SEC-01: WASM sandbox support (optional)
+# wasmtime>=8.0.0  # Uncomment for WASM sandbox
+
+# ITEM-SEC-02: Zstd compression for checkpoints
+zstandard>=0.21.0
 
 # Testing
 pytest>=7.0
@@ -19,3 +25,8 @@ mypy>=1.0
 
 # Optional: Metrics export
 # prometheus-client>=0.17
+
+# ITEM-SEC-03: Secret store backends (optional)
+# keyring>=24.0  # For keyring backend
+# hvac>=1.0  # For HashiCorp Vault backend
+# pynacl>=1.5  # For Ed25519 signatures (ITEM-SEC-05)

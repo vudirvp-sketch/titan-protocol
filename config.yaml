@@ -47,6 +47,9 @@ checkpoint:
   serialization: json_zstd
   compression: zstd
   security: safe
+  # ITEM-SEC-03: Checkpoint encryption
+  encryption: aes-256-gcm
+  encryption_key_path: .titan/encryption_key
 output:
   directory: outputs/
   clean_mode: true
@@ -90,6 +93,12 @@ validators:
   disabled: []
   # ITEM-070: Sandbox for validators
   sandbox_enabled: true
+  # ITEM-SEC-01: Sandbox type selection
+  sandbox_type: subprocess  # Options: wasm, gvisor, subprocess, none
+  sandbox_config:
+    memory_limit_mb: 128
+    timeout_ms: 10000
+    max_output_size: 1048576
 logging:
   level: info
   file: null
@@ -131,8 +140,30 @@ security:
   # ITEM-115: Enable secret scanning
   secrets_scan: true
   secrets_baseline: .secrets.baseline
+  fail_on_detection: true
   workspace_path: null
   redos_timeout_ms: 1000
+
+# ITEM-SEC-03: Secret store configuration
+secrets:
+  backend: env  # Options: keyring, vault, env
+  # Backend-specific config:
+  # keyring:
+  #   service_name: titan-protocol
+  # vault:
+  #   url: http://localhost:8200
+  #   token: null  # Use VAULT_TOKEN env
+  #   mount_point: secret
+  # env:
+  prefix: TITAN_SECRET_
+
+# ITEM-SEC-05: Audit trail configuration
+audit:
+  enabled: true
+  signing_key_path: .titan/audit_key
+  trail_path: .titan/audit_trail.json
+  sign_critical_events: true
+
 chunking_limits:
   max_chars_per_chunk: 150000
   max_tokens_per_chunk: 30000
