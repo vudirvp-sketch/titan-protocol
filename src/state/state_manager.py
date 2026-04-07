@@ -385,10 +385,11 @@ class SessionState:
     - Budget and token management
     - Assessment scores
     - Cursor tracking
+    - Model version fingerprint (ITEM-ARCH-15)
     """
     # Session identification
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    protocol_version: str = "3.2.3"
+    protocol_version: str = "3.4.0"
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
 
@@ -433,6 +434,11 @@ class SessionState:
     # Cursor tracking
     cursor_tracker: CursorTracker = field(default_factory=CursorTracker)
     cursor_hash: Optional[str] = None  # ITEM-STOR-05: SHA-256 of last patch applied
+
+    # ITEM-ARCH-15: Model version fingerprint
+    model_version_fingerprint: Optional[str] = None  # Fingerprint from ModelRouter
+    root_model_fingerprint: Optional[str] = None
+    leaf_model_fingerprint: Optional[str] = None
 
     # Reasoning steps
     reasoning_steps: List[ReasoningStep] = field(default_factory=list)
@@ -529,6 +535,10 @@ class SessionState:
             "assessment_score": self.assessment_score.to_dict() if self.assessment_score else None,
             "cursor_hash": self.cursor_hash,  # ITEM-STOR-05: For drift detection
             "cursor_state": self.cursor_tracker.get_state(),
+            # ITEM-ARCH-15: Model version fingerprints for reproducibility
+            "model_version_fingerprint": self.model_version_fingerprint,
+            "root_model_fingerprint": self.root_model_fingerprint,
+            "leaf_model_fingerprint": self.leaf_model_fingerprint,
             "gaps": self.gaps,
             "updated_at": self.updated_at
         }
@@ -562,6 +572,39 @@ class SessionState:
         """
         current_hash = self.compute_cursor_hash()
         return self.cursor_tracker.verify_cursor(expected_hash)
+
+    def set_model_fingerprints(self, fingerprints: Dict[str, str]) -> None:
+        """
+        ITEM-ARCH-15: Set model version fingerprints from ModelRouter.
+
+        Should be called at session start to record the model versions
+        being used for this session.
+
+        Args:
+            fingerprints: Dict with 'root' and 'leaf' fingerprints from ModelRouter
+        """
+        self.root_model_fingerprint = fingerprints.get("root")
+        self.leaf_model_fingerprint = fingerprints.get("leaf")
+        # Combined fingerprint for quick comparison
+        if self.root_model_fingerprint and self.leaf_model_fingerprint:
+            combined = f"{self.root_model_fingerprint}:{self.leaf_model_fingerprint}"
+            self.model_version_fingerprint = hashlib.sha256(
+                combined.encode()
+            ).hexdigest()[:32]
+        self._update_timestamp()
+
+    def get_model_fingerprints(self) -> Dict[str, Optional[str]]:
+        """
+        ITEM-ARCH-15: Get stored model fingerprints.
+
+        Returns:
+            Dict with root, leaf, and combined fingerprints
+        """
+        return {
+            "root": self.root_model_fingerprint,
+            "leaf": self.leaf_model_fingerprint,
+            "combined": self.model_version_fingerprint
+        }
 
     def to_json(self) -> str:
         """Serialize to JSON."""

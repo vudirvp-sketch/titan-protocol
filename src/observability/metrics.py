@@ -5,6 +5,11 @@ Prometheus-compatible metrics collection for monitoring.
 Supports counters, gauges, and histograms.
 
 TASK-002: Advanced Observability & Transparency Layer
+
+ITEM-OBS-03: Metrics Schema Versioning
+- schema_version field in all metrics output
+- Version validation and migration support
+- Backward compatibility with older metrics formats
 """
 
 import json
@@ -16,6 +21,23 @@ from enum import Enum
 from pathlib import Path
 from collections import defaultdict
 import threading
+
+
+# ITEM-OBS-03: Current metrics schema version
+METRICS_SCHEMA_VERSION = "3.4.0"
+
+# ITEM-OBS-03: Supported schema versions for migration
+SUPPORTED_VERSIONS = ["unknown", "3.2.0", "3.3.0", "3.4.0"]
+
+
+class UnsupportedSchemaVersionError(Exception):
+    """ITEM-OBS-03: Raised when unsupported metrics schema version is encountered."""
+    def __init__(self, version: str):
+        self.version = version
+        super().__init__(
+            f"Unsupported metrics schema version: {version}. "
+            f"Supported versions: {SUPPORTED_VERSIONS}"
+        )
 
 
 class MetricType(Enum):
@@ -355,8 +377,13 @@ class MetricsCollector:
         return "\n".join(lines)
 
     def export_json(self) -> Dict[str, Any]:
-        """Export all metrics as JSON."""
+        """
+        Export all metrics as JSON.
+
+        ITEM-OBS-03: Includes schema_version for format detection and migration.
+        """
         return {
+            "schema_version": METRICS_SCHEMA_VERSION,  # ITEM-OBS-03
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "namespace": self.namespace,
             "uptime_seconds": time.time() - self._start_time,
@@ -435,3 +462,61 @@ def observe_histogram(name: str, value: float) -> None:
     histogram = get_metrics().get_histogram(name)
     if histogram:
         histogram.observe(value)
+
+
+def validate_schema_version(data: Dict) -> bool:
+    """
+    ITEM-OBS-03: Validate metrics schema version.
+
+    Args:
+        data: Metrics data dictionary
+
+    Returns:
+        True if version is supported
+
+    Raises:
+        UnsupportedSchemaVersionError: If version is not supported
+    """
+    version = data.get("schema_version", "unknown")
+    if version not in SUPPORTED_VERSIONS:
+        raise UnsupportedSchemaVersionError(version)
+    return True
+
+
+def load_metrics_with_migration(path: Path) -> Dict[str, Any]:
+    """
+    ITEM-OBS-03: Load metrics from file with automatic migration.
+
+    Loads metrics data and migrates to current schema version if needed.
+
+    Args:
+        path: Path to metrics JSON file
+
+    Returns:
+        Metrics data at current schema version
+    """
+    path = Path(path)
+    if not path.exists():
+        return {}
+
+    with open(path, 'r') as f:
+        data = json.load(f)
+
+    version = data.get("schema_version", "unknown")
+
+    # Already current version
+    if version == METRICS_SCHEMA_VERSION:
+        return data
+
+    # Need migration - import here to avoid circular dependency
+    try:
+        from ..schema.migrations import migrate_metrics
+        return migrate_metrics(data, version)
+    except ImportError:
+        # Migration module not available, return as-is with warning
+        import logging
+        logging.getLogger(__name__).warning(
+            f"[gap: metrics_migration_unavailable] "
+            f"Cannot migrate metrics from version {version}"
+        )
+        return data

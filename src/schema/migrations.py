@@ -2,12 +2,17 @@
 Schema migration framework for TITAN Protocol checkpoints.
 
 Migrations are applied in order when checkpoint schema_version < current.
+
+ITEM-OBS-03: Added metrics schema migration support.
 """
 
 from typing import Dict, List, Callable
 
 # Current schema version
-CURRENT_SCHEMA_VERSION = "3.2.2"
+CURRENT_SCHEMA_VERSION = "3.4.0"
+
+# Current metrics schema version (ITEM-OBS-03)
+CURRENT_METRICS_SCHEMA_VERSION = "3.4.0"
 
 # Migration registry: version -> migration function
 MIGRATIONS: Dict[str, Callable] = {}
@@ -89,6 +94,21 @@ def migrate_321_to_322(checkpoint: Dict) -> Dict:
     return checkpoint
 
 
+@migration("3.2.2")
+def migrate_322_to_340(checkpoint: Dict) -> Dict:
+    """Migrate from 3.2.2 to 3.4.0."""
+    # ITEM-ARCH-15: Add model version fingerprint fields
+    if "model_version_fingerprint" not in checkpoint:
+        checkpoint["model_version_fingerprint"] = None
+    if "root_model_fingerprint" not in checkpoint:
+        checkpoint["root_model_fingerprint"] = None
+    if "leaf_model_fingerprint" not in checkpoint:
+        checkpoint["leaf_model_fingerprint"] = None
+
+    checkpoint["protocol_version"] = "3.4.0"
+    return checkpoint
+
+
 def _extract_severity(gap_str: str) -> str:
     """Extract severity from gap string."""
     import re
@@ -106,17 +126,100 @@ def _extract_reason(gap_str: str) -> str:
 def apply_migrations(checkpoint: Dict, target_version: str = CURRENT_SCHEMA_VERSION) -> Dict:
     """Apply all migrations up to target version."""
     current = checkpoint.get("protocol_version", "3.2.0")
-    
+
     # Define migration order
-    version_order = ["3.2.0", "3.2.1", "3.2.2"]
-    
+    version_order = ["3.2.0", "3.2.1", "3.2.2", "3.4.0"]
+
     start_idx = version_order.index(current) if current in version_order else 0
     end_idx = version_order.index(target_version) if target_version in version_order else len(version_order)
-    
+
     for i in range(start_idx, end_idx):
         from_ver = version_order[i]
         if from_ver in MIGRATIONS:
             checkpoint = MIGRATIONS[from_ver](checkpoint)
             print(f"Applied migration: {from_ver} → {checkpoint['protocol_version']}")
-    
+
     return checkpoint
+
+
+# ITEM-OBS-03: Metrics migration functions
+def migrate_metrics(data: Dict, from_version: str) -> Dict:
+    """
+    ITEM-OBS-03: Migrate metrics data to current schema version.
+
+    Args:
+        data: Metrics data dictionary
+        from_version: Version of the input data
+
+    Returns:
+        Metrics data at current schema version
+    """
+    if from_version in ["unknown", "3.2.0", "3.3.0"]:
+        data = _migrate_metrics_v32_to_v34(data)
+
+    data["schema_version"] = CURRENT_METRICS_SCHEMA_VERSION
+    return data
+
+
+def _migrate_metrics_v32_to_v34(data: Dict) -> Dict:
+    """
+    Migrate metrics from v3.2.x format to v3.4.0.
+
+    Changes:
+    - Add schema_version field
+    - Ensure all metric values have proper structure
+    - Add namespace if missing
+    """
+    # Ensure namespace exists
+    if "namespace" not in data:
+        data["namespace"] = "titan"
+
+    # Ensure timestamp exists
+    if "timestamp" not in data:
+        from datetime import datetime
+        data["timestamp"] = datetime.utcnow().isoformat() + "Z"
+
+    # Migrate counters structure if needed
+    if "counters" in data:
+        migrated_counters = {}
+        for name, values in data["counters"].items():
+            if isinstance(values, list):
+                migrated_counters[name] = values
+            elif isinstance(values, dict):
+                # Old format: single value
+                migrated_counters[name] = [{
+                    "value": values.get("value", 0),
+                    "timestamp": values.get("timestamp", data.get("timestamp")),
+                    "labels": values.get("labels", {})
+                }]
+        data["counters"] = migrated_counters
+
+    # Migrate gauges structure if needed
+    if "gauges" in data:
+        migrated_gauges = {}
+        for name, values in data["gauges"].items():
+            if isinstance(values, list):
+                migrated_gauges[name] = values
+            elif isinstance(values, dict):
+                migrated_gauges[name] = [{
+                    "value": values.get("value", 0),
+                    "timestamp": values.get("timestamp", data.get("timestamp")),
+                    "labels": values.get("labels", {})
+                }]
+        data["gauges"] = migrated_gauges
+
+    # Migrate histograms structure if needed
+    if "histograms" in data:
+        for name, hist_data in data["histograms"].items():
+            if isinstance(hist_data, dict):
+                # Ensure required fields
+                if "sum" not in hist_data:
+                    hist_data["sum"] = 0.0
+                if "count" not in hist_data:
+                    hist_data["count"] = 0
+                if "average" not in hist_data:
+                    count = hist_data.get("count", 0)
+                    total = hist_data.get("sum", 0.0)
+                    hist_data["average"] = total / count if count > 0 else 0.0
+
+    return data

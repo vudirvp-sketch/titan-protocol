@@ -82,6 +82,9 @@ approval:
 metrics:
   enabled: true
   output_file: outputs/metrics.json
+  # ITEM-OBS-03: Schema versioning
+  schema_version: "3.4.0"
+  migration_enabled: true
   prometheus:
     enabled: false
     port: 9090
@@ -228,6 +231,11 @@ event_journal:
   path: .titan/event_journal.jsonl
   max_size_mb: 100
 
+# ITEM-CONFLICT-J: EventBus Wildcard Performance
+events:
+  wildcard_warning_threshold: 10
+  max_wildcard_handlers: 50
+
 # ITEM-ARCH-03: Distributed Locking
 locks:
   backend: file  # Options: file, redis, etcd
@@ -333,8 +341,10 @@ causal_ordering:
 
 # ITEM-ARCH-15: Model Version Fingerprint
 llm:
-  strict_version_check: false  # Raise error on model version mismatch
-  fingerprint_storage: state  # Where to store fingerprint
+  strict_version_check: false  # Raise error on model version mismatch in deterministic mode
+  version_tracking:
+    enabled: true
+    warn_only: false  # If true, just warn instead of blocking on mismatch
 
 # ITEM-ARCH-19: Semantic Tainting
 tainting:

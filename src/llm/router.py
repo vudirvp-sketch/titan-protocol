@@ -8,8 +8,13 @@ ITEM-GATE-05: Model Downgrade Determinism
 Controls model downgrade behavior based on execution mode.
 In deterministic mode, downgrade is blocked to ensure reproducibility.
 
+ITEM-ARCH-15: Model Version Fingerprint
+Tracks provider-side model version to ensure reproducibility.
+Different model versions may produce different outputs,
+breaking reproducibility guarantees.
+
 Author: TITAN FUSE Team
-Version: 3.3.0
+Version: 3.4.0
 """
 
 from typing import Dict, List, Optional, Any, Literal
@@ -17,6 +22,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 import logging
+import hashlib
 
 
 class ExecutionStrictness(Enum):
@@ -36,15 +42,65 @@ class DowngradeViolationError(Exception):
     pass
 
 
+class ModelVersionError(Exception):
+    """
+    ITEM-ARCH-15: Raised when model version fingerprint mismatch detected.
+
+    This error is raised in deterministic mode when the model version
+    differs from the one used in a previous session, which would break
+    reproducibility guarantees.
+
+    Attributes:
+        current_fingerprint: The fingerprint of the current model version
+        stored_fingerprint: The fingerprint stored from the previous session
+    """
+    def __init__(self, current_fingerprint: str, stored_fingerprint: str):
+        self.current_fingerprint = current_fingerprint
+        self.stored_fingerprint = stored_fingerprint
+        super().__init__(
+            f"Model version mismatch: current={current_fingerprint[:16]}..., "
+            f"stored={stored_fingerprint[:16]}... "
+            f"Use --fast or --guided mode to allow version drift, "
+            f"or update the model version."
+        )
+
+
 @dataclass
 class ModelConfig:
-    """Configuration for a specific model."""
+    """
+    Configuration for a specific model.
+
+    ITEM-ARCH-15: Added version tracking for reproducibility.
+    - version: Model version identifier (e.g., "2024-01-15", "v1.2.3")
+    - version_fingerprint: SHA-256 hash of provider:model:version
+    """
     provider: str
     model: str
     max_tokens: int = 4096
     fallback: List[str] = field(default_factory=list)
     temperature: float = 0.7
     supports_streaming: bool = True
+    # ITEM-ARCH-15: Version tracking fields
+    version: str = "unknown"  # e.g., "2024-01-15" or "v1.2.3"
+    version_fingerprint: str = field(default="", init=False)
+
+    def __post_init__(self):
+        """Compute fingerprint after initialization."""
+        if not self.version_fingerprint:
+            self.version_fingerprint = self.compute_fingerprint()
+
+    def compute_fingerprint(self) -> str:
+        """
+        ITEM-ARCH-15: Compute SHA-256 fingerprint of model configuration.
+
+        The fingerprint uniquely identifies the exact model version,
+        ensuring reproducibility across sessions.
+
+        Returns:
+            32-character hex string (first 32 chars of SHA-256)
+        """
+        data = f"{self.provider}:{self.model}:{self.version}"
+        return hashlib.sha256(data.encode()).hexdigest()[:32]
 
     def to_dict(self) -> Dict:
         return {
@@ -53,7 +109,9 @@ class ModelConfig:
             "max_tokens": self.max_tokens,
             "fallback": self.fallback,
             "temperature": self.temperature,
-            "supports_streaming": self.supports_streaming
+            "supports_streaming": self.supports_streaming,
+            "version": self.version,
+            "version_fingerprint": self.version_fingerprint
         }
 
     @classmethod
@@ -155,6 +213,12 @@ class ModelRouter:
         # ITEM-GATE-05: Downgrade control
         self.downgrade_allowed = config.get("model_downgrade_allowed", False)
         self.strictness = self._get_strictness_from_config()
+
+        # ITEM-ARCH-15: Version tracking configuration
+        llm_config = config.get("llm", {})
+        self.strict_version_check = llm_config.get("strict_version_check", False)
+        self.version_tracking_enabled = llm_config.get("version_tracking", {}).get("enabled", True)
+        self.version_warn_only = llm_config.get("version_tracking", {}).get("warn_only", False)
         
         # Triggers for fallback
         self.triggers = fb_config.get("triggers", {})
@@ -168,13 +232,17 @@ class ModelRouter:
             "fallback_calls": 0,
             "total_tokens": 0,
             "downgrade_attempts": 0,
-            "downgrade_blocks": 0
+            "downgrade_blocks": 0,
+            # ITEM-ARCH-15: Version tracking stats
+            "version_mismatches": 0,
+            "version_checks": 0
         }
 
         self._logger.info(
             f"ModelRouter initialized: root={self.root_model.model}, "
             f"leaf={self.leaf_model.model}, fallback_enabled={self.fallback_enabled}, "
-            f"downgrade_allowed={self.downgrade_allowed}, strictness={self.strictness.value}"
+            f"downgrade_allowed={self.downgrade_allowed}, strictness={self.strictness.value}, "
+            f"strict_version_check={self.strict_version_check}"
         )
     
     def _get_strictness_from_config(self) -> ExecutionStrictness:
@@ -204,9 +272,78 @@ class ModelRouter:
                 max_tokens=cfg.get("max_tokens", 4096),
                 fallback=cfg.get("fallback", []),
                 temperature=cfg.get("temperature", 0.7),
-                supports_streaming=cfg.get("supports_streaming", True)
+                supports_streaming=cfg.get("supports_streaming", True),
+                version=cfg.get("version", "unknown")  # ITEM-ARCH-15
             )
         return ModelConfig(provider="default", model="unknown")
+
+    def check_model_version(self, stored_fingerprint: str,
+                            model_type: str = "root") -> bool:
+        """
+        ITEM-ARCH-15: Check model version against stored fingerprint.
+
+        In deterministic mode, a mismatch raises ModelVersionError.
+        In other modes, a warning is logged and the operation continues.
+
+        Args:
+            stored_fingerprint: Fingerprint stored from previous session
+            model_type: "root" or "leaf" model to check
+
+        Returns:
+            True if versions match, False otherwise
+
+        Raises:
+            ModelVersionError: If strict_version_check=True and mismatch detected
+        """
+        if not self.version_tracking_enabled:
+            return True
+
+        self._usage_stats["version_checks"] += 1
+
+        model = self.root_model if model_type == "root" else self.leaf_model
+        current_fingerprint = model.version_fingerprint
+
+        if current_fingerprint == stored_fingerprint:
+            return True
+
+        # Mismatch detected
+        self._usage_stats["version_mismatches"] += 1
+
+        if self.strict_version_check and self.strictness == ExecutionStrictness.DETERMINISTIC:
+            self._logger.error(
+                f"[gap: model_version_mismatch] "
+                f"Model version changed: {model_type} model "
+                f"current={current_fingerprint[:16]}... vs "
+                f"stored={stored_fingerprint[:16]}... "
+                f"Reproducibility cannot be guaranteed."
+            )
+            raise ModelVersionError(current_fingerprint, stored_fingerprint)
+
+        # Log warning and continue
+        self._logger.warning(
+            f"[gap: model_version_mismatch] "
+            f"Model version changed: {model_type} model "
+            f"current={current_fingerprint[:16]}... vs "
+            f"stored={stored_fingerprint[:16]}... "
+            f"Continuing in {self.strictness.value} mode."
+        )
+        return False
+
+    def get_model_fingerprints(self) -> Dict[str, str]:
+        """
+        ITEM-ARCH-15: Get fingerprints for both models.
+
+        Returns:
+            Dict with 'root' and 'leaf' fingerprints
+        """
+        return {
+            "root": self.root_model.version_fingerprint,
+            "leaf": self.leaf_model.version_fingerprint,
+            "root_model": self.root_model.model,
+            "leaf_model": self.leaf_model.model,
+            "root_version": self.root_model.version,
+            "leaf_version": self.leaf_model.version
+        }
 
     def get_model_for_phase(self, phase: int) -> ModelConfig:
         """
@@ -423,7 +560,13 @@ class ModelRouter:
             },
             "downgrade_allowed": self.downgrade_allowed,
             "strictness": self.strictness.value,
-            "usage_stats": self._usage_stats
+            "usage_stats": self._usage_stats,
+            # ITEM-ARCH-15: Version tracking status
+            "version_tracking": {
+                "enabled": self.version_tracking_enabled,
+                "strict_check": self.strict_version_check,
+                "fingerprints": self.get_model_fingerprints()
+            }
         }
 
     def record_token_usage(self, tokens: int, phase: int) -> None:
@@ -439,6 +582,9 @@ class ModelRouter:
             "total_tokens": self._usage_stats["total_tokens"],
             "downgrade_attempts": self._usage_stats["downgrade_attempts"],
             "downgrade_blocks": self._usage_stats["downgrade_blocks"],
+            # ITEM-ARCH-15: Version tracking stats
+            "version_checks": self._usage_stats["version_checks"],
+            "version_mismatches": self._usage_stats["version_mismatches"],
             "fallback_rate": (
                 self._usage_stats["fallback_calls"] /
                 max(1, self._usage_stats["root_calls"] + self._usage_stats["leaf_calls"])

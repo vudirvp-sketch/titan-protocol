@@ -15,8 +15,14 @@ ITEM-OBS-02: Event Severity Filtering
 - Hybrid dispatch: sync CRITICAL/WARN, async INFO/DEBUG
 - May drop DEBUG events under load
 
+ITEM-CONFLICT-J: EventBus Wildcard Performance
+- Priority-based handler dispatch
+- Wildcard handlers at lowest priority (default 100)
+- Warning for excessive wildcard usage
+- Typed handlers run before wildcard handlers
+
 Author: TITAN FUSE Team
-Version: 3.3.0
+Version: 3.4.0
 """
 
 from dataclasses import dataclass, field
@@ -142,6 +148,28 @@ def get_severity_for_event(event_type: str) -> 'EventSeverity':
     return EVENT_SEVERITY_MAP.get(event_type, EventSeverity.INFO)
 
 
+# ITEM-CONFLICT-J: Handler entry with priority support
+@dataclass
+class HandlerEntry:
+    """
+    Handler entry with priority for ordered dispatch.
+
+    ITEM-CONFLICT-J: Priority-based handler ordering.
+    - Lower priority number = runs first
+    - Wildcard handlers default to priority 100 (lowest)
+    - registered_at tracks registration order for stable sorting
+    """
+    handler: Callable
+    priority: int = 10  # Lower = higher priority
+    registered_at: datetime = field(default_factory=datetime.utcnow)
+
+    def __lt__(self, other: 'HandlerEntry') -> bool:
+        """Compare by priority, then by registration time."""
+        if self.priority != other.priority:
+            return self.priority < other.priority
+        return self.registered_at < other.registered_at
+
+
 class EventSeverity(Enum):
     """Event severity levels determining dispatch behavior."""
     CRITICAL = 1  # GATE_FAIL, BUDGET_EXCEEDED - sync dispatch
@@ -243,7 +271,7 @@ class EventBus:
     Event bus with severity-based dispatch and handler failure escalation.
 
     Features:
-    - Type-specific handler subscription
+    - Type-specific handler subscription with priority
     - Severity-based handler subscription
     - Synchronous dispatch for CRITICAL events
     - Handler failure escalation with EVENT_HANDLER_FAILURE events
@@ -254,14 +282,22 @@ class EventBus:
     - INFO: Async, fire-and-forget
     - DEBUG: Async, may be dropped under load
 
+    ITEM-CONFLICT-J: Priority-based handler dispatch:
+    - Lower priority number runs first
+    - Wildcard handlers always at lowest priority (100+)
+    - Typed handlers run before wildcard handlers
+
     Usage:
         bus = EventBus()
 
-        # Subscribe to specific event type
-        bus.subscribe("GATE_FAIL", on_gate_fail)
+        # Subscribe to specific event type with priority
+        bus.subscribe("GATE_FAIL", on_gate_fail, priority=5)
 
         # Subscribe to all CRITICAL events
         bus.subscribe_severity(EventSeverity.CRITICAL, on_critical)
+
+        # Subscribe to all events (wildcard)
+        bus.subscribe("*", on_any_event)  # Priority defaults to 100
 
         # Emit event (severity auto-determined from event_type)
         bus.emit(Event("GATE_PASS", {"gate_id": "GATE-00"}))
@@ -270,7 +306,8 @@ class EventBus:
     def __init__(self, config: Dict = None, journal: 'EventJournal' = None):
         self.config = config or {}
         self._journal = journal  # ITEM-ARCH-02: Event journal for WAL
-        self._handlers: Dict[str, List[Callable]] = {}
+        # ITEM-CONFLICT-J: Store HandlerEntry instead of Callable
+        self._handlers: Dict[str, List[HandlerEntry]] = {}
         self._severity_handlers: Dict[EventSeverity, List[Callable]] = {}
         self._logger = logging.getLogger(__name__)
         self._handler_failure_action = self.config.get("handler_failure_action", "log")
@@ -289,6 +326,14 @@ class EventBus:
         self._min_severity = self._parse_min_severity(
             self.config.get("min_severity", "DEBUG")
         )
+
+        # ITEM-CONFLICT-J: Wildcard configuration
+        self._wildcard_warning_threshold = self.config.get(
+            "events", {}
+        ).get("wildcard_warning_threshold", 10)
+        self._max_wildcard_handlers = self.config.get(
+            "events", {}
+        ).get("max_wildcard_handlers", 50)
 
     def _parse_min_severity(self, severity_str: str) -> EventSeverity:
         """Parse minimum severity from config string."""
@@ -311,18 +356,84 @@ class EventBus:
         self._min_severity = severity
         self._logger.info(f"Minimum dispatch severity set to {severity.name}")
 
-    def subscribe(self, event_type: str, handler: Callable[[Event], None]) -> None:
+    def subscribe(self, event_type: str, handler: Callable[[Event], None],
+                  priority: int = 10) -> None:
         """
-        Subscribe handler to event type.
+        Subscribe handler to event type with priority.
+
+        ITEM-CONFLICT-J: Priority-based subscription.
+        - Lower priority number = runs first
+        - Wildcard ("*") handlers default to priority 100 (lowest)
+        - Typed handlers run before wildcard handlers
 
         Args:
             event_type: Event type to subscribe to (or "*" for all)
             handler: Function to call when event is emitted
+            priority: Handler priority (lower = higher priority, default 10)
         """
+        # ITEM-CONFLICT-J: Wildcard always at lowest priority
+        if event_type == "*":
+            priority = max(priority, 100)
+            self._check_wildcard_overload()
+
         if event_type not in self._handlers:
             self._handlers[event_type] = []
-        self._handlers[event_type].append(handler)
-        self._logger.debug(f"Subscribed handler to {event_type}")
+
+        entry = HandlerEntry(handler=handler, priority=priority)
+        self._handlers[event_type].append(entry)
+        self._logger.debug(
+            f"Subscribed handler to {event_type} with priority {priority}"
+        )
+
+    def _check_wildcard_overload(self) -> None:
+        """
+        ITEM-CONFLICT-J: Warn about excessive wildcard handler usage.
+
+        Too many wildcard handlers can degrade performance as they
+        receive all events and run at lowest priority.
+        """
+        wildcard_count = len(self._handlers.get("*", []))
+
+        if wildcard_count >= self._wildcard_warning_threshold:
+            self._logger.warning(
+                f"[warn: wildcard_handler_overload] "
+                f"{wildcard_count + 1} wildcard handlers registered. "
+                f"Consider using typed subscriptions for better performance."
+            )
+
+        if wildcard_count >= self._max_wildcard_handlers:
+            raise RuntimeError(
+                f"Maximum wildcard handlers ({self._max_wildcard_handlers}) exceeded. "
+                f"Use typed event subscriptions instead."
+            )
+
+    def _get_sorted_handlers(self, event_type: str) -> List[Callable]:
+        """
+        ITEM-CONFLICT-J: Get handlers sorted by priority.
+
+        Typed handlers run first (sorted by priority), then wildcard
+        handlers (always at priority 100+).
+
+        Args:
+            event_type: Event type to get handlers for
+
+        Returns:
+            List of handlers sorted by priority (lowest priority number first)
+        """
+        # Typed handlers first
+        typed_entries = self._handlers.get(event_type, [])
+        sorted_typed = sorted(typed_entries, key=lambda e: (e.priority, e.registered_at))
+
+        # Wildcard handlers last (already at priority 100+)
+        wildcard_entries = self._handlers.get("*", [])
+        sorted_wildcard = sorted(wildcard_entries, key=lambda e: (e.priority, e.registered_at))
+
+        # Combine: typed first, wildcard last
+        return [e.handler for e in sorted_typed] + [e.handler for e in sorted_wildcard]
+
+    def _get_handlers(self, event_type: str) -> List[Callable]:
+        """Get handlers for event type, sorted by priority with wildcard last."""
+        return self._get_sorted_handlers(event_type)
 
     def subscribe_severity(self, severity: EventSeverity, handler: Callable[[Event], None]) -> None:
         """
@@ -354,10 +465,17 @@ class EventBus:
                 self.subscribe_severity(sev, handler)
 
     def unsubscribe(self, event_type: str, handler: Callable) -> bool:
-        """Unsubscribe handler from event type."""
-        if event_type in self._handlers and handler in self._handlers[event_type]:
-            self._handlers[event_type].remove(handler)
-            return True
+        """
+        Unsubscribe handler from event type.
+
+        ITEM-CONFLICT-J: Works with HandlerEntry-based storage.
+        """
+        if event_type in self._handlers:
+            # Find and remove the entry with matching handler
+            for i, entry in enumerate(self._handlers[event_type]):
+                if entry.handler == handler:
+                    self._handlers[event_type].pop(i)
+                    return True
         return False
 
     def unsubscribe_severity(self, severity: EventSeverity, handler: Callable) -> bool:
@@ -525,12 +643,6 @@ class EventBus:
         self.emit(event)
         return event
 
-    def _get_handlers(self, event_type: str) -> List[Callable]:
-        """Get handlers for event type, including wildcard."""
-        handlers = self._handlers.get(event_type, [])
-        wildcard_handlers = self._handlers.get("*", [])
-        return handlers + wildcard_handlers
-
     def _safe_dispatch(self, handler: Callable, event: Event) -> None:
         """Dispatch with failure handling."""
         try:
@@ -635,6 +747,10 @@ class EventBus:
             "dropped_debug_events": self._dropped_debug_count,
             "min_severity": self._min_severity.name,
             "async_enabled": self._async_enabled,
+            # ITEM-CONFLICT-J: Wildcard handler metrics
+            "wildcard_handler_count": len(self._handlers.get("*", [])),
+            "wildcard_warning_threshold": self._wildcard_warning_threshold,
+            "max_wildcard_handlers": self._max_wildcard_handlers,
         }
 
         # Add journal stats if available
