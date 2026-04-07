@@ -15,8 +15,28 @@ from typing import Dict, List, Optional, Any
 import hashlib
 import json
 import uuid
+from types import SimpleNamespace
 
 from .assessment import AssessmentScore
+
+
+class SessionDict(dict):
+    """Dictionary that also supports attribute access."""
+    
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+    
+    def __setattr__(self, name, value):
+        self[name] = value
+    
+    def __delattr__(self, name):
+        try:
+            del self[name]
+        except KeyError:
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
 
 class EvidenceType(Enum):
@@ -398,3 +418,234 @@ class SessionState:
     def _update_timestamp(self) -> None:
         """Update the updated_at timestamp."""
         self.updated_at = datetime.utcnow().isoformat() + "Z"
+
+
+class StateManager:
+    """
+    Manager for TITAN FUSE Protocol session state.
+    
+    Provides high-level interface for session creation, checkpoint management,
+    and state transitions.
+    """
+    
+    PROTOCOL_VERSION = "3.2.2"
+    
+    def __init__(self, repo_root=None):
+        """Initialize state manager."""
+        self.repo_root = repo_root
+        self.current_session: Optional[Dict] = None
+        self._session_state: Optional[SessionState] = None
+        self._token_history: List[int] = []
+        self._latency_history: List[int] = []
+        self._confidence_scores: List[str] = []
+        self._leaf_model_calls = 0
+        self._root_model_calls = 0
+        self._recursion_depth = 0
+        self._recursion_depth_peak = 0
+        self._max_recursion_depth = 1
+        self._all_high_confidence = True
+        
+    def create_session(self, session_id: str = None, max_tokens: int = 100000, 
+                       input_files: List[str] = None) -> Dict:
+        """Create a new session."""
+        session_id = session_id or str(uuid.uuid4())
+        
+        # Calculate checksum for input files
+        source_checksum = None
+        source_file = None
+        if input_files:
+            source_file = input_files[0] if len(input_files) == 1 else None
+            if source_file:
+                try:
+                    with open(source_file, 'rb') as f:
+                        source_checksum = hashlib.sha256(f.read()).hexdigest()
+                except Exception:
+                    source_checksum = None
+        
+        self.current_session = SessionDict({
+            "id": session_id,
+            "status": "INITIALIZED",
+            "protocol_version": self.PROTOCOL_VERSION,
+            "created_at": datetime.utcnow().isoformat() + "Z",
+            "source_file": source_file,
+            "source_checksum": source_checksum,
+            "max_tokens": max_tokens,
+            "tokens_used": 0,
+            "current_phase": 0,
+            "current_gate": 0,
+            "chunk_cursor": None,
+            "chunks": {},
+            "open_issues": [],
+            "known_gaps": [],
+            "gates_passed": [],
+            "completed_batches": [],
+            "input_files": input_files or [],
+            "recursion_depth": 0,
+            "recursion_depth_peak": 0,
+            "token_history": [],
+            "latency_history": [],
+            "confidence_scores": [],
+            "leaf_model_calls": 0,
+            "root_model_calls": 0,
+            "all_high_confidence": True,
+            "confidence_summary": {"all_high": True, "high_count": 0, "med_count": 0, "low_count": 0}
+        })
+        
+        self._session_state = SessionState(
+            session_id=session_id,
+            max_tokens=max_tokens,
+            source_file=source_file,
+            source_checksum=source_checksum
+        )
+        
+        return self.current_session
+    
+    def get_current_session(self) -> Optional[Dict]:
+        """Get current session."""
+        return self.current_session
+    
+    def save_checkpoint(self, checkpoint_path: str = None) -> Dict:
+        """Save current session to checkpoint."""
+        if not self.current_session:
+            return {"success": False, "error": "No active session"}
+        
+        checkpoint_path = checkpoint_path or str(
+            self.repo_root / "checkpoints" / "checkpoint.json"
+        ) if self.repo_root else "checkpoint.json"
+        
+        checkpoint_data = self.current_session.copy()
+        checkpoint_data["saved_at"] = datetime.utcnow().isoformat() + "Z"
+        
+        try:
+            import os
+            os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+            with open(checkpoint_path, 'w') as f:
+                json.dump(checkpoint_data, f, indent=2)
+            return {"success": True, "checkpoint_path": checkpoint_path}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def resume_from_checkpoint(self, checkpoint_path: str, 
+                                allow_unsafe: bool = False) -> Dict:
+        """Resume session from checkpoint."""
+        try:
+            with open(checkpoint_path, 'r') as f:
+                data = json.load(f)
+            
+            self.current_session = SessionDict(data)
+            return {
+                "success": True,
+                "status": "RESUMED",
+                "session_id": data.get("id"),
+                "gates_passed": data.get("gates_passed", []),
+                "completed_batches": data.get("completed_batches", []),
+                "chunk_cursor": data.get("chunk_cursor"),
+                "open_issues": data.get("open_issues", [])
+            }
+        except FileNotFoundError:
+            return {"success": False, "status": "FAILED", "error": "Checkpoint file not found"}
+        except json.JSONDecodeError:
+            return {"success": False, "status": "FAILED", "error": "Invalid checkpoint file"}
+        except Exception as e:
+            return {"success": False, "status": "FAILED", "error": str(e)}
+    
+    def configure_provider(self, provider: str, api_key: str) -> Dict:
+        """Configure LLM provider."""
+        # Store provider configuration (in real implementation would use secure storage)
+        if not self.current_session:
+            self.create_session()
+        self.current_session["provider"] = provider
+        return {"success": True, "message": f"Configured provider: {provider}"}
+    
+    def compact_context(self, strategy: str = "auto") -> Dict:
+        """Compact context to reduce token usage."""
+        if not self.current_session:
+            return {"success": False, "error": "No active session"}
+        return {"success": True, "strategy": strategy, "tokens_freed": 0}
+    
+    def export_artifacts(self, session: Dict, output_path, format: str = "json") -> Dict:
+        """Export session artifacts."""
+        artifacts = []
+        try:
+            import os
+            os.makedirs(output_path, exist_ok=True)
+            
+            # Export session data
+            artifact_path = os.path.join(output_path, "session.json")
+            with open(artifact_path, 'w') as f:
+                json.dump(session, f, indent=2)
+            artifacts.append(artifact_path)
+            
+            return {"success": True, "artifacts": artifacts}
+        except Exception as e:
+            return {"success": False, "error": str(e), "artifacts": artifacts}
+    
+    def increment_recursion_depth(self) -> bool:
+        """Increment recursion depth if under limit."""
+        if self._recursion_depth >= self._max_recursion_depth:
+            return False
+        self._recursion_depth += 1
+        self._recursion_depth_peak = max(self._recursion_depth_peak, self._recursion_depth)
+        if self.current_session:
+            self.current_session["recursion_depth"] = self._recursion_depth
+            self.current_session["recursion_depth_peak"] = self._recursion_depth_peak
+        return True
+    
+    def decrement_recursion_depth(self) -> None:
+        """Decrement recursion depth."""
+        if self._recursion_depth > 0:
+            self._recursion_depth -= 1
+            if self.current_session:
+                self.current_session["recursion_depth"] = self._recursion_depth
+    
+    def record_query_metrics(self, tokens: int, latency_ms: int, model_type: str = "leaf") -> None:
+        """Record query metrics for telemetry."""
+        self._token_history.append(tokens)
+        self._latency_history.append(latency_ms)
+        if model_type == "leaf":
+            self._leaf_model_calls += 1
+        else:
+            self._root_model_calls += 1
+        
+        if self.current_session:
+            self.current_session["token_history"] = self._token_history
+            self.current_session["latency_history"] = self._latency_history
+            self.current_session["leaf_model_calls"] = self._leaf_model_calls
+            self.current_session["root_model_calls"] = self._root_model_calls
+    
+    def record_confidence(self, confidence: str) -> None:
+        """Record confidence score."""
+        self._confidence_scores.append(confidence)
+        if confidence != "HIGH":
+            self._all_high_confidence = False
+        
+        if self.current_session:
+            self.current_session["confidence_scores"] = self._confidence_scores
+            self.current_session["all_high_confidence"] = self._all_high_confidence
+            self.current_session["confidence_summary"] = self.get_confidence_summary()
+    
+    def get_token_percentiles(self) -> Dict:
+        """Get token usage percentiles."""
+        if not self._token_history:
+            return {"p50": 0, "p95": 0, "total_queries": 0}
+        
+        sorted_tokens = sorted(self._token_history)
+        n = len(sorted_tokens)
+        
+        p50_idx = int(n * 0.5)
+        p95_idx = int(n * 0.95)
+        
+        return {
+            "p50": sorted_tokens[p50_idx] if p50_idx < n else sorted_tokens[-1],
+            "p95": sorted_tokens[p95_idx] if p95_idx < n else sorted_tokens[-1],
+            "total_queries": n
+        }
+    
+    def get_confidence_summary(self) -> Dict:
+        """Get confidence score summary."""
+        return {
+            "all_high": all(c == "HIGH" for c in self._confidence_scores) if self._confidence_scores else True,
+            "high_count": self._confidence_scores.count("HIGH"),
+            "med_count": self._confidence_scores.count("MED"),
+            "low_count": self._confidence_scores.count("LOW")
+        }

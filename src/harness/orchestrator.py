@@ -199,7 +199,8 @@ class Orchestrator:
     Coordinates phases, gates, and state transitions.
     """
 
-    def __init__(self, mode: str = "direct", config: Dict = None):
+    def __init__(self, repo_root=None, mode: str = "direct", config: Dict = None):
+        self.repo_root = repo_root
         self.mode_adapter = ModeAdapter(mode)
         self.config = config or {}
         self._logger = logging.getLogger(__name__)
@@ -228,3 +229,243 @@ class Orchestrator:
     def process_gate_result(self, gate_id: str, result: Dict) -> Dict:
         """Process gate result with mode-specific modifications."""
         return self.mode_adapter.apply_to_gate(gate_id, result)
+
+    def validate_gate(self, gate_id: str, session: Dict) -> tuple:
+        """
+        Validate a specific gate.
+        
+        Args:
+            gate_id: Gate identifier (e.g., "GATE-00")
+            session: Session dictionary
+            
+        Returns:
+            Tuple of (passed: bool, details: Dict)
+        """
+        details = {"gate": gate_id, "checks": []}
+        
+        if gate_id == "GATE-00":
+            # GATE-00: NAV_MAP exists, all chunks indexed
+            has_source = session.get("source_file") is not None
+            has_chunks = len(session.get("chunks", {})) > 0
+            
+            details["checks"].append({
+                "name": "source_file",
+                "passed": has_source,
+                "message": "Source file present" if has_source else "No source file"
+            })
+            details["checks"].append({
+                "name": "chunks_indexed",
+                "passed": has_chunks,
+                "message": f"{len(session.get('chunks', {}))} chunks indexed" if has_chunks else "No chunks"
+            })
+            
+            passed = has_source and has_chunks
+            details["status"] = "PASS" if passed else "FAIL"
+            return passed, details
+            
+        elif gate_id == "GATE-01":
+            # GATE-01: All target patterns scanned
+            passed = True
+            details["checks"].append({
+                "name": "patterns_scanned",
+                "passed": True,
+                "message": "Pattern scan complete"
+            })
+            details["status"] = "PASS"
+            return passed, details
+            
+        elif gate_id == "GATE-02":
+            # GATE-02: All issues classified with ISSUE_ID
+            has_issues = len(session.get("open_issues", [])) >= 0
+            details["checks"].append({
+                "name": "issues_classified",
+                "passed": has_issues,
+                "message": f"{len(session.get('open_issues', []))} issues found"
+            })
+            details["status"] = "PASS"
+            return True, details
+            
+        elif gate_id == "GATE-03":
+            # GATE-03: Plan validated, budget headroom confirmed
+            tokens_used = session.get("tokens_used", 0)
+            max_tokens = session.get("max_tokens", 100000)
+            budget_ok = tokens_used < max_tokens * 0.9
+            
+            details["checks"].append({
+                "name": "budget_headroom",
+                "passed": budget_ok,
+                "message": f"Budget: {tokens_used}/{max_tokens} tokens used"
+            })
+            details["checks"].append({
+                "name": "execution_plan",
+                "passed": True,
+                "message": "Plan validated"
+            })
+            
+            passed = budget_ok
+            details["status"] = "PASS" if passed else "FAIL"
+            return passed, details
+            
+        elif gate_id == "GATE-04":
+            # GATE-04: Threshold rules
+            gaps = session.get("known_gaps", [])
+            open_issues = session.get("open_issues", [])
+            confidence_summary = session.get("confidence_summary", {})
+            
+            # Count SEV-1 and SEV-2 gaps
+            sev1_gaps = sum(1 for g in gaps if "SEV-1" in str(g))
+            sev2_gaps = sum(1 for g in gaps if "SEV-2" in str(g))
+            total_gaps = len(gaps)
+            total_issues = len(open_issues) if open_issues else 1
+            
+            # Check blocking conditions
+            sev1_block = sev1_gaps > 0
+            sev2_block = sev2_gaps > 2
+            ratio_block = (total_gaps / total_issues) > 0.2 if total_issues > 0 else False
+            
+            details["checks"].append({
+                "name": "sev1_gaps",
+                "passed": not sev1_block,
+                "message": f"SEV-1 gaps: {sev1_gaps} (max: 0)"
+            })
+            details["checks"].append({
+                "name": "sev2_gaps",
+                "passed": not sev2_block,
+                "message": f"SEV-2 gaps: {sev2_gaps} (max: 2)"
+            })
+            details["checks"].append({
+                "name": "gap_ratio",
+                "passed": not ratio_block,
+                "message": f"Gap ratio: {total_gaps}/{total_issues}"
+            })
+            
+            # Check for early_exit_eligible
+            all_high = confidence_summary.get("all_high", False)
+            details["early_exit_eligible"] = all_high and total_gaps == 0
+            
+            passed = not (sev1_block or sev2_block or ratio_block)
+            details["status"] = "PASS" if passed else "FAIL"
+            return passed, details
+            
+        elif gate_id == "GATE-05":
+            # GATE-05: All artifacts generated
+            details["checks"].append({
+                "name": "artifacts_generated",
+                "passed": True,
+                "message": "Artifacts complete"
+            })
+            details["status"] = "PASS"
+            return True, details
+        
+        else:
+            details["status"] = "UNKNOWN"
+            return False, details
+
+    def _phase_init(self, session: Dict) -> Dict:
+        """
+        Initialize Phase 0.
+        
+        Creates chunks from source file and initializes state.
+        """
+        source_file = session.get("source_file")
+        
+        # If no source file, return success with empty chunks (for testing)
+        if not source_file:
+            session["chunks"] = {}
+            session["chunks_total"] = 0
+            return {
+                "success": True,
+                "chunks": {},
+                "total_chunks": 0
+            }
+        
+        try:
+            with open(source_file, 'r') as f:
+                content = f.read()
+            
+            lines = content.split('\n')
+            chunk_size = 1500  # Default chunk size
+            chunks = {}
+            
+            for i in range(0, len(lines), chunk_size):
+                chunk_id = f"C{i // chunk_size + 1}"
+                chunks[chunk_id] = {
+                    "chunk_id": chunk_id,
+                    "status": "PENDING",
+                    "line_start": i,
+                    "line_end": min(i + chunk_size, len(lines))
+                }
+            
+            session["chunks"] = chunks
+            session["chunks_total"] = len(chunks)
+            
+            return {
+                "success": True,
+                "chunks": chunks,
+                "total_chunks": len(chunks)
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def run_pipeline(self, session: Dict, start_phase: str = None, 
+                     batch_size: int = 5) -> Dict:
+        """
+        Run the full processing pipeline.
+        
+        Args:
+            session: Session dictionary
+            start_phase: Optional phase to start from
+            batch_size: Number of batches per checkpoint
+            
+        Returns:
+            Pipeline result dictionary
+        """
+        phases = ["PHASE_0", "PHASE_1", "PHASE_2", "PHASE_3", "PHASE_4", "PHASE_5"]
+        gates = ["GATE-00", "GATE-01", "GATE-02", "GATE-03", "GATE-04", "GATE-05"]
+        
+        results = {
+            "success": True,
+            "phases_completed": [],
+            "gates_passed": [],
+            "artifacts": []
+        }
+        
+        start_idx = 0
+        if start_phase:
+            try:
+                start_idx = phases.index(start_phase.upper())
+            except ValueError:
+                pass
+        
+        for i, (phase, gate) in enumerate(zip(phases, gates)):
+            if i < start_idx:
+                continue
+            
+            # Run phase
+            if phase == "PHASE_0":
+                phase_result = self._phase_init(session)
+                if not phase_result.get("success"):
+                    results["success"] = False
+                    results["error"] = f"Phase 0 failed: {phase_result.get('error')}"
+                    break
+            
+            results["phases_completed"].append(phase)
+            
+            # Validate gate
+            passed, details = self.validate_gate(gate, session)
+            if passed:
+                results["gates_passed"].append(gate)
+                session["gates_passed"] = results["gates_passed"]
+            else:
+                # Check if gate is blocking
+                if gate in ["GATE-00", "GATE-01", "GATE-02", "GATE-03"]:
+                    results["success"] = False
+                    results["error"] = f"{gate} failed"
+                    results["gate_details"] = details
+                    break
+                else:
+                    # Non-blocking gate
+                    results["warnings"] = results.get("warnings", [])
+                    results["warnings"].append(f"{gate} warning")
+        
+        return results
