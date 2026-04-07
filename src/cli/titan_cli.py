@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 TITAN FUSE Protocol - Unified CLI Interface
-Version: 3.2.0
+Version: 3.2.3
 
 A harness-first CLI that positions TITAN as an execution layer,
 not just a set of prompts. Provides deterministic JSON output
@@ -12,15 +12,20 @@ import argparse
 import json
 import sys
 import os
+import hashlib
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from enum import Enum
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from state.state_manager import StateManager
+import yaml
+import jsonschema
+from jsonschema import validate, ValidationError as JsonSchemaError
+
+from state.state_manager import StateManager, InputSizeValidator, CredentialManager
 from harness.orchestrator import Orchestrator
 from events.event_bus import EventBus
 
@@ -35,6 +40,76 @@ class ExecutionMode(Enum):
     INTERACTIVE = "interactive"
     BATCH = "batch"
     AGENT_RUN = "agent-run"
+
+
+# =============================================================================
+# T1: Config Schema Validation
+# =============================================================================
+
+def validate_config(config_path: str, schema_path: str = None) -> Dict:
+    """
+    Validate config against JSON schema.
+    
+    Args:
+        config_path: Path to config.yaml
+        schema_path: Path to config.schema.json (auto-detected if not provided)
+    
+    Returns:
+        Validated config dictionary
+    
+    Raises:
+        ValueError: If validation fails
+    """
+    config_path = Path(config_path)
+    
+    # Auto-detect schema path
+    if schema_path is None:
+        schema_path = config_path.parent / "schemas" / "config.schema.json"
+    else:
+        schema_path = Path(schema_path)
+    
+    # Load config
+    if not config_path.exists():
+        raise ValueError(f"[gap: config_not_found] {config_path}")
+    
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+    
+    # Load schema
+    if not schema_path.exists():
+        # Schema validation is optional if schema file missing
+        return config
+    
+    with open(schema_path) as f:
+        schema = json.load(f)
+    
+    # Validate
+    try:
+        validate(instance=config, schema=schema)
+    except JsonSchemaError as e:
+        raise ValueError(f"[gap: config_validation_failed] {e.message}")
+    
+    return config
+
+
+def validate_config_safe(config_path: str) -> Dict:
+    """
+    Validate config with graceful error handling.
+    
+    Returns:
+        Tuple of (config, errors)
+    """
+    errors = []
+    config = {}
+    
+    try:
+        config = validate_config(config_path)
+    except ValueError as e:
+        errors.append(str(e))
+    except Exception as e:
+        errors.append(f"[gap: config_load_error] {str(e)}")
+    
+    return config, errors
 
 
 class TitanCLI:
@@ -56,6 +131,20 @@ class TitanCLI:
     def __init__(self, repo_root: Optional[Path] = None):
         self.repo_root = repo_root or Path.cwd()
         self.config_path = self.repo_root / "config.yaml"
+        
+        # T1: Load and validate config
+        self.config, self.config_errors = validate_config_safe(str(self.config_path))
+        
+        # T2: Initialize InputSizeValidator with config limits
+        security_config = self.config.get("security", {})
+        self.input_validator = InputSizeValidator(
+            max_file_size=security_config.get("max_input_file_size_mb", 100) * 1024 * 1024,
+            max_total_size=security_config.get("max_total_input_size_mb", 500) * 1024 * 1024
+        )
+        
+        # T4: Initialize CredentialManager
+        self.credential_manager = CredentialManager()
+        
         self.state_manager = StateManager(self.repo_root)
         self.orchestrator = Orchestrator(self.repo_root)
         self.event_bus = EventBus()
@@ -149,6 +238,16 @@ class TitanCLI:
         Returns:
             Exit code (0 for success)
         """
+        # T2: Validate input file sizes before processing
+        if input_files:
+            validation = self.input_validator.validate(input_files)
+            if not validation["valid"]:
+                return self._output({
+                    "command": "init",
+                    "error": "[gap: input_validation_failed]",
+                    "validation_errors": validation["errors"]
+                }, success=False)
+        
         # Initialize state
         session = self.state_manager.create_session(
             session_id=session_id,
@@ -156,8 +255,15 @@ class TitanCLI:
             input_files=input_files or []
         )
 
+        # T4: Validate no credentials leaked into state
+        if not self.credential_manager.validate_no_key_in_state(session):
+            return self._output({
+                "command": "init",
+                "error": "[gap: credential_leak_detected] Session state contains credential-like values"
+            }, success=False)
+
         # Emit initialization event
-        self.event_bus.emit("session.init", {
+        self.event_bus.emit_simple("session.init", {
             "session_id": session["id"],
             "max_tokens": max_tokens,
             "input_count": len(input_files or [])
@@ -172,6 +278,10 @@ class TitanCLI:
                 "created_at": session["created_at"]
             },
             "input_files": input_files or [],
+            "config_validation": {
+                "errors": self.config_errors,
+                "valid": len(self.config_errors) == 0
+            },
             "next_steps": [
                 "Run 'titan validate' to check GATE-00",
                 "Run 'titan process' to start processing",
@@ -218,7 +328,7 @@ class TitanCLI:
                 "details": details
             }
 
-            self.event_bus.emit(f"gate.{g.lower()}", {
+            self.event_bus.emit_simple(f"gate.{g.lower()}", {
                 "gate": g,
                 "passed": passed,
                 "details": details
@@ -261,7 +371,7 @@ class TitanCLI:
         )
 
         if result.get("status") == "RESUMED":
-            self.event_bus.emit("session.resume", {
+            self.event_bus.emit_simple("session.resume", {
                 "session_id": result["session_id"],
                 "checkpoint": checkpoint_file,
                 "chunk_cursor": result.get("chunk_cursor")
@@ -472,7 +582,7 @@ class TitanCLI:
             batch_size=batch_size
         )
 
-        self.event_bus.emit("pipeline.complete", {
+        self.event_bus.emit_simple("pipeline.complete", {
             "session_id": session["id"],
             "result": result
         })
