@@ -92,7 +92,17 @@ __all__ = [
     'LintFinding',
     'LintResult',
     'lint_gate_configuration',
-    'check_early_exit_required'
+    'check_early_exit_required',
+    
+    # Guardian validation loop (ITEM-VAL-03)
+    'Guardian',
+    'GuardianResult',
+    'Conflict',
+    'Resolution',
+    'ConflictType',
+    'ResolutionStatus',
+    'ValidationMode',
+    'create_guardian',
 ]
 
 # ITEM-GATE-01: Gate lint for early exit validation
@@ -103,4 +113,16 @@ from .gate_lint import (
     LintSeverity,
     lint_gate_configuration,
     check_early_exit_required
+)
+
+# ITEM-VAL-03: Guardian validation loop
+from .guardian import (
+    Guardian,
+    GuardianResult,
+    Conflict,
+    Resolution,
+    ConflictType,
+    ResolutionStatus,
+    ValidationMode,
+    create_guardian,
 )

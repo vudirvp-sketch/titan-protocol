@@ -417,3 +417,72 @@ dag_checkpoint:
   enabled: true
   checkpoint_dir: .titan/dag_checkpoints
   max_snapshots: 100
+
+# ========================================
+# v3.5.1 Configuration Additions (Phase 14)
+# ========================================
+
+# ITEM-CAT-01: Adaptive Weight Profiles Engine
+scoring:
+  adaptive_weights:
+    enabled: true
+    default_profile: "mixed"  # Options: technical, medical_legal, narrative, mixed
+    override_by_intent: true  # Allow intent_router to override profile
+  thresholds:
+    clear_winner: 2.0  # Gap for auto-select without rationale
+    needs_rationale: 1.0  # Gap for one-sentence explanation
+    conditional: 0.0  # Below this → conditional recommendation
+
+# ITEM-CAT-02: SCOUT Roles Matrix Agent Framework
+scout:
+  roles:
+    radar:
+      enabled: true
+      min_signal_threshold: 0.3
+    devil:
+      enabled: true
+      mandatory_for: ["EVALUATE", "COMPARE", "VALIDATE", "AUDIT"]
+    eval:
+      enabled: true
+      veto_enabled: true
+      veto_on: ["EXPERIMENTAL", "VAPORWARE"]
+    strat:
+      enabled: true
+      require_caveat_for: ["EXPERIMENTAL", "EARLY_ADOPTER"]
+  pipeline:
+    enforce_order: ["RADAR", "DEVIL", "EVAL", "STRAT"]
+    allow_parallel: false  # Veto propagation requires sequential
+
+# ITEM-CAT-03: Type-Aware Fusion Engine
+fusion:
+  type_aware:
+    enabled: true
+    strict_type_merge: true  # Block cross-type merges
+    low_density_policy: "unique_context_or_caveat"  # Options: always, unique_context_or_caveat, never
+  density:
+    high_priority_multiplier: 1.5  # Boost HIGH_DENSITY in scoring
+    low_density_threshold: 0.3  # Min relevance score to include LOW_DENSITY
+
+# ITEM-CAT-04: Conflict Resolution Formula Engine
+decision:
+  conflict_resolution:
+    enabled: true
+    formula_weights:
+      accuracy: 0.40
+      utility: 0.35
+      efficiency: 0.15
+      consensus: 0.10
+    thresholds:
+      clear_winner: 2.0  # Auto-select, no rationale
+      needs_rationale: 1.0  # Winner + one-sentence
+      conditional: 0.0  # Below this → conditional recommendation
+    override_by_domain: true  # Allow domain_profile to adjust weights
+
+# ITEM-VAL-GUARDIAN: Guardian Validation Loop
+guardian:
+  enabled: true
+  default_profile: "mixed"
+  validation_mode: "standard"  # Options: strict, standard, permissive
+  log_decisions: true
+  conflict_detection: true
+  auto_resolve: true
