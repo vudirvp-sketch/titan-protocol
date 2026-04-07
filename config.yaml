@@ -43,7 +43,9 @@ checkpoint:
   path: checkpoints/checkpoint.json
   interval_tokens: 5000
   interval_seconds: 60
-  compression: none
+  # ITEM-073: Default serialization format
+  serialization: json_zstd
+  compression: zstd
   security: safe
 output:
   directory: outputs/
@@ -86,6 +88,8 @@ validators:
   auto_load: true
   timeout: 10
   disabled: []
+  # ITEM-070: Sandbox for validators
+  sandbox_enabled: true
 logging:
   level: info
   file: null
@@ -124,7 +128,9 @@ security:
   - chown
   max_input_file_size_mb: 100
   max_total_input_size_mb: 500
-  secrets_scan: false
+  # ITEM-115: Enable secret scanning
+  secrets_scan: true
+  secrets_baseline: .secrets.baseline
   workspace_path: null
   redos_timeout_ms: 1000
 chunking_limits:

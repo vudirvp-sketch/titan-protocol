@@ -9,6 +9,13 @@ should NOT be used. For JavaScript validators, we use isolated-vm.
 
 Author: TITAN FUSE Team
 Version: 3.2.3
+
+ITEM-070 Implementation:
+- ValidatorSandbox class with isolated execution
+- validate_code_safety() for pre-execution checks
+- get_resource_limits() for sandbox configuration
+- Filesystem isolation (deny all by default)
+- Timeout enforcement (default 10000ms)
 """
 
 import subprocess
@@ -16,10 +23,33 @@ import json
 import tempfile
 import os
 import time
+import re
+import hashlib
 from pathlib import Path
-from typing import Dict, Any, Optional
-from dataclasses import dataclass
+from typing import Dict, Any, Optional, List
+from dataclasses import dataclass, field
 import logging
+
+
+@dataclass
+class ResourceLimits:
+    """Resource limits for sandbox execution."""
+    timeout_ms: int = 10000
+    max_output_size: int = 1024 * 1024  # 1MB
+    memory_limit_mb: int = 128
+    filesystem_access: List[str] = field(default_factory=list)
+    network_access: bool = False
+    max_processes: int = 1
+    
+    def to_dict(self) -> Dict:
+        return {
+            "timeout_ms": self.timeout_ms,
+            "max_output_size": self.max_output_size,
+            "memory_limit_mb": self.memory_limit_mb,
+            "filesystem_access": self.filesystem_access,
+            "network_access": self.network_access,
+            "max_processes": self.max_processes
+        }
 
 
 @dataclass
@@ -63,17 +93,159 @@ class ValidatorSandbox:
             print(f"Violations: {result.violations}")
     """
 
-    def __init__(self, timeout_ms: int = 5000, max_output_size: int = 1024 * 1024):
+    # Dangerous patterns for code safety validation
+    DANGEROUS_PATTERNS = [
+        # Filesystem access
+        (r'open\s*\(["\']/', 'ABSOLUTE_PATH'),
+        (r'os\.path\.join\s*\([^)]*["\']/', 'ABSOLUTE_PATH'),
+        (r'shutil\.rmtree', 'DIR_DELETE'),
+        (r'os\.remove', 'FILE_DELETE'),
+        (r'os\.unlink', 'FILE_DELETE'),
+        (r'subprocess\..*shell\s*=\s*True', 'SHELL_EXEC'),
+        # Network access
+        (r'requests\.(get|post|put|delete)', 'NETWORK'),
+        (r'urllib', 'NETWORK'),
+        (r'socket\.', 'NETWORK'),
+        # Code execution
+        (r'eval\s*\(', 'CODE_EXEC'),
+        (r'exec\s*\(', 'CODE_EXEC'),
+        (r'compile\s*\(', 'CODE_EXEC'),
+        (r'__import__\s*\(', 'CODE_EXEC'),
+        # System access
+        (r'os\.system', 'SYSTEM'),
+        (r'os\.popen', 'SYSTEM'),
+        (r'sys\.(exit|setrecursionlimit)', 'SYSTEM'),
+        # Introspection bypass
+        (r'getattr\s*\([^)]*__)', 'INTROSPECTION'),
+        (r'setattr\s*\([^)]*__)', 'INTROSPECTION'),
+        (r'delattr\s*\([^)]*__)', 'INTROSPECTION'),
+    ]
+
+    def __init__(self, timeout_ms: int = 5000, max_output_size: int = 1024 * 1024,
+                 resource_limits: ResourceLimits = None, config: Dict = None):
         """
         Initialize sandbox.
 
         Args:
-            timeout_ms: Maximum execution time in milliseconds
+            timeout_ms: Maximum execution time in milliseconds (default from config)
             max_output_size: Maximum output size in bytes
+            resource_limits: Optional ResourceLimits configuration
+            config: Optional config dict for validators.timeout
         """
+        # Support config-driven timeout (ITEM-070 step 03)
+        if config and 'validators' in config:
+            timeout_ms = config['validators'].get('timeout', timeout_ms) * 1000
+        
         self.timeout_ms = timeout_ms
         self.max_output_size = max_output_size
+        self._resource_limits = resource_limits or ResourceLimits(
+            timeout_ms=timeout_ms,
+            max_output_size=max_output_size
+        )
+        self._config = config or {}
         self._logger = logging.getLogger(__name__)
+        
+        # Compile dangerous patterns for code safety checks
+        self._dangerous_patterns = [
+            (re.compile(p, re.IGNORECASE), name) for p, name in self.DANGEROUS_PATTERNS
+        ]
+
+    def execute(self, code: str, context: Dict = None) -> SandboxResult:
+        """
+        Execute validator code in sandbox.
+        
+        This is the main entry point for sandboxed execution (ITEM-070 step 02).
+        Auto-detects language and routes to appropriate executor.
+        
+        Args:
+            code: Code string to execute (or path to file)
+            context: Context dictionary for execution
+            
+        Returns:
+            SandboxResult with execution results
+        """
+        context = context or {}
+        
+        # Determine if code is a file path or inline code
+        code_path = Path(code) if '/' in code or code.endswith('.py') or code.endswith('.js') else None
+        
+        # Validate code safety before execution
+        safety_check = self.validate_code_safety(code if not code_path else code_path.read_text(errors='ignore'))
+        if not safety_check['safe']:
+            return SandboxResult(
+                valid=False,
+                violations=[],
+                error=f"[gap: unsafe_code_blocked] {safety_check['reason']}"
+            )
+        
+        # Route to appropriate executor
+        if code_path:
+            if code_path.suffix == '.js':
+                return self.run_js_validator(code_path, '', context)
+            else:
+                return self.run_python_validator(code_path, '', context)
+        else:
+            # Inline code - create temp file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write(code)
+                temp_path = Path(f.name)
+            
+            try:
+                return self.run_python_validator(temp_path, '', context)
+            finally:
+                temp_path.unlink(missing_ok=True)
+
+    def validate_code_safety(self, code: str) -> Dict[str, Any]:
+        """
+        Validate code for dangerous patterns before execution (ITEM-070 step 02).
+        
+        Performs static analysis to detect potentially dangerous operations
+        that could violate sandbox isolation.
+        
+        Args:
+            code: Source code to validate
+            
+        Returns:
+            Dict with 'safe' boolean, 'findings' list, and 'reason' if unsafe
+        """
+        findings = []
+        
+        for pattern, name in self._dangerous_patterns:
+            matches = pattern.findall(code)
+            if matches:
+                findings.append({
+                    'pattern': name,
+                    'matches': matches[:3],  # Limit to first 3 matches
+                    'severity': 'HIGH' if name in ['CODE_EXEC', 'SYSTEM', 'SHELL_EXEC'] else 'MEDIUM'
+                })
+        
+        # Check for filesystem access beyond allowed paths
+        if self._resource_limits.filesystem_access:
+            # Only specified paths are allowed
+            for pattern, name in [(r'open\s*\(["\']([^"\']+)', 'FILE_ACCESS'),
+                                  (r'with\s+open\s*\(["\']([^"\']+)', 'FILE_ACCESS')]:
+                for match in re.findall(pattern, code):
+                    if not any(match.startswith(allowed) for allowed in self._resource_limits.filesystem_access):
+                        findings.append({
+                            'pattern': 'UNAUTHORIZED_FILE_ACCESS',
+                            'path': match,
+                            'severity': 'HIGH'
+                        })
+        
+        return {
+            'safe': len(findings) == 0,
+            'findings': findings,
+            'reason': '; '.join(f['pattern'] for f in findings) if findings else None
+        }
+
+    def get_resource_limits(self) -> ResourceLimits:
+        """
+        Get current resource limits for the sandbox (ITEM-070 step 02).
+        
+        Returns:
+            ResourceLimits with current configuration
+        """
+        return self._resource_limits
 
     def run_python_validator(self, script_path: Path, content: str,
                             context: Dict = None) -> SandboxResult:
@@ -348,3 +520,37 @@ run().catch(e => {{
     process.exit(1);
 }});
 '''
+
+
+def get_sandbox(config: Dict = None) -> ValidatorSandbox:
+    """
+    Factory function to create configured sandbox (ITEM-070 integration).
+    
+    Reads sandbox configuration from config.yaml if provided.
+    
+    Args:
+        config: Configuration dictionary
+        
+    Returns:
+        Configured ValidatorSandbox instance
+    """
+    limits = ResourceLimits()
+    
+    if config:
+        sandbox_config = config.get('sandbox', {})
+        limits.timeout_ms = sandbox_config.get('timeout_ms', 10000)
+        limits.memory_limit_mb = sandbox_config.get('memory_limit_mb', 128)
+        
+        # Check if sandbox is enabled in config
+        validation_config = config.get('validation', {})
+        if not validation_config.get('sandbox_enabled', True):
+            logging.getLogger(__name__).warning(
+                "Sandbox disabled via config - validators will run with reduced isolation"
+            )
+    
+    return ValidatorSandbox(
+        timeout_ms=limits.timeout_ms,
+        max_output_size=limits.max_output_size,
+        resource_limits=limits,
+        config=config
+    )

@@ -4,6 +4,11 @@ State Manager for TITAN FUSE Protocol.
 Manages session state, reasoning steps, budget allocation,
 and cursor tracking for deterministic execution.
 
+ITEM-120 Implementation:
+- CredentialManager for provider credential isolation
+- Environment variable injection pattern
+- No credentials in session state or checkpoints
+
 Author: TITAN FUSE Team
 Version: 3.2.3
 """
@@ -15,9 +20,178 @@ from typing import Dict, List, Optional, Any
 import hashlib
 import json
 import uuid
+import os
+import re
 from types import SimpleNamespace
 
 from .assessment import AssessmentScore
+
+
+class CredentialManager:
+    """
+    Manage provider credentials with environment variable isolation.
+    
+    ITEM-120: Provider credential isolation
+    - Credentials stored in environment variables, not session state
+    - Pattern: {PROVIDER}_API_KEY (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY)
+    - Session state never contains api_key or credential fields
+    
+    Usage:
+        cm = CredentialManager()
+        creds = cm.get_credentials('openai')  # Reads from OPENAI_API_KEY env var
+        cm.set_credentials('openai', {'api_key': 'sk-xxx'})  # Sets env var
+    """
+    
+    # Patterns that should never appear in session state
+    CREDENTIAL_PATTERNS = [
+        r'api[_-]?key',
+        r'secret[_-]?key', 
+        r'access[_-]?token',
+        r'auth[_-]?token',
+        r'password',
+        r'private[_-]?key',
+        r'credential',
+    ]
+    
+    # Known provider environment variable patterns
+    PROVIDER_ENV_PATTERNS = {
+        'openai': 'OPENAI_API_KEY',
+        'anthropic': 'ANTHROPIC_API_KEY',
+        'google': 'GOOGLE_API_KEY',
+        'azure': 'AZURE_OPENAI_API_KEY',
+        'cohere': 'COHERE_API_KEY',
+        'huggingface': 'HUGGINGFACE_TOKEN',
+    }
+    
+    def __init__(self):
+        """Initialize credential manager."""
+        self._cached_providers: Dict[str, Dict] = {}
+    
+    def get_credentials(self, provider: str) -> Dict[str, str]:
+        """
+        Get credentials for a provider from environment.
+        
+        Args:
+            provider: Provider name (e.g., 'openai', 'anthropic')
+            
+        Returns:
+            Dict with 'api_key' if found, empty dict otherwise
+        """
+        provider = provider.lower()
+        env_var = self.PROVIDER_ENV_PATTERNS.get(provider, f"{provider.upper()}_API_KEY")
+        
+        api_key = os.environ.get(env_var)
+        if api_key:
+            return {'api_key': api_key, 'source': 'environment'}
+        
+        return {}
+    
+    def set_credentials(self, provider: str, credentials: Dict) -> None:
+        """
+        Set credentials for a provider in environment.
+        
+        Args:
+            provider: Provider name
+            credentials: Dict with 'api_key' or similar
+        """
+        provider = provider.lower()
+        env_var = self.PROVIDER_ENV_PATTERNS.get(provider, f"{provider.upper()}_API_KEY")
+        
+        if 'api_key' in credentials:
+            os.environ[env_var] = credentials['api_key']
+            self._cached_providers[provider] = {'configured': True}
+    
+    def rotate_credentials(self, provider: str) -> Dict:
+        """
+        Rotate credentials for a provider.
+        
+        Note: Actual rotation must be done externally. This method
+        clears the cached credentials and returns instructions.
+        
+        Args:
+            provider: Provider name
+            
+        Returns:
+            Dict with rotation instructions
+        """
+        provider = provider.lower()
+        env_var = self.PROVIDER_ENV_PATTERNS.get(provider, f"{provider.upper()}_API_KEY")
+        
+        # Clear from environment
+        if env_var in os.environ:
+            del os.environ[env_var]
+        
+        # Clear cache
+        if provider in self._cached_providers:
+            del self._cached_providers[provider]
+        
+        return {
+            'status': 'cleared',
+            'provider': provider,
+            'instruction': f"Set new {env_var} environment variable with rotated key"
+        }
+    
+    def validate_no_key_in_state(self, state: Dict) -> bool:
+        """
+        Validate that no credential fields are in session state.
+        
+        This is called before saving checkpoints to ensure
+        credentials are never persisted (ITEM-120 step 04).
+        
+        Args:
+            state: Session state dictionary to validate
+            
+        Returns:
+            True if no credentials found, False otherwise
+        """
+        state_str = json.dumps(state, default=str).lower()
+        
+        for pattern in self.CREDENTIAL_PATTERNS:
+            if re.search(pattern, state_str):
+                # Check if it's actually a credential value (not just field name)
+                # Look for actual secret-like values
+                for key in state.keys():
+                    if re.search(pattern, key.lower()):
+                        value = str(state.get(key, ''))
+                        # Check for secret-like values (long alphanumeric strings)
+                        if re.search(r'[A-Za-z0-9_-]{20,}', value):
+                            return False
+        
+        return True
+    
+    def scan_for_credentials(self, data: str) -> List[Dict]:
+        """
+        Scan string data for potential credential patterns.
+        
+        Used by checkpoint serialization to warn about potential leaks.
+        
+        Args:
+            data: String data to scan
+            
+        Returns:
+            List of potential credential findings
+        """
+        findings = []
+        
+        # Common API key patterns
+        api_key_patterns = [
+            (r'sk-[A-Za-z0-9]{20,}', 'OPENAI_KEY'),
+            (r'sk-ant-[A-Za-z0-9]{20,}', 'ANTHROPIC_KEY'),
+            (r'ghp_[A-Za-z0-9]{36}', 'GITHUB_PAT'),
+            (r'AKIA[0-9A-Z]{16}', 'AWS_KEY'),
+            (r'eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*', 'JWT'),
+        ]
+        
+        for pattern, name in api_key_patterns:
+            matches = re.findall(pattern, data)
+            if matches:
+                findings.append({
+                    'type': name,
+                    'count': len(matches),
+                    'severity': 'CRITICAL'
+                })
+        
+        return findings
 
 
 class SessionDict(dict):
