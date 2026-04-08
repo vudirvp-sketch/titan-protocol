@@ -628,3 +628,104 @@ symbol_map:
   eviction_batch_size: 1000
   eviction_policy: "lru"  # lru | lfu | fifo
   namespace_qualification: true
+
+# ========================================
+# v4.0.0 Configuration Additions (TIER_6)
+# ========================================
+
+# ITEM-OBS-06: Distributed Tracing Integration
+tracing:
+  enabled: true
+  provider: "opentelemetry"  # opentelemetry | jaeger | zipkin | none
+  sampling_rate: 1.0  # 0.0 to 1.0
+  exporters:
+    - type: "otlp"
+      endpoint: "http://localhost:4317"
+    - type: "jaeger"
+      endpoint: "http://localhost:14268/api/traces"
+  propagation: "w3c"  # w3c | b3 | jaeger
+
+# ITEM-OBS-07: Structured Logging Format
+structured_logging:
+  enabled: true
+  format: "json"  # json | text
+  output: "stdout"  # stdout | file | both
+  file_path: "logs/titan.log"
+  component_levels:
+    eventbus: "INFO"
+    gates: "DEBUG"
+    llm: "WARN"
+    storage: "INFO"
+  include_fields:
+    - timestamp
+    - level
+    - message
+    - component
+    - session_id
+    - trace_id
+
+# ITEM-AGENT-01: Multi-Agent Orchestrator
+multi_agent:
+  enabled: true
+  max_agents: 10
+  task_queue:
+    max_size: 1000
+    priority_levels: 5
+  heartbeat:
+    interval_seconds: 30
+    timeout_seconds: 120
+  conflict_resolution:
+    strategy: "weighted_vote"  # weighted_vote | first | consensus
+
+# ITEM-FEAT-74: Chunk Dependency Graph for Recovery
+chunk_dependency:
+  enabled: true
+  partial_recovery:
+    enabled: true
+    max_retry_chunks: 10
+  dependency_tracking: true
+  checkpoint_integration: true
+
+# ITEM-FEAT-103: titan-doctor Diagnostic Rules Engine
+doctor:
+  enabled: true
+  rules_path: "diagnostics/rules.yaml"
+  auto_fix_enabled: false  # Require explicit --fix flag
+  severity_threshold: "WARN"  # Minimum severity to report
+  rules:
+    - id: "PROTOCOL_VERSION_MISMATCH"
+      enabled: true
+    - id: "ORPHANED_CHECKPOINT"
+      enabled: true
+      auto_fix: true
+    - id: "STALE_LOCK_FILE"
+      enabled: true
+      auto_fix: true
+    - id: "EVENTBUS_DLQ_FULL"
+      enabled: true
+      auto_fix: true
+
+# ITEM-PROD-01: SARIF Output Format
+sarif:
+  enabled: true
+  output_path: "results.sarif"
+  include_suppressed: false
+  schema_version: "2.1.0"
+
+# ITEM-PROD-02: Interactive Mode
+interactive:
+  enabled: false  # Enable for debugging sessions
+  prompt: "titan> "
+  history_file: ".titan/repl_history"
+  auto_pause_on:
+    - "GATE_FAIL"
+    - "CLARITY_LOW"
+  max_history: 1000
+
+# ITEM-PERF-01: Streaming Response Support
+streaming:
+  enabled: true
+  chunk_callback: true
+  max_stream_time_seconds: 300
+  early_termination_on_gate_fail: true
+  buffer_size: 4096

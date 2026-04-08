@@ -10,6 +10,7 @@ This module provides:
 - Span Tracker: Distributed tracing for tool calls
 - State Validator: Event-state transition contract (ITEM-OBS-06)
 - Budget Forecaster: Token velocity forecasting (ITEM-OBS-05)
+- Structured Logger: JSON structured logging (ITEM-OBS-07)
 """
 
 from .tracer import (
@@ -78,6 +79,47 @@ from .budget_forecast import (
     get_budget_report
 )
 
+# ITEM-OBS-06: Distributed Tracing Integration
+from .distributed_tracing import (
+    DistributedTracer,
+    Span as DistributedSpan,
+    SpanStatus,
+    ExporterType,
+    TraceContext,
+    TracingEventBusIntegration,
+    get_distributed_tracer,
+    init_distributed_tracer,
+    start_span as start_distributed_span,
+    end_span as end_distributed_span,
+    get_active_span as get_active_distributed_span,
+    inject_context,
+    extract_context,
+    OTEL_AVAILABLE,
+    JAEGER_AVAILABLE,
+    ZIPKIN_AVAILABLE,
+    OTLP_AVAILABLE,
+)
+
+# ITEM-OBS-07: Structured Logging Format
+from .structured_logging import (
+    StructuredLogger,
+    JSONLogFormatter,
+    LoggingConfig,
+    LogLevel,
+    OutputDestination,
+    OutputFormat,
+    LEVEL_ORDER,
+    DEFAULT_COMPONENT_LEVELS,
+    init_logging,
+    get_logger,
+    configure_from_yaml,
+    shutdown_logging,
+    log_event,
+    log_error,
+    log_gate,
+    log_performance,
+)
+
 __all__ = [
     # Tracer
     "ReasoningTracer",
@@ -130,7 +172,42 @@ __all__ = [
     "get_forecaster",
     "init_forecaster",
     "record_usage",
-    "get_budget_report"
+    "get_budget_report",
+    # Structured Logging (ITEM-OBS-07)
+    "StructuredLogger",
+    "JSONLogFormatter",
+    "LoggingConfig",
+    "LogLevel",
+    "OutputDestination",
+    "OutputFormat",
+    "LEVEL_ORDER",
+    "DEFAULT_COMPONENT_LEVELS",
+    "init_logging",
+    "get_logger",
+    "configure_from_yaml",
+    "shutdown_logging",
+    "log_event",
+    "log_error",
+    "log_gate",
+    "log_performance",
+    # Distributed Tracing (ITEM-OBS-06)
+    "DistributedTracer",
+    "DistributedSpan",
+    "SpanStatus",
+    "ExporterType",
+    "TraceContext",
+    "TracingEventBusIntegration",
+    "get_distributed_tracer",
+    "init_distributed_tracer",
+    "start_distributed_span",
+    "end_distributed_span",
+    "get_active_distributed_span",
+    "inject_context",
+    "extract_context",
+    "OTEL_AVAILABLE",
+    "JAEGER_AVAILABLE",
+    "ZIPKIN_AVAILABLE",
+    "OTLP_AVAILABLE",
 ]
 
-__version__ = "3.7.1"
+__version__ = "4.0.0"

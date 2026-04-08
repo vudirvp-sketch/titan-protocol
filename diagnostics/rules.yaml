@@ -1,0 +1,195 @@
+# TITAN FUSE Protocol - Diagnostic Rules Configuration
+# ITEM-FEAT-103: titan-doctor Diagnostic Rules Engine
+# Version: 4.0.0
+
+# Global configuration for diagnostics
+config:
+  max_checkpoint_age_days: 30
+  lock_ttl_seconds: 300
+  dlq_max_size: 10000
+  dlq_warning_threshold: 0.8
+  dlq_max_age_hours: 72
+
+# Diagnostic rules definitions
+rules:
+  # -------------------------------------------------------------------------
+  # Protocol Version Checks
+  # -------------------------------------------------------------------------
+  - rule_id: PROTOCOL_VERSION_MISMATCH
+    name: Protocol Version Mismatch
+    description: |
+      Checks if the protocol version in VERSION file matches the expected
+      schema version in config.yaml. Major version mismatch indicates
+      potential incompatibility issues.
+    severity: WARN
+    remediation: |
+      Update VERSION file or config.yaml to match expected version.
+      Ensure metrics.schema_version and VERSION major version are aligned.
+    enabled: true
+    tags:
+      - version
+      - config
+      - compatibility
+
+  # -------------------------------------------------------------------------
+  # Checkpoint Health
+  # -------------------------------------------------------------------------
+  - rule_id: ORPHANED_CHECKPOINT
+    name: Orphaned Checkpoint
+    description: |
+      Detects checkpoint files that have no corresponding active session.
+      This can occur when sessions are terminated unexpectedly or when
+      cleanup operations fail.
+    severity: INFO
+    remediation: |
+      Remove orphaned checkpoint files to free storage:
+        titan doctor --fix --rule ORPHANED_CHECKPOINT
+      
+      Or manually archive:
+        mv checkpoints/checkpoint.json checkpoints/archive/
+    auto_fix: true
+    enabled: true
+    tags:
+      - checkpoint
+      - cleanup
+      - storage
+
+  # -------------------------------------------------------------------------
+  # Lock File Management
+  # -------------------------------------------------------------------------
+  - rule_id: STALE_LOCK_FILE
+    name: Stale Lock File
+    description: |
+      Detects lock files older than the configured TTL (default 5 minutes).
+      Stale locks can block operations and indicate process crashes.
+    severity: WARN
+    remediation: |
+      Remove stale lock files:
+        titan doctor --fix --rule STALE_LOCK_FILE
+      
+      Or manually:
+        rm .titan/locks/*.lock
+    auto_fix: true
+    enabled: true
+    tags:
+      - locks
+      - cleanup
+      - concurrency
+
+  # -------------------------------------------------------------------------
+  # Dependency Checks
+  # -------------------------------------------------------------------------
+  - rule_id: MISSING_DEPENDENCY
+    name: Missing Dependency
+    description: |
+      Verifies that all required Python dependencies are installed.
+      Currently checks for PyYAML and jsonschema which are core requirements.
+    severity: ERROR
+    remediation: |
+      Install missing dependencies:
+        pip install -r requirements.txt
+      
+      Or individually:
+        pip install pyyaml jsonschema
+    enabled: true
+    tags:
+      - dependencies
+      - installation
+      - runtime
+
+  # -------------------------------------------------------------------------
+  # Configuration Validation
+  # -------------------------------------------------------------------------
+  - rule_id: CONFIG_SCHEMA_INVALID
+    name: Config Schema Invalid
+    description: |
+      Validates config.yaml against the JSON schema defined in
+      schemas/config.schema.json. Ensures configuration values
+      are properly typed and structured.
+    severity: ERROR
+    remediation: |
+      Review validation errors and fix config.yaml:
+        titan validate --config
+      
+      Check schema at: schemas/config.schema.json
+    enabled: true
+    tags:
+      - config
+      - validation
+      - schema
+
+  # -------------------------------------------------------------------------
+  # Security & Secrets
+  # -------------------------------------------------------------------------
+  - rule_id: SECRET_STORE_UNREACHABLE
+    name: Secret Store Unreachable
+    description: |
+      Verifies that the configured secret store backend is accessible.
+      Checks connectivity for keyring, HashiCorp Vault, or validates
+      environment variable availability for env backend.
+    severity: CRITICAL
+    remediation: |
+      For Vault: Verify VAULT_TOKEN and Vault URL
+        curl $VAULT_URL/v1/sys/health
+      
+      For keyring: Ensure keyring service is available
+        python -c "import keyring; print(keyring.get_keyring())"
+      
+      For env: Check environment variables are set
+        env | grep TITAN_SECRET_
+    enabled: true
+    tags:
+      - security
+      - secrets
+      - connectivity
+
+  # -------------------------------------------------------------------------
+  # Event System Health
+  # -------------------------------------------------------------------------
+  - rule_id: EVENTBUS_DLQ_FULL
+    name: EventBus Dead Letter Queue Full
+    description: |
+      Monitors the Dead Letter Queue (DLQ) size. When the DLQ approaches
+      capacity (default 80% of max_size), events may be dropped and
+      failures may go unrecorded.
+    severity: WARN
+    remediation: |
+      Investigate failed events:
+        cat .titan/dlq/*.json | jq '.events[]'
+      
+      Purge old entries:
+        titan doctor --fix --rule EVENTBUS_DLQ_FULL
+      
+      Or manually:
+        rm .titan/dlq/old_entries.json
+    auto_fix: true
+    enabled: true
+    tags:
+      - events
+      - dlq
+      - reliability
+
+  # -------------------------------------------------------------------------
+  # Storage Backend Health
+  # -------------------------------------------------------------------------
+  - rule_id: STORAGE_BACKEND_UNREACHABLE
+    name: Storage Backend Unreachable
+    description: |
+      Verifies that the configured storage backend is accessible.
+      For local storage, checks directory existence. For cloud storage
+      (S3, GCS), verifies bucket access and credentials.
+    severity: ERROR
+    remediation: |
+      For local: Verify .titan/storage directory exists
+        mkdir -p .titan/storage
+      
+      For S3: Check credentials and bucket
+        aws s3 ls s3://your-bucket/titan
+      
+      For GCS: Check credentials and bucket
+        gsutil ls gs://your-bucket/titan
+    enabled: true
+    tags:
+      - storage
+      - connectivity
+      - cloud

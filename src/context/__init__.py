@@ -3,6 +3,7 @@ Context module for TITAN Protocol.
 
 ITEM-OBS-04: Symbol Map OOM Protection
 ITEM-FEAT-91: Auto-split on Chunk Limit
+ITEM-FEAT-74: Chunk Dependency Graph for Recovery
 """
 
 from .symbol_map import (
@@ -20,6 +21,13 @@ from .auto_split import (
     BoundaryType,
     create_auto_splitter
 )
+from .chunk_dependency_graph import (
+    ChunkDependencyGraph,
+    ChunkStatus,
+    ChunkNode,
+    DependencyGraphStats,
+    create_dependency_graph
+)
 
 __all__ = [
     "BoundedSymbolMap",
@@ -33,4 +41,9 @@ __all__ = [
     "AutoSplitConfig",
     "BoundaryType",
     "create_auto_splitter",
+    "ChunkDependencyGraph",
+    "ChunkStatus",
+    "ChunkNode",
+    "DependencyGraphStats",
+    "create_dependency_graph",
 ]

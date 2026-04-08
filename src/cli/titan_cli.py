@@ -424,9 +424,12 @@ class TitanCLI:
             "message": result.get("message", "")
         }, success=result.get("success", False))
 
-    def cmd_doctor(self) -> int:
+    def cmd_doctor(self, fix: bool = False, rule_id: Optional[str] = None,
+                    rules_only: bool = False) -> int:
         """
         Health check and diagnostics.
+
+        ITEM-FEAT-103: Enhanced with Diagnostic Rules Engine.
 
         Runs comprehensive checks on:
         - Protocol files integrity
@@ -434,93 +437,153 @@ class TitanCLI:
         - Dependencies availability
         - Session state consistency
         - Checkpoint validity
+        - Diagnostic rules engine checks
+
+        Args:
+            fix: Apply auto-fixes where available
+            rule_id: Run specific diagnostic rule only
+            rules_only: Skip basic checks, run only rules engine
 
         Returns:
             Exit code (0 if all checks pass)
         """
         checks = []
+        rule_results = []
 
-        # Check 1: Protocol files
-        protocol_md = self.repo_root / "PROTOCOL.md"
-        skill_md = self.repo_root / "SKILL.md"
-        config_yaml = self.repo_root / "config.yaml"
+        # Run basic checks unless rules_only is set
+        if not rules_only:
+            # Check 1: Protocol files
+            protocol_md = self.repo_root / "PROTOCOL.md"
+            skill_md = self.repo_root / "SKILL.md"
+            config_yaml = self.repo_root / "config.yaml"
 
-        checks.append({
-            "name": "protocol_files",
-            "status": "OK" if protocol_md.exists() else "MISSING",
-            "details": f"PROTOCOL.md: {'exists' if protocol_md.exists() else 'missing'}"
-        })
-        checks.append({
-            "name": "skill_config",
-            "status": "OK" if skill_md.exists() else "MISSING",
-            "details": f"SKILL.md: {'exists' if skill_md.exists() else 'missing'}"
-        })
-        checks.append({
-            "name": "runtime_config",
-            "status": "OK" if config_yaml.exists() else "MISSING",
-            "details": f"config.yaml: {'exists' if config_yaml.exists() else 'missing'}"
-        })
-
-        # Check 2: Directory structure
-        required_dirs = ["inputs", "outputs", "checkpoints", "skills", "scripts"]
-        for d in required_dirs:
-            dir_path = self.repo_root / d
             checks.append({
-                "name": f"directory_{d}",
-                "status": "OK" if dir_path.exists() and dir_path.is_dir() else "MISSING",
-                "details": f"{d}/: {'exists' if dir_path.exists() else 'missing'}"
+                "name": "protocol_files",
+                "status": "OK" if protocol_md.exists() else "MISSING",
+                "details": f"PROTOCOL.md: {'exists' if protocol_md.exists() else 'missing'}"
+            })
+            checks.append({
+                "name": "skill_config",
+                "status": "OK" if skill_md.exists() else "MISSING",
+                "details": f"SKILL.md: {'exists' if skill_md.exists() else 'missing'}"
+            })
+            checks.append({
+                "name": "runtime_config",
+                "status": "OK" if config_yaml.exists() else "MISSING",
+                "details": f"config.yaml: {'exists' if config_yaml.exists() else 'missing'}"
             })
 
-        # Check 3: Python dependencies
-        try:
-            import yaml
-            checks.append({"name": "pyyaml", "status": "OK", "details": "PyYAML installed"})
-        except ImportError:
-            checks.append({"name": "pyyaml", "status": "MISSING", "details": "PyYAML not installed"})
+            # Check 2: Directory structure
+            required_dirs = ["inputs", "outputs", "checkpoints", "skills", "scripts"]
+            for d in required_dirs:
+                dir_path = self.repo_root / d
+                checks.append({
+                    "name": f"directory_{d}",
+                    "status": "OK" if dir_path.exists() and dir_path.is_dir() else "MISSING",
+                    "details": f"{d}/: {'exists' if dir_path.exists() else 'missing'}"
+                })
 
-        # Check 4: Current session
-        session = self.state_manager.get_current_session()
-        checks.append({
-            "name": "active_session",
-            "status": "OK" if session else "NONE",
-            "details": f"Session: {session['id'][:8] if session else 'no active session'}"
-        })
-
-        # Check 5: Checkpoint validity
-        checkpoint_path = self.repo_root / "checkpoints" / "checkpoint.json"
-        if checkpoint_path.exists():
+            # Check 3: Python dependencies
             try:
-                with open(checkpoint_path) as f:
-                    cp = json.load(f)
-                checks.append({
-                    "name": "checkpoint",
-                    "status": "OK",
-                    "details": f"Valid checkpoint for session {cp.get('session_id', 'unknown')[:8]}"
-                })
-            except Exception as e:
-                checks.append({
-                    "name": "checkpoint",
-                    "status": "INVALID",
-                    "details": f"Checkpoint parse error: {str(e)}"
-                })
-        else:
+                import yaml
+                checks.append({"name": "pyyaml", "status": "OK", "details": "PyYAML installed"})
+            except ImportError:
+                checks.append({"name": "pyyaml", "status": "MISSING", "details": "PyYAML not installed"})
+
+            # Check 4: Current session
+            session = self.state_manager.get_current_session()
             checks.append({
-                "name": "checkpoint",
-                "status": "NONE",
-                "details": "No checkpoint file found"
+                "name": "active_session",
+                "status": "OK" if session else "NONE",
+                "details": f"Session: {session['id'][:8] if session else 'no active session'}"
             })
 
-        all_ok = all(c["status"] in ("OK", "NONE") for c in checks)
+            # Check 5: Checkpoint validity
+            checkpoint_path = self.repo_root / "checkpoints" / "checkpoint.json"
+            if checkpoint_path.exists():
+                try:
+                    with open(checkpoint_path) as f:
+                        cp = json.load(f)
+                    checks.append({
+                        "name": "checkpoint",
+                        "status": "OK",
+                        "details": f"Valid checkpoint for session {cp.get('session_id', 'unknown')[:8]}"
+                    })
+                except Exception as e:
+                    checks.append({
+                        "name": "checkpoint",
+                        "status": "INVALID",
+                        "details": f"Checkpoint parse error: {str(e)}"
+                    })
+            else:
+                checks.append({
+                    "name": "checkpoint",
+                    "status": "NONE",
+                    "details": "No checkpoint file found"
+                })
 
-        return self._output({
-            "command": "doctor",
-            "checks": checks,
-            "summary": {
+        # Run diagnostic rules engine
+        try:
+            from diagnostics.doctor_rules import DiagnosticRulesEngine
+            
+            engine = DiagnosticRulesEngine(repo_root=self.repo_root)
+            engine.load_rules("diagnostics/rules.yaml")
+            
+            if rule_id:
+                # Run specific rule
+                try:
+                    result = engine.run_rule(rule_id)
+                    if fix and not result.passed and result.auto_fix_available:
+                        engine.apply_auto_fix(result)
+                    rule_results = [result]
+                except ValueError as e:
+                    return self._output({
+                        "command": "doctor",
+                        "error": str(e),
+                        "checks": checks
+                    }, success=False)
+            else:
+                # Run all rules
+                rule_results = engine.run_all()
+                
+                # Apply auto-fixes if requested
+                if fix:
+                    for result in rule_results:
+                        if not result.passed and result.auto_fix_available:
+                            engine.apply_auto_fix(result)
+            
+        except ImportError:
+            # Rules engine not available, continue with basic checks only
+            pass
+
+        # Combine results
+        basic_ok = all(c["status"] in ("OK", "NONE") for c in checks)
+        rules_ok = all(r.passed for r in rule_results) if rule_results else True
+        all_ok = basic_ok and rules_ok
+
+        # Build summary
+        summary = {
+            "total": len(checks) + len(rule_results),
+            "basic_checks": {
                 "total": len(checks),
                 "ok": sum(1 for c in checks if c["status"] == "OK"),
                 "warnings": sum(1 for c in checks if c["status"] == "NONE"),
                 "errors": sum(1 for c in checks if c["status"] not in ("OK", "NONE"))
+            },
+            "rule_checks": {
+                "total": len(rule_results),
+                "passed": sum(1 for r in rule_results if r.passed),
+                "failed": sum(1 for r in rule_results if not r.passed),
+                "auto_fixes_applied": sum(1 for r in rule_results if r.auto_fix_applied)
             }
+        }
+
+        return self._output({
+            "command": "doctor",
+            "checks": checks,
+            "rule_results": [r.to_dict() for r in rule_results],
+            "summary": summary,
+            "fix_applied": fix
         }, success=all_ok)
 
     def cmd_status(self) -> int:
@@ -854,8 +917,14 @@ def create_parser() -> argparse.ArgumentParser:
     login_parser.add_argument("--provider", "-p", default="default", help="Provider name")
     login_parser.add_argument("--api-key", "-k", help="API key")
 
-    # doctor command
-    subparsers.add_parser("doctor", help="Health check and diagnostics")
+    # doctor command - ITEM-FEAT-103: Enhanced with rules engine
+    doctor_parser = subparsers.add_parser("doctor", help="Health check and diagnostics")
+    doctor_parser.add_argument("--fix", "-f", action="store_true",
+                               help="Apply auto-fixes where available")
+    doctor_parser.add_argument("--rule", "-r", dest="rule_id",
+                               help="Run specific diagnostic rule")
+    doctor_parser.add_argument("--rules-only", action="store_true",
+                               help="Run only rules engine checks (skip basic checks)")
 
     # status command
     subparsers.add_parser("status", help="Show session status")
@@ -918,7 +987,11 @@ def main() -> int:
             provider=args.provider,
             api_key=args.api_key
         ),
-        "doctor": lambda: cli.cmd_doctor(),
+        "doctor": lambda: cli.cmd_doctor(
+            fix=getattr(args, 'fix', False),
+            rule_id=getattr(args, 'rule_id', None),
+            rules_only=getattr(args, 'rules_only', False)
+        ),
         "status": lambda: cli.cmd_status(),
         "process": lambda: cli.cmd_process(
             phase=args.phase,

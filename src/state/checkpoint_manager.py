@@ -2,19 +2,22 @@
 Checkpoint Manager for TITAN FUSE Protocol.
 
 ITEM-STOR-02: Checkpoint Session Isolation
+ITEM-FEAT-74: Chunk Dependency Graph Checkpoint Integration
 
 Provides session-isolated checkpoint management with:
 - Namespace-based path isolation (checkpoints/{namespace}/{session_id}/)
 - Backward compatibility via symlink (checkpoints/current)
 - Atomic operations for save/load
 - Multi-session support
+- Chunk dependency graph persistence for recovery
 
 Integration with:
 - StorageBackend (ITEM-STOR-01) for cloud storage support
 - CheckpointSerialization (ITEM-SEC-02) for safe serialization
+- ChunkDependencyGraph (ITEM-FEAT-74) for partial recovery
 
 Author: TITAN FUSE Team
-Version: 3.3.0
+Version: 4.0.0
 """
 
 import json
@@ -724,6 +727,261 @@ class CheckpointManager:
             f"<CheckpointManager(namespace='{self.namespace}', "
             f"backend={self.backend.__class__.__name__ if self.backend else 'local'})>"
         )
+    
+    # === Chunk Dependency Graph Integration (ITEM-FEAT-74) ===
+    
+    def _get_chunk_graph_path(self, session_id: str) -> str:
+        """
+        Get path for a session's chunk dependency graph.
+        
+        Args:
+            session_id: Session identifier
+            
+        Returns:
+            Path like: checkpoints/{namespace}/{session_id}/chunk_graph.json
+        """
+        return f"{self._get_session_path(session_id)}/chunk_graph.json"
+    
+    def save_chunk_graph(
+        self,
+        session_id: str,
+        graph: 'ChunkDependencyGraph'
+    ) -> bool:
+        """
+        Save a chunk dependency graph for a session.
+        
+        ITEM-FEAT-74: Persists the chunk dependency graph to enable
+        intelligent partial recovery after failures.
+        
+        Args:
+            session_id: Session identifier
+            graph: ChunkDependencyGraph instance to save
+            
+        Returns:
+            True if saved successfully
+            
+        Example:
+            from context.chunk_dependency_graph import ChunkDependencyGraph
+            
+            manager = CheckpointManager()
+            graph = ChunkDependencyGraph()
+            graph.add_chunk("chunk_1", [])
+            
+            # Save the graph
+            manager.save_chunk_graph("session-123", graph)
+        """
+        self.logger.info(f"Saving chunk dependency graph for session: {session_id}")
+        
+        graph_path = self._get_chunk_graph_path(session_id)
+        
+        try:
+            # Serialize the graph
+            graph_data = graph.to_dict()
+            graph_json = json.dumps(graph_data, indent=2)
+            
+            if self.backend:
+                # Use StorageBackend
+                self.backend.save(
+                    graph_path,
+                    graph_json.encode('utf-8'),
+                    {'content_type': 'application/json'}
+                )
+            else:
+                # Use local filesystem
+                local_path = self.base_path / graph_path
+                local_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(local_path, 'w') as f:
+                    f.write(graph_json)
+            
+            self.logger.info(
+                f"Chunk dependency graph saved: session={session_id}, "
+                f"chunks={len(graph)}"
+            )
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to save chunk dependency graph: {e}")
+            return False
+    
+    def load_chunk_graph(
+        self,
+        session_id: str,
+        event_bus: 'EventBus' = None
+    ) -> Optional['ChunkDependencyGraph']:
+        """
+        Load a chunk dependency graph for a session.
+        
+        ITEM-FEAT-74: Restores the chunk dependency graph to enable
+        intelligent partial recovery after failures.
+        
+        Args:
+            session_id: Session identifier
+            event_bus: Optional EventBus for the restored graph
+            
+        Returns:
+            ChunkDependencyGraph instance or None if not found
+            
+        Example:
+            manager = CheckpointManager()
+            graph = manager.load_chunk_graph("session-123")
+            
+            if graph:
+                # Get chunks that need reprocessing
+                recovery_set = graph.get_recovery_chunks("failed_chunk_id")
+        """
+        self.logger.info(f"Loading chunk dependency graph for session: {session_id}")
+        
+        graph_path = self._get_chunk_graph_path(session_id)
+        
+        try:
+            if self.backend:
+                # Use StorageBackend
+                if not self.backend.exists(graph_path):
+                    self.logger.debug(f"No chunk graph found for session: {session_id}")
+                    return None
+                
+                data = self.backend.load(graph_path)
+                graph_json = data.decode('utf-8')
+            else:
+                # Use local filesystem
+                local_path = self.base_path / graph_path
+                if not local_path.exists():
+                    self.logger.debug(f"No chunk graph found for session: {session_id}")
+                    return None
+                
+                with open(local_path, 'r') as f:
+                    graph_json = f.read()
+            
+            # Import here to avoid circular imports
+            from context.chunk_dependency_graph import ChunkDependencyGraph
+            
+            # Deserialize the graph
+            graph_data = json.loads(graph_json)
+            graph = ChunkDependencyGraph.from_dict(graph_data, event_bus=event_bus)
+            
+            self.logger.info(
+                f"Chunk dependency graph loaded: session={session_id}, "
+                f"chunks={len(graph)}"
+            )
+            
+            return graph
+            
+        except Exception as e:
+            self.logger.error(f"Failed to load chunk dependency graph: {e}")
+            return None
+    
+    def save_checkpoint_with_graph(
+        self,
+        session_id: str,
+        data: Dict[str, Any],
+        graph: 'ChunkDependencyGraph',
+        format: SerializationFormat = SerializationFormat.JSON_ZSTD,
+        metadata: Dict[str, str] = None,
+        unsafe_mode: bool = False
+    ) -> tuple:
+        """
+        Save checkpoint data with chunk dependency graph.
+        
+        ITEM-FEAT-74: Convenience method to save both checkpoint data
+        and the chunk dependency graph in one call.
+        
+        Args:
+            session_id: Unique session identifier
+            data: Checkpoint data dictionary
+            graph: ChunkDependencyGraph instance
+            format: Serialization format (default: JSON_ZSTD)
+            metadata: Optional additional metadata
+            unsafe_mode: Allow unsafe pickle serialization
+            
+        Returns:
+            Tuple of (SerializationResult, bool) where bool indicates
+            if the graph was saved successfully
+            
+        Example:
+            manager = CheckpointManager()
+            graph = ChunkDependencyGraph()
+            # ... populate graph ...
+            
+            result, graph_saved = manager.save_checkpoint_with_graph(
+                "session-123",
+                {"state": "processing"},
+                graph
+            )
+        """
+        # Save the main checkpoint
+        result = self.save(
+            session_id,
+            data,
+            format=format,
+            metadata=metadata,
+            unsafe_mode=unsafe_mode
+        )
+        
+        if not result.success:
+            return result, False
+        
+        # Save the chunk graph
+        graph_saved = self.save_chunk_graph(session_id, graph)
+        
+        return result, graph_saved
+    
+    def load_checkpoint_with_graph(
+        self,
+        session_id: str,
+        event_bus: 'EventBus' = None,
+        unsafe_mode: bool = False
+    ) -> tuple:
+        """
+        Load checkpoint data with chunk dependency graph.
+        
+        ITEM-FEAT-74: Convenience method to load both checkpoint data
+        and the chunk dependency graph in one call.
+        
+        Args:
+            session_id: Session identifier
+            event_bus: Optional EventBus for the restored graph
+            unsafe_mode: Allow loading pickle checkpoints
+            
+        Returns:
+            Tuple of (data: Dict, graph: ChunkDependencyGraph or None, result: SerializationResult)
+            
+        Example:
+            manager = CheckpointManager()
+            data, graph, result = manager.load_checkpoint_with_graph("session-123")
+            
+            if result.success and graph:
+                # Resume processing with graph
+                pass
+        """
+        # Load the main checkpoint
+        data, result = self.load(session_id, unsafe_mode=unsafe_mode)
+        
+        if not result.success:
+            return data, None, result
+        
+        # Load the chunk graph
+        graph = self.load_chunk_graph(session_id, event_bus=event_bus)
+        
+        return data, graph, result
+    
+    def graph_exists(self, session_id: str) -> bool:
+        """
+        Check if a chunk dependency graph exists for a session.
+        
+        Args:
+            session_id: Session identifier
+            
+        Returns:
+            True if graph exists
+        """
+        graph_path = self._get_chunk_graph_path(session_id)
+        
+        if self.backend:
+            return self.backend.exists(graph_path)
+        else:
+            local_path = self.base_path / graph_path
+            return local_path.exists()
 
 
 # Factory function for convenience
