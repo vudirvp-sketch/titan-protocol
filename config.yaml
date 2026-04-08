@@ -756,3 +756,77 @@ amendment_control:
     - batches
     - keep_veto_markers
     - critical_path
+
+# ========================================
+# v4.1.0 Configuration Additions (TIER_7 - PHASE_27-33)
+# ========================================
+
+# ITEM-VAL-65: Sandbox Health Check
+sandbox:
+  health_check: true
+  check_interval_seconds: 60
+  unhealthy_action: "block"  # block | warn | allow
+  health_check_cache_seconds: 60
+
+# ITEM-SEC-122: Workspace Isolation Enforcement
+workspace:
+  enforcement: "strict"  # strict | permissive | disabled
+  allowed_symlinks: false
+  sandbox_to_workspace: true
+  require_workspace_path: true
+
+# ITEM-INT-102: CROSSREF_VALIDATOR
+crossref:
+  enabled: true
+  run_post_gate04: true
+  run_post_chunk: true
+  broken_threshold: 0.05  # 5% broken refs triggers diagnostics
+  validate_external: false
+  check_images: true
+  check_code_imports: true
+
+# ITEM-OPS-79: Schema Migration Framework
+schema_migration:
+  enabled: true
+  auto_apply: true
+  migrations_dir: "src/schema/migrations"
+  backup_before_migrate: true
+  validate_after_migrate: true
+
+# ITEM-VAL-69: Validation Tiering by Severity
+validation_tiering:
+  enabled: true
+  thresholds:
+    sev1_sev2: 1.0  # Always run
+    sev3_large_file_threshold: 50000
+    sev3_sampling_rate: 0.5
+    sev4_sampling_rate: 0.2
+
+# ITEM-OBS-81: Real-time p50/p95 Export
+realtime_metrics:
+  enabled: true
+  export_interval_seconds: 30
+  window_size: 100
+  include:
+    - token_count_p50
+    - token_count_p95
+    - latency_p50
+    - latency_p95
+
+# ITEM-OBS-85: Token Attribution per Gate
+token_attribution:
+  enabled: true
+  track_per_gate: true
+  include_in_metrics: true
+
+# ITEM-RES-113: Leaf Agent Heartbeat
+leaf_heartbeat:
+  enabled: true
+  timeout_seconds: 120
+  on_timeout: "replan"  # replan | abort | warn
+
+# ITEM-RES-143: DeterministicSeed Injection
+deterministic_seed:
+  enforce: true
+  require_temperature_zero: true
+  inject_on_all_calls: true

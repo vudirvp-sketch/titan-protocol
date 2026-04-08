@@ -1,34 +1,51 @@
 {
-  "session_id": "titan-upgrade-6b3fe165",
-  "protocol_version": "3.3.0",
-  "source_file": null,
-  "source_checksum": null,
-  "gates_passed": ["GATE-REPO-00", "GATE-REPO-01"],
-  "completed_batches": ["UPGRADE-P0", "UPGRADE-P1"],
-  "open_issues": [],
+  "id": "7a4f12c5-ad71-42de-8a82-4bc852d3bdec",
+  "status": "INITIALIZED",
+  "protocol_version": "3.2.2",
+  "created_at": "2026-04-08T02:50:44.424648Z",
+  "source_file": "/home/z/my-project/titan-protocol/inputs/test.md",
+  "source_checksum": "f1c2b13f897272c08e0d37df9975a4767848c94c38c475a45bf43c3ab845ac05",
+  "max_tokens": 100000,
+  "tokens_used": 0,
+  "current_phase": 0,
+  "current_gate": 0,
   "chunk_cursor": null,
-  "timestamp": "2026-04-07T00:00:00Z",
-  "cursor_state": {
-    "current_file": null,
-    "current_line": 0,
-    "current_chunk": null,
-    "current_section": null,
-    "offset_delta": 0
+  "chunks": {
+    "C1": {
+      "chunk_id": "C1",
+      "status": "PENDING",
+      "line_start": 0,
+      "line_end": 27
+    }
   },
-  "status": "READY",
-  "mode": "REPO_NAVIGATE",
-  "repo_url": "https://github.com/vudirvp-sketch/titan-protocol",
-  "skill_version": "2.1.0",
-  "protocol_source": "EXTERNAL",
-  "input_queue": [],
-  "output_target": "outputs/",
-  "checkpoint_path": "checkpoints/checkpoint.json",
-  "file_inventory_path": null,
-  "issue_dependency_graph": {},
-  "crossref_report": {
-    "total_references": 0,
-    "resolved": 0,
-    "broken": 0
+  "open_issues": [],
+  "known_gaps": [],
+  "gates_passed": [
+    "GATE-00",
+    "GATE-01",
+    "GATE-02",
+    "GATE-03",
+    "GATE-04",
+    "GATE-05"
+  ],
+  "completed_batches": [],
+  "input_files": [
+    "/home/z/my-project/titan-protocol/inputs/test.md"
+  ],
+  "recursion_depth": 0,
+  "recursion_depth_peak": 0,
+  "token_history": [],
+  "latency_history": [],
+  "confidence_scores": [],
+  "leaf_model_calls": 0,
+  "root_model_calls": 0,
+  "all_high_confidence": true,
+  "confidence_summary": {
+    "all_high": true,
+    "high_count": 0,
+    "med_count": 0,
+    "low_count": 0
   },
-  "notes": "Protocol upgraded to v3.2.1 with FILE_INVENTORY, CURSOR_TRACKING, ISSUE_DEPENDENCY_GRAPH, CROSSREF_VALIDATOR, DIAGNOSTICS_MODULE. Ready for processing."
+  "chunks_total": 1,
+  "saved_at": "2026-04-08T02:50:44.441413Z"
 }
