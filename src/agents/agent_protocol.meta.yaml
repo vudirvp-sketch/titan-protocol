@@ -1,0 +1,83 @@
+# TITAN Protocol Agent Metadata
+# Auto-generated: 2026-04-08T00:00:00Z
+# Source: src/agents/agent_protocol.py
+
+id: "agent_protocol"
+module: "agent_protocol.py"
+version: "4.0.0"
+
+purpose: |
+  Defines agent communication protocol and message routing.
+  Provides inter-agent communication with delivery guarantees,
+  including message routing, broadcasting, and EventBus integration
+  with Dead Letter Queue support for failed deliveries.
+
+tier: 6
+item_id: "ITEM-AGENT-02"
+
+dependencies:
+  - "event_bus"
+  - "dead_letter_queue"
+
+capabilities:
+  - message_routing
+  - protocol_negotiation
+  - broadcast_messaging
+  - delivery_guarantees
+  - dlq_integration
+
+classes:
+  - name: "AgentMessage"
+    purpose: "Message exchanged between agents"
+  - name: "AgentMessageRouter"
+    purpose: "Router for inter-agent communication with delivery guarantees"
+  - name: "AgentMessageType"
+    purpose: "Types of messages exchanged between agents"
+  - name: "RouterStats"
+    purpose: "Statistics for the AgentMessageRouter"
+
+message_types:
+  - TASK_REQUEST: "Request task assignment from orchestrator"
+  - TASK_RESULT: "Submit task execution result"
+  - CONTEXT_SHARE: "Share context/information with other agents"
+  - ASSISTANCE_REQUEST: "Request help from other agents"
+  - DISCOVERY_BROADCAST: "Broadcast discovered information"
+  - HEARTBEAT: "Agent alive signal for health monitoring"
+  - STATUS_UPDATE: "Update agent status information"
+
+events_emitted:
+  - AGENT_MESSAGE
+  - EVENT_HANDLER_FAILURE
+
+config_keys:
+  - messaging.timeout_seconds
+  - messaging.max_retries
+  - messaging.dlq_enabled
+
+metrics:
+  - eventbus_events_total
+  - eventbus_dlq_total
+  - eventbus_subscribers
+
+related_modules:
+  - "src/events/event_bus.py"
+  - "src/events/dead_letter_queue.py"
+  - "src/agents/multi_agent_orchestrator.py"
+
+convenience_functions:
+  - create_heartbeat_message
+  - create_task_request_message
+  - create_task_result_message
+  - create_context_share_message
+  - create_assistance_request_message
+  - create_discovery_broadcast_message
+  - create_status_update_message
+
+test_coverage:
+  test_file: "tests/test_agent_protocol.py"
+  scenarios:
+    - "message_creation"
+    - "message_routing"
+    - "broadcast_delivery"
+    - "dlq_integration"
+    - "event_bus_integration"

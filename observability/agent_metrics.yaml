@@ -1,0 +1,318 @@
+# TITAN Agent Metrics Definition
+# Prometheus-compatible metrics configuration
+# Version: 1.0.0
+# Generated: 2026-04-08T00:00:00Z
+
+version: "1.0.0"
+generated: "2026-04-08T00:00:00Z"
+
+# Metrics exposed by the Multi-Agent Orchestrator and related modules
+metrics:
+  # ===========================================
+  # Task Completion Metrics
+  # ===========================================
+  agent_task_completion_rate:
+    type: gauge
+    description: "Percentage of tasks completed without human intervention"
+    labels: [agent_id, task_type]
+    target: 0.95
+    unit: "percentage"
+    category: "task"
+
+  agent_task_total:
+    type: counter
+    description: "Total number of tasks processed"
+    labels: [agent_id, task_type, status]
+    unit: "count"
+    category: "task"
+
+  agent_task_latency_p50:
+    type: gauge
+    description: "p50 latency for agent task completion (milliseconds)"
+    labels: [agent_id]
+    unit: "ms"
+    category: "performance"
+
+  agent_task_latency_p95:
+    type: gauge
+    description: "p95 latency for agent task completion (milliseconds)"
+    labels: [agent_id]
+    unit: "ms"
+    category: "performance"
+
+  agent_task_latency_p99:
+    type: gauge
+    description: "p99 latency for agent task completion (milliseconds)"
+    labels: [agent_id]
+    unit: "ms"
+    category: "performance"
+
+  # ===========================================
+  # Navigation Metrics
+  # ===========================================
+  nav_map_lookup_total:
+    type: counter
+    description: "Total navigation map lookups"
+    labels: [agent_id, result]
+    unit: "count"
+    category: "navigation"
+
+  nav_map_fallback_rate:
+    type: gauge
+    description: "Rate of fallback from semantic to path-based navigation"
+    target: 0.05
+    unit: "percentage"
+    category: "navigation"
+
+  agent_onboarding_time_seconds:
+    type: gauge
+    description: "Time for new agent to first successful task"
+    target: 300
+    unit: "seconds"
+    category: "onboarding"
+
+  # ===========================================
+  # Migration Metrics
+  # ===========================================
+  migration_total:
+    type: counter
+    description: "Total migration operations"
+    labels: [from_version, to_version, status]
+    unit: "count"
+    category: "migration"
+
+  migration_success_rate:
+    type: gauge
+    description: "Success rate of version migrations"
+    target: 0.95
+    unit: "percentage"
+    category: "migration"
+
+  legacy_command_usage_total:
+    type: counter
+    description: "Usage count of deprecated commands"
+    labels: [command, version_deprecated]
+    unit: "count"
+    category: "deprecation"
+
+  # ===========================================
+  # Version Drift Metrics
+  # ===========================================
+  version_drift_events:
+    type: counter
+    description: "Count of version drift detection events"
+    labels: [source, detected_version, expected_version]
+    unit: "count"
+    category: "compliance"
+
+  version_sync_status:
+    type: gauge
+    description: "Version synchronization status (1=synchronized, 0=drift)"
+    labels: [source]
+    unit: "boolean"
+    category: "compliance"
+
+  # ===========================================
+  # Checkpoint Metrics
+  # ===========================================
+  checkpoint_save_total:
+    type: counter
+    description: "Total checkpoint save operations"
+    labels: [status]
+    unit: "count"
+    category: "checkpoint"
+
+  checkpoint_load_total:
+    type: counter
+    description: "Total checkpoint load operations"
+    labels: [status]
+    unit: "count"
+    category: "checkpoint"
+
+  checkpoint_size_bytes:
+    type: gauge
+    description: "Size of checkpoint files in bytes"
+    labels: [checkpoint_id]
+    unit: "bytes"
+    category: "checkpoint"
+
+  # ===========================================
+  # EventBus Metrics
+  # ===========================================
+  eventbus_events_total:
+    type: counter
+    description: "Total events emitted to EventBus"
+    labels: [event_type, source]
+    unit: "count"
+    category: "eventbus"
+
+  eventbus_dlq_total:
+    type: counter
+    description: "Total events sent to Dead Letter Queue"
+    labels: [event_type, error_reason]
+    unit: "count"
+    category: "eventbus"
+
+  eventbus_subscribers:
+    type: gauge
+    description: "Number of active EventBus subscribers"
+    labels: [event_type]
+    unit: "count"
+    category: "eventbus"
+
+  # ===========================================
+  # Conflict Resolution Metrics
+  # ===========================================
+  conflict_total:
+    type: counter
+    description: "Total conflict detection events"
+    labels: [conflict_type, resolution_strategy]
+    unit: "count"
+    category: "conflict"
+
+  conflict_resolution_time_ms:
+    type: gauge
+    description: "Time to resolve conflicts in milliseconds"
+    labels: [conflict_type]
+    unit: "ms"
+    category: "conflict"
+
+# ===========================================
+# Alerting Rules
+# ===========================================
+alerts:
+  - name: agent_task_completion_low
+    expr: agent_task_completion_rate < 0.90
+    severity: warning
+    message: "Agent task completion rate below 90%"
+    for: "5m"
+    labels:
+      team: platform
+      component: orchestrator
+
+  - name: agent_task_completion_critical
+    expr: agent_task_completion_rate < 0.75
+    severity: critical
+    message: "Agent task completion rate critically low (<75%)"
+    for: "2m"
+    labels:
+      team: platform
+      component: orchestrator
+
+  - name: nav_map_fallback_high
+    expr: nav_map_fallback_rate > 0.10
+    severity: warning
+    message: "Navigation fallback rate above 10%"
+    for: "5m"
+    labels:
+      team: platform
+      component: navigation
+
+  - name: version_drift_detected
+    expr: version_drift_events > 0
+    severity: critical
+    message: "Version drift detected - sync required"
+    for: "0m"
+    labels:
+      team: platform
+      component: compliance
+
+  - name: migration_failure_spike
+    expr: rate(migration_total{status="failed"}[5m]) > 0.1
+    severity: warning
+    message: "High migration failure rate detected"
+    for: "5m"
+    labels:
+      team: platform
+      component: migration
+
+  - name: dlq_accumulation
+    expr: rate(eventbus_dlq_total[5m]) > 0.5
+    severity: warning
+    message: "Events accumulating in Dead Letter Queue"
+    for: "5m"
+    labels:
+      team: platform
+      component: eventbus
+
+  - name: checkpoint_save_failures
+    expr: rate(checkpoint_save_total{status="failed"}[10m]) > 0.1
+    severity: warning
+    message: "Checkpoint save failures detected"
+    for: "5m"
+    labels:
+      team: platform
+      component: state
+
+# ===========================================
+# Dashboard Configurations
+# ===========================================
+dashboards:
+  - name: agent_overview
+    title: "Agent Performance Overview"
+    panels:
+      - title: "Task Completion Rate"
+        metric: agent_task_completion_rate
+        visualization: gauge
+        thresholds:
+          green: ">= 0.95"
+          yellow: ">= 0.90"
+          red: "< 0.90"
+
+      - title: "Task Latency Distribution"
+        metric: agent_task_latency_p50, agent_task_latency_p95, agent_task_latency_p99
+        visualization: graph
+
+      - title: "Navigation Fallback Rate"
+        metric: nav_map_fallback_rate
+        visualization: gauge
+        thresholds:
+          green: "< 0.05"
+          yellow: "< 0.10"
+          red: ">= 0.10"
+
+  - name: system_health
+    title: "System Health Metrics"
+    panels:
+      - title: "Version Sync Status"
+        metric: version_sync_status
+        visualization: stat
+
+      - title: "EventBus Health"
+        metric: eventbus_events_total, eventbus_dlq_total
+        visualization: graph
+
+      - title: "Checkpoint Operations"
+        metric: checkpoint_save_total, checkpoint_load_total
+        visualization: graph
+
+# ===========================================
+# Collection Configuration
+# ===========================================
+collection:
+  interval_seconds: 15
+  timeout_seconds: 10
+  max_retries: 3
+
+  # Prometheus endpoint configuration
+  prometheus:
+    enabled: true
+    port: 9090
+    path: /metrics
+    prefix: titan_
+
+  # Labels automatically added to all metrics
+  default_labels:
+    protocol_version: "4.1.0"
+    tier: "TIER_7_PRODUCTION"
+    environment: "production"
+
+# ===========================================
+# Retention Configuration
+# ===========================================
+retention:
+  raw_data_days: 7
+  aggregated_data_days: 90
+  resolution:
+    raw: "15s"
+    aggregated: "1h"

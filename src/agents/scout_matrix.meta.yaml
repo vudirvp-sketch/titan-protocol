@@ -1,0 +1,96 @@
+# TITAN Protocol Agent Metadata
+# Auto-generated: 2026-04-08T00:00:00Z
+# Source: src/agents/scout_matrix.py
+
+id: "scout_matrix"
+module: "scout_matrix.py"
+version: "3.2.3"
+
+purpose: |
+  SCOUT Roles Matrix Agent Framework for technology assessment.
+  Implements four specialized agents (RADAR/DEVIL/EVAL/STRAT) with
+  explicit roles for domain classification, hype detection,
+  readiness assessment with veto power, and strategy synthesis.
+
+tier: 4
+item_id: "ITEM-CAT-02"
+
+dependencies:
+  - "state.assessment"
+
+capabilities:
+  - adaptive_scoring
+  - role_assignment
+  - hype_detection
+  - risk_flagging
+  - readiness_assessment
+  - veto_propagation
+  - strategy_synthesis
+
+agent_roles:
+  RADAR:
+    purpose: "Domain/signal classification"
+    tier: 0
+  DEVIL:
+    purpose: "Hype detection and risk flagging"
+    tier: 1
+    mandatory_contexts:
+      - "evaluate"
+      - "compare"
+      - "validate"
+  EVAL:
+    purpose: "Readiness assessment with veto power"
+    tier: 2
+    veto_power: true
+  STRAT:
+    purpose: "Strategy synthesis respecting EVAL constraints"
+    tier: 3
+    blocked_by: "EVAL"
+
+classes:
+  - name: "RADARAgent"
+    purpose: "Domain and signal classification agent"
+  - name: "DEVILAgent"
+    purpose: "Hype detection and risk flagging agent"
+  - name: "EVALAgent"
+    purpose: "Readiness assessment agent with veto power"
+  - name: "STRATAgent"
+    purpose: "Strategy synthesis agent"
+  - name: "ScoutPipeline"
+    purpose: "Coordinates SCOUT agent execution pipeline"
+  - name: "AnalysisContext"
+    purpose: "Input context for SCOUT pipeline analysis"
+  - name: "ScoutOutput"
+    purpose: "Output from SCOUT pipeline execution"
+
+readiness_tiers:
+  PRODUCTION_READY: "Battle-tested, safe for production use"
+  EARLY_ADOPTER: "Stable but needs monitoring"
+  EXPERIMENTAL: "Unproven, use with caution"
+  VAPORWARE: "No real implementation, avoid"
+
+pipeline_contexts:
+  DISCOVER: "Exploration mode"
+  EVALUATE: "Assessment mode (requires DEVIL)"
+  COMPARE: "Comparison mode (requires DEVIL)"
+  VALIDATE: "Validation mode (requires DEVIL)"
+
+config_keys:
+  - scout.weights
+  - scout.hype_threshold
+  - scout.confidence_threshold
+
+related_modules:
+  - "src/state/assessment.py"
+  - "src/scoring/adaptive_weights.py"
+  - "src/decision/conflict_resolver.py"
+
+test_coverage:
+  test_file: "tests/test_scout_matrix.py"
+  scenarios:
+    - "radar_domain_analysis"
+    - "devil_hype_detection"
+    - "eval_readiness_assessment"
+    - "strat_strategy_synthesis"
+    - "veto_propagation"
+    - "pipeline_execution"

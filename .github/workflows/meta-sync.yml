@@ -1,0 +1,83 @@
+name: Validate README_META
+
+on:
+  push:
+    paths:
+      - '.github/README_META.yaml'
+      - 'VERSION'
+      - 'AGENTS.md'
+  pull_request:
+    paths:
+      - '.github/README_META.yaml'
+      - 'VERSION'
+      - 'AGENTS.md'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyyaml jsonschema yq
+
+      - name: Check META exists
+        run: |
+          test -f .github/README_META.yaml || (echo "ERROR: README_META.yaml not found" && exit 1)
+
+      - name: Validate META schema
+        run: |
+          python3 -c "
+import yaml
+import json
+import jsonschema
+
+with open('.github/README_META.yaml', 'r') as f:
+    meta = yaml.safe_load(f)
+
+with open('schemas/readme_meta.schema.json', 'r') as f:
+    schema = json.load(f)
+
+try:
+    jsonschema.validate(instance=meta, schema=schema)
+    print('✅ README_META.yaml validates against schema')
+except jsonschema.ValidationError as e:
+    print(f'❌ Validation error: {e.message}')
+    exit(1)
+"
+
+      - name: Validate version sync
+        run: |
+          VERSION=$(head -1 VERSION)
+          META_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('.github/README_META.yaml'))['protocol']['version'])")
+          echo "VERSION file: $VERSION"
+          echo "META version: $META_VERSION"
+          test "$VERSION" = "$META_VERSION" || (echo "ERROR: Version mismatch!" && exit 1)
+          echo "✅ Version sync validated"
+
+      - name: Validate nav_map sync
+        run: |
+          VERSION=$(head -1 VERSION)
+          NAV_VERSION=$(python3 -c "import json; print(json.load(open('.ai/nav_map.json'))['version'])")
+          echo "VERSION file: $VERSION"
+          echo "nav_map version: $NAV_VERSION"
+          test "$VERSION" = "$NAV_VERSION" || (echo "ERROR: nav_map version mismatch!" && exit 1)
+          echo "✅ nav_map sync validated"
+
+      - name: Report status
+        run: |
+          echo "## README_META Validation Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| META exists | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
+          echo "| Schema validation | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version sync | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
+          echo "| nav_map sync | ✅ Pass |" >> $GITHUB_STEP_SUMMARY

@@ -1,12 +1,13 @@
 {
-  "version": "3.2.1",
-  "generated": "2026-04-07T00:00:00Z",
+  "version": "4.1.0",
+  "generated": "2026-04-08T00:00:00Z",
   "navigation": {
     "entry_points": {
       "agents": "AGENTS.md",
       "human": "README.md",
       "system": "AI_MISSION.md",
-      "config": "SKILL.md"
+      "config": "SKILL.md",
+      "meta": ".github/README_META.yaml"
     },
     "protocol_files": [
       {
@@ -38,6 +39,16 @@
         "path": "config.yaml",
         "purpose": "Runtime defaults",
         "tier": -1
+      },
+      {
+        "path": ".github/README_META.yaml",
+        "purpose": "Single source of truth for protocol metadata",
+        "tier": -1
+      },
+      {
+        "path": "schemas/readme_meta.schema.json",
+        "purpose": "JSON Schema for README_META validation",
+        "tier": -1
       }
     ],
     "directories": {
@@ -56,6 +67,14 @@
       "skills/validators": {
         "purpose": "Custom validators",
         "type": "extension"
+      },
+      "docs/tiers": {
+        "purpose": "Tier exit criteria documentation",
+        "type": "documentation"
+      },
+      "observability": {
+        "purpose": "Agent metrics and monitoring configuration",
+        "type": "observability"
       }
     }
   },
@@ -85,6 +104,10 @@
     "config": {
       "action": "read",
       "target": "config.yaml"
+    },
+    "meta": {
+      "action": "read",
+      "target": ".github/README_META.yaml"
     }
   }
 }

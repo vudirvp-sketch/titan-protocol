@@ -1,0 +1,77 @@
+# TITAN Protocol Agent Metadata
+# Auto-generated: 2026-04-08T00:00:00Z
+# Source: src/agents/multi_agent_orchestrator.py
+
+id: "multi_agent_orchestrator"
+module: "multi_agent_orchestrator.py"
+version: "4.0.0"
+
+purpose: |
+  Orchestrates multiple agents with task queue and conflict resolution.
+  Provides agent registration with capability tracking, priority-based
+  task dispatching, result aggregation with confidence scoring, and
+  conflict resolution using existing ConflictResolver.
+
+tier: 6
+item_id: "ITEM-AGENT-01"
+
+dependencies:
+  - "event_bus"
+  - "conflict_resolver"
+
+capabilities:
+  - task_queue_management
+  - agent_registry
+  - conflict_resolution
+  - result_aggregation
+  - heartbeat_monitoring
+  - priority_dispatch
+
+classes:
+  - name: "MultiAgentOrchestrator"
+    purpose: "Main orchestrator for multi-agent coordination"
+  - name: "Agent"
+    purpose: "Represents an agent in the orchestrator"
+  - name: "Task"
+    purpose: "Represents a task to be dispatched"
+  - name: "Result"
+    purpose: "Result from a task execution"
+  - name: "TaskQueue"
+    purpose: "Priority-based task queue with capability matching"
+  - name: "AgentRegistry"
+    purpose: "Registry for agents with capability-based lookup"
+
+events_emitted:
+  - AGENT_REGISTERED
+  - AGENT_UNREGISTERED
+  - TASK_DISPATCHED
+  - TASK_QUEUED
+  - RESULT_SUBMITTED
+  - RESULTS_AGGREGATED
+
+config_keys:
+  - agents.max_concurrent
+  - agents.timeout_seconds
+  - agents.heartbeat_timeout
+  - agents.max_queue_size
+
+metrics:
+  - agent_task_completion_rate
+  - agent_task_total
+  - agent_task_latency_p50
+  - agent_task_latency_p95
+  - agent_task_latency_p99
+
+related_modules:
+  - "src/events/event_bus.py"
+  - "src/decision/conflict_resolver.py"
+  - "src/observability/agent_metrics_collector.py"
+
+test_coverage:
+  test_file: "tests/test_multi_agent_orchestrator.py"
+  scenarios:
+    - "agent_registration"
+    - "task_dispatch"
+    - "result_aggregation"
+    - "conflict_resolution"
+    - "heartbeat_monitoring"

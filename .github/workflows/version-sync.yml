@@ -1,0 +1,87 @@
+name: Version Sync Check
+
+on:
+  push:
+    paths:
+      - 'VERSION'
+      - '.ai/nav_map.json'
+      - '.github/README_META.yaml'
+  pull_request:
+    paths:
+      - 'VERSION'
+      - '.ai/nav_map.json'
+      - '.github/README_META.yaml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Extract versions
+        id: versions
+        run: |
+          # VERSION file
+          VERSION=$(head -1 VERSION)
+          echo "version_file=$VERSION" >> $GITHUB_OUTPUT
+
+          # nav_map.json
+          NAV_VERSION=$(python3 -c "import json; print(json.load(open('.ai/nav_map.json'))['version'])" 2>/dev/null || echo "not_found")
+          echo "nav_version=$NAV_VERSION" >> $GITHUB_OUTPUT
+
+          # README_META.yaml
+          META_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('.github/README_META.yaml'))['protocol']['version'])" 2>/dev/null || echo "not_found")
+          echo "meta_version=$META_VERSION" >> $GITHUB_OUTPUT
+
+          echo "### Extracted Versions:" >> $GITHUB_STEP_SUMMARY
+          echo "- VERSION file: \`$VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "- nav_map.json: \`$NAV_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "- README_META.yaml: \`$META_VERSION\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check version sync
+        run: |
+          VERSION="${{ steps.versions.outputs.version_file }}"
+          NAV_VERSION="${{ steps.versions.outputs.nav_version }}"
+          META_VERSION="${{ steps.versions.outputs.meta_version }}"
+
+          ERRORS=""
+
+          if [ "$VERSION" != "$NAV_VERSION" ]; then
+            ERRORS="${ERRORS}DRIFT: nav_map.json ($NAV_VERSION) != VERSION ($VERSION)\n"
+          fi
+
+          if [ "$VERSION" != "$META_VERSION" ]; then
+            ERRORS="${ERRORS}DRIFT: README_META.yaml ($META_VERSION) != VERSION ($VERSION)\n"
+          fi
+
+          if [ -n "$ERRORS" ]; then
+            echo -e "❌ Version drift detected:\n$ERRORS"
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## ❌ Version Drift Detected" >> $GITHUB_STEP_SUMMARY
+            echo -e "$ERRORS" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          echo "✅ All versions are synchronized"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ Version Sync Validated" >> $GITHUB_STEP_SUMMARY
+          echo "All sources are synchronized to version \`$VERSION\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.versions.outputs.version_file }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            echo "Expected semantic version (e.g., 4.1.0)"
+            exit 1
+          fi
+          echo "✅ Version format is valid: $VERSION"

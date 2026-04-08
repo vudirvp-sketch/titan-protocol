@@ -1,0 +1,47 @@
+# TITAN Protocol README Metadata
+# Single source of truth for protocol metadata
+# Generated: 2026-04-08T00:00:00Z
+
+protocol:
+  version: "4.1.0"
+  tier: "TIER_7_PRODUCTION"
+  status: "IN_PROGRESS"
+  catalog_compliance: 100
+
+last_sync: "2026-04-08T00:00:00Z"
+
+sources:
+  version_file: "VERSION"
+  agents_entry: "AGENTS.md"
+  nav_map: ".ai/nav_map.json"
+
+# Extracted from AGENTS.md frontmatter
+metadata:
+  purpose: "Entry point for LLM agents navigating the TITAN FUSE Protocol repository"
+  audience:
+    - "agents"
+    - "developers"
+  when_to_read: "FIRST — before any other file in this repository"
+  related_files:
+    - "README.md"
+    - "SKILL.md"
+    - "PROTOCOL.md"
+    - ".ai/nav_map.json"
+  stable_sections:
+    - "navigation-matrix"
+    - "critical-constraints"
+  emotional_tone: "welcoming, directive, concise"
+  ideal_reader_state: "starting a new session with this repository"
+
+# Validation configuration
+validation:
+  require_version_sync: true
+  require_tier_status: true
+  require_catalog_compliance: true
+
+# Sync history for audit trail
+sync_history:
+  - timestamp: "2026-04-08T00:00:00Z"
+    action: "created"
+    version: "4.1.0"
+    source: "ITEM-SYNC-001 implementation"
