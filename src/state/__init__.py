@@ -26,6 +26,16 @@ from .checkpoint_manager import (
     CheckpointMetadata,
     get_checkpoint_manager
 )
+# ITEM-ARCH-16: External State Drift Policy
+from .drift_policy import (
+    ConflictPolicy,
+    DriftReport,
+    DriftPolicyHandler,
+    DriftDetectedError,
+    MergeConflictError,
+    ActionResult,
+    check_state_drift
+)
 
 __all__ = [
     'AssessmentScore',
@@ -56,5 +66,13 @@ __all__ = [
     # ITEM-STOR-02: Checkpoint manager
     'CheckpointManager',
     'CheckpointMetadata',
-    'get_checkpoint_manager'
+    'get_checkpoint_manager',
+    # ITEM-ARCH-16: External State Drift Policy
+    'ConflictPolicy',
+    'DriftReport',
+    'DriftPolicyHandler',
+    'DriftDetectedError',
+    'MergeConflictError',
+    'ActionResult',
+    'check_state_drift'
 ]

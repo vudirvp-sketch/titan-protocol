@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..events.event_bus import EventBus, EventSeverity
+    from .drift_policy import ConflictPolicy, DriftPolicyHandler, DriftReport, ActionResult
 
 
 @dataclass
@@ -433,6 +434,72 @@ class CursorTracker:
             expected_hash=checkpoint_hash,
             actual_hash=current_hash
         )
+
+    def validate_and_handle_drift(
+        self,
+        policy: 'ConflictPolicy',
+        local_state: Dict,
+        external_state: Dict,
+        drift_handler: 'DriftPolicyHandler' = None
+    ) -> 'ActionResult':
+        """
+        Validate cursor and handle drift with specified policy.
+
+        ITEM-ARCH-16: Integration with DriftPolicyHandler.
+
+        This method combines drift detection with policy-based resolution.
+        Use this when you need to not only detect drift but also handle it
+        according to a configurable conflict policy.
+
+        Args:
+            policy: The ConflictPolicy to apply (FAIL, CLOBBER, MERGE, BRANCH)
+            local_state: The local/expected state
+            external_state: The external/current state
+            drift_handler: Optional DriftPolicyHandler (creates one if None)
+
+        Returns:
+            ActionResult with the outcome of policy application
+
+        Raises:
+            DriftDetectedError: If policy is FAIL and drift is detected
+        """
+        # Import here to avoid circular dependency
+        from .drift_policy import ConflictPolicy, DriftPolicyHandler
+
+        # Create handler if not provided
+        if drift_handler is None:
+            drift_handler = DriftPolicyHandler(event_bus=self._event_bus)
+        elif self._event_bus and drift_handler._event_bus is None:
+            drift_handler.set_event_bus(self._event_bus)
+
+        # Detect drift
+        report = drift_handler.detect_drift(
+            local=local_state,
+            external=external_state,
+            local_hash=self.cursor_hash
+        )
+
+        # No drift detected
+        if report is None:
+            from .drift_policy import ActionResult
+            return ActionResult(
+                success=True,
+                policy_applied=policy,
+                message="No drift detected"
+            )
+
+        # Apply the specified policy
+        return drift_handler.apply_policy(policy, report, local_state, external_state)
+
+    def get_drift_handler(self) -> 'DriftPolicyHandler':
+        """
+        Get a DriftPolicyHandler configured with this tracker's EventBus.
+
+        Returns:
+            DriftPolicyHandler instance
+        """
+        from .drift_policy import DriftPolicyHandler
+        return DriftPolicyHandler(event_bus=self._event_bus)
 
 
 # Convenience functions

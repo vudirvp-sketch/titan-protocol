@@ -187,6 +187,13 @@ policy:
       - "INFO"
     auto_resolve: false  # Auto-resolve trivial conflicts
 
+# ITEM-ARCH-10: PolicyStagingZone
+staging_zone:
+  min_confidence: 0.6  # Minimum confidence to commit a staged policy
+  max_staged: 100  # Maximum number of staged policies
+  ttl_seconds: 3600  # Time-to-live for staged policies (1 hour)
+  cleanup_interval_seconds: 300  # Automatic cleanup interval (5 minutes)
+
 recursion:
   max_recursion_depth: 3
   track_peak: true
@@ -548,3 +555,30 @@ skills:
   validation:
     on_startup: true
     strict_mode: false
+
+# ========================================
+# v3.7.0 Configuration Additions (Phase 18)
+# ========================================
+
+# ITEM-ARCH-16: External State Drift Policy
+state:
+  drift_policy: "FAIL"  # FAIL | CLOBBER | MERGE | BRANCH
+  drift_detection:
+    enabled: true
+    check_interval_seconds: 30
+    on_drift:
+      log_level: "WARN"
+      emit_event: true
+  merge_strategy:
+    prefer: "local"  # local | external | newer
+    conflict_resolution: "manual"  # manual | prefer_local | prefer_external
+
+# ITEM-ARCH-18: Config Precedence Pyramid
+config_precedence:
+  log_overrides: true
+  strict_mode: false  # Warn on conflicts if true
+  sources:
+    env_prefix: "TITAN_"
+    cli_prefix: "--"
+    constraints_file: "constraints.yaml"
+    local_file: "config.yaml"

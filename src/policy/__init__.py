@@ -6,6 +6,7 @@ ITEM-ARCH-04: Gate-04 SEV-1 Override Fix
 ITEM-GATE-01: Gate-04 Early Exit Fix
 ITEM-GATE-02: Mode-Based Gate Sensitivity
 ITEM-POLICY-01: PolicyResolver for EQUIP Stage
+ITEM-ARCH-10: PolicyStagingZone
 """
 
 from .intent_router import IntentRouter, IntentResult, INTENT_CHAINS
@@ -26,6 +27,11 @@ from .policy_resolver import (
     ResolutionResult, Skill, Constraints, Constraint, ToolConstraint,
     BudgetConstraint, create_policy_resolver, resolve_skill_policy,
     lint_skills
+)
+from .staging_zone import (
+    PolicyStagingZone, StagedPolicy, StagingZoneConfig,
+    NoStagedPolicyError, InsufficientClarityError, StagedPolicyExpiredError,
+    create_staging_zone, get_staging_zone, reset_staging_zone
 )
 
 __all__ = [
@@ -75,4 +81,15 @@ __all__ = [
     'create_policy_resolver',
     'resolve_skill_policy',
     'lint_skills',
+    
+    # Policy staging zone (ITEM-ARCH-10)
+    'PolicyStagingZone',
+    'StagedPolicy',
+    'StagingZoneConfig',
+    'NoStagedPolicyError',
+    'InsufficientClarityError',
+    'StagedPolicyExpiredError',
+    'create_staging_zone',
+    'get_staging_zone',
+    'reset_staging_zone',
 ]
