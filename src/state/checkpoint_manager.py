@@ -32,6 +32,9 @@ from dataclasses import dataclass, field
 
 from src.utils.timezone import now_utc, now_utc_iso
 
+# Import migration framework (ITEM-OPS-79)
+from src.schema.migrations import apply_migrations, CURRENT_SCHEMA_VERSION
+
 # Import from sibling modules
 from .checkpoint_serialization import (
     SerializationFormat,
@@ -456,9 +459,21 @@ class CheckpointManager:
                     )
                 
                 if result.success:
+                    # ITEM-OPS-79: Auto-migrate checkpoint if version mismatch
+                    checkpoint_version = data.get("protocol_version", "unknown")
+                    if checkpoint_version != CURRENT_SCHEMA_VERSION:
+                        self.logger.info(
+                            f"Migrating checkpoint from {checkpoint_version} to {CURRENT_SCHEMA_VERSION}"
+                        )
+                        data = apply_migrations(data)
+                        self.logger.info(
+                            f"Migration complete: now at version {data.get('protocol_version')}"
+                        )
+                    
                     self.logger.info(
                         f"Checkpoint loaded: session={session_id}, "
-                        f"format={result.format.value if result.format else 'unknown'}"
+                        f"format={result.format.value if result.format else 'unknown'}, "
+                        f"version={data.get('protocol_version', 'unknown')}"
                     )
                     return data, result
                     
