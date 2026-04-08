@@ -8,11 +8,43 @@ emotional_tone: "informative, welcoming, technical"
 ideal_reader_state: "learning about the protocol"
 ---
 
+<!-- version-header -->
 # TITAN FUSE Protocol
 
-**Production-Grade Large-File Agent Protocol v3.2.1**
+**Production-Grade Large-File Agent Protocol v4.1.0**
 
 A deterministic LLM agent protocol for processing large files (5k–50k+ lines) with verification gates, rollback safety, and session persistence.
+
+<!-- badges -->
+![Version](https://img.shields.io/badge/version-4.1.0-blue)
+![Tier](https://img.shields.io/badge/tier-TIER_7_IN_PROGRESS-orange)
+![Tests](https://img.shields.io/badge/tests-1100+-brightgreen)
+![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)
+![Contributing](https://img.shields.io/badge/contributing-welcome-brightgreen)
+
+---
+
+## Project Scale
+
+| Metric | Value |
+|--------|-------|
+| Python Modules | 175 files |
+| Lines of Code | 73,800+ |
+| Test Coverage | 1,100+ tests |
+| Architecture Tiers | 8 (TIER -1..7) |
+| Production Status | TIER_7_IN_PROGRESS |
+
+---
+
+## Requirements
+
+```yaml
+requirements:
+  python: ">=3.10"
+  node: ">=18"  # for JS validators
+  cli_tools: [gh, git, python3]
+  env_vars: [TITAN_API_KEY, TITAN_TOKEN_LIMIT]
+```
 
 ---
 
@@ -20,7 +52,7 @@ A deterministic LLM agent protocol for processing large files (5k–50k+ lines) 
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/titan-protocol.git
+git clone https://github.com/vudirvp-sketch/titan-protocol.git
 cd titan-protocol
 
 # Assemble the protocol
@@ -62,6 +94,13 @@ cp your-large-file.md inputs/
 - **ISSUE_DEPENDENCY_GRAPH**: DAG for issue dependencies with topological ordering
 - **CROSSREF_VALIDATOR**: Reference validation module (section, anchor, code, import refs)
 - **DIAGNOSTICS_MODULE**: Systematic troubleshooting (Symptom → Root Cause → Solution matrix)
+
+### TIER 7 Production Features (NEW in v4.1.0)
+- **Planning DAG**: CycleDetector prevents infinite loops in execution plans
+- **Amendment Control**: GATE-PLAN and GATE-AMENDMENT enforcement
+- **Multi-Agent Orchestration**: SCOUT roles (RADAR/DEVIL/EVAL/STRAT) for quality assurance
+- **Observability**: OpenTelemetry tracing, structured logging, token attribution
+- **Production Ready**: 1100+ tests, security hardening, checkpoint isolation
 
 ---
 
@@ -115,16 +154,19 @@ titan-protocol/
 
 ### TIER Structure
 
-| Tier | Name | Purpose |
-|------|------|---------|
-| -1 | Bootstrap | Repository navigation, self-initialization |
-| 0 | Invariants | Non-negotiable rules (anti-fabrication, zero-drift) |
-| 1 | Core Principles | Deterministic execution, tool-first navigation |
-| 2 | Execution Protocol | Phased processing (Phase 0-5) |
-| 3 | Output Format | Mandatory structure and artifacts |
-| 4 | Rollback Protocol | Backup and recovery |
-| 5 | Failsafe Protocol | Edge case handling |
-| 6 | Verification Gates | GATE-00 through GATE-05 |
+| Tier | Name | Purpose | Key Modules |
+|------|------|---------|-------------|
+| -1 | Bootstrap | Repository navigation, self-initialization | PROTOCOL.ext.md |
+| 0 | Invariants | Non-negotiable rules (anti-fabrication, zero-drift) | PROTOCOL.base.md |
+| 1 | Core Principles | Deterministic execution, tool-first navigation | PROTOCOL.base.md |
+| 2 | Execution Protocol | Phased processing (Phase 0-5) | orchestrator.py |
+| 3 | Output Format | Mandatory structure and artifacts | src/output/ |
+| 4 | Rollback Protocol | Backup and recovery | checkpoint_manager.py |
+| 5 | Failsafe Protocol | Edge case handling | recovery_manager.py |
+| 6 | Verification Gates | GATE-00 through GATE-05 | guardian.py |
+| 7 | Production | Multi-agent, observability, planning | multi_agent_orchestrator.py, cycle_detector.py |
+
+> **Note**: TIER_7 status is IN_PROGRESS (NOT STABLE). See `docs/tiers/TIER_7_EXIT_CRITERIA.md` for production readiness gates.
 
 ### Processing Pipeline
 
@@ -226,7 +268,7 @@ flowchart LR
 | GATE-02 | All issues classified with ISSUE_ID | BLOCK |
 | GATE-03 | Plan validated, no KEEP_VETO violations | BLOCK |
 | GATE-04 | Validations pass OR gaps within threshold | BLOCK/WARN |
-| GATE-05 | All artifacts generated, hygiene complete | BLOCK |
+| GATE-05 | artifacts-generated AND metrics.json-valid AND audit_trail.sig-verified | BLOCK |
 
 ### GATE-04 Threshold Rules
 
@@ -236,21 +278,131 @@ flowchart LR
 
 ---
 
-## Agent Navigation (NEW)
+## Security
+
+### Invariants (Non-Negotiable)
+
+| ID | Name | Enforcement |
+|----|------|-------------|
+| INVAR-01 | Anti-Fabrication | `[gap: not in sources]` for missing data |
+| INVAR-02 | S-5 VETO | `<!-- KEEP -->` blocks modification |
+| INVAR-03 | Zero-Drift | Preserve formatting, structure, tone |
+| INVAR-04 | Patch Idempotency | Same result on re-application |
+| INVAR-05 | Code Execution Gate | sandbox/human_gate required |
+
+### Security Modules
+
+- `src/security/secret_scanner.py` — AWS/GitHub/API key detection
+- `src/security/workspace_isolation.py` — Sandboxed file operations
+- `src/security/sandbox_verifier.py` — Runtime sandbox health check
+- `src/security/execution_gate.py` — LLM code execution control
+- `src/state/checkpoint_serialization.py` — JSON+zstd default, pickle requires `--unsafe`
+
+---
+
+## Multi-Agent Architecture
+
+### SCOUT Roles Matrix
+
+| Role | Function | Trigger |
+|------|----------|---------|
+| RADAR | Signal detection | All tasks |
+| DEVIL | Adversarial review | EVALUATE, COMPARE, AUDIT |
+| EVAL | Quality veto | EXPERIMENTAL, VAPORWARE detection |
+| STRAT | Strategic synthesis | Final recommendation |
+
+### Modules
+
+- `src/agents/multi_agent_orchestrator.py` — TaskQueue, AgentRegistry, conflict resolution
+- `src/agents/scout_matrix.py` — RADAR/DEVIL/EVAL/STRAT pipeline
+- `src/agents/agent_protocol.py` — Communication protocol
+- `src/skills/skill_library.py` — YAML catalog with synergy tracking
+
+---
+
+## Observability
+
+### Modules
+
+- `src/observability/distributed_tracing.py` — OpenTelemetry, W3C Trace Context
+- `src/observability/structured_logging.py` — JSON output, component-level levels
+- `src/observability/realtime_metrics.py` — p50/p95 latency export
+- `src/observability/token_attribution.py` — Per-gate token tracking
+- `src/observability/budget_forecast.py` — Proactive warnings
+
+### Configuration
+
+```yaml
+tracing:
+  enabled: true
+  provider: opentelemetry
+  sampling_rate: 1.0
+structured_logging:
+  enabled: true
+  format: json
+```
+
+---
+
+## Production Features
+
+| Feature | Module | Purpose |
+|---------|--------|---------|
+| SARIF Output | src/output/sarif_exporter.py | GitHub Code Scanning compatible |
+| Interactive Mode | src/interactive/repl.py | REPL debugging, breakpoints, rollback |
+| Streaming | src/llm/streaming.py | Chunk callbacks, early termination |
+| Dead Letter Queue | src/events/dead_letter_queue.py | Failed event recovery |
+| Cycle Detection | src/planning/cycle_detector.py | DAG infinite loop prevention |
+
+---
+
+## Agent Navigation
 
 For LLM agents, the repository now includes navigation aids:
 
-| File | Purpose |
-|------|---------|
-| `AGENTS.md` | Entry point with navigation matrix |
-| `AI_MISSION.md` | System prompt for LLM context |
-| `.ai/nav_map.json` | Semantic index with aliases |
-| `.ai/context_hints.md` | STOP/PROCEED/GO signals |
-| `.ai/shortcuts.yaml` | Zero-click navigation shortcuts |
-| `.ai/agent_interface.md` | Command specification |
-| `DECISION_TREE.json` | State machine definition |
+| File | Purpose | Priority |
+|------|---------|----------|
+| AGENTS.md | Primary LLM entry point | HIGH |
+| .ai/nav_map.json | Machine-readable navigation graph | HIGH |
+| PROTOCOL.md | Full assembled specification | MEDIUM |
+| SKILL.md | Agent configuration v2.1.0 | MEDIUM |
+| config.yaml | Runtime defaults | MEDIUM |
+| VERSION | Single source of truth | MEDIUM |
+| docs/tiers/TIER_7_EXIT_CRITERIA.md | Production readiness gates | LOW |
+| CHANGELOG.md | Human history (agent ignores unless --changelog) | LOW |
 
-**For agents:** Start with `AGENTS.md`, then read `SKILL.md`.
+**For agents:** Start with `AGENTS.md`, use `nav_map.json` for graph traversal.
+
+---
+
+## Migration v3.2.x → v4.1.0
+
+1. Add to `config.yaml`:
+   ```yaml
+   planning:
+     cycle_detection:
+       enabled: true
+   ```
+2. Run migration preview:
+   ```bash
+   python scripts/migrate_checkpoints.py --from 3.2.2 --to 4.1.0 --dry-run
+   ```
+3. GATE-PLAN and GATE-AMENDMENT are now enforced
+4. Enable observability:
+   ```yaml
+   observability:
+     prometheus_enabled: true
+   ```
+
+---
+
+## Version Authority
+
+- **Single Source of Truth**: `./VERSION` file
+- **Sync Script**: `scripts/sync_readme_version.py`
+- **Check Script**: `scripts/check_version_sync.py --strict`
+- **Rule**: No hardcoded versions — use `src/core/version.py::get_version()`
+- **Violation**: Hardcoded version = S-5 VETO (invariant breach)
 
 ---
 
@@ -263,7 +415,7 @@ Override protocol defaults in `SKILL.md`:
 ```yaml
 ---
 skill_version: 2.1.0
-protocol_version: 3.2.1
+protocol_version: 4.1.0
 constraints:
   max_files_per_session: 3
   max_tokens_per_session: 100000
@@ -383,6 +535,54 @@ The protocol generates `metrics.json` for monitoring:
 
 ---
 
+## Automation
+
+### Pre-Commit Hook
+
+The repository includes a pre-commit configuration for automatic version sync:
+
+```yaml
+# .pre-commit-config.yaml (already configured)
+repos:
+  - repo: local
+    hooks:
+      - id: version-sync
+        name: Check VERSION sync
+        entry: bash -c 'python3 scripts/check_version_sync.py --strict'
+        language: system
+        files: '^(VERSION|README\.md|\.ai/nav_map\.json|\.github/README_META\.yaml)$'
+```
+
+### CI Workflow
+
+```yaml
+# .github/workflows/sync-readme.yml
+on:
+  push:
+    paths: ['VERSION']
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python scripts/sync_readme_version.py
+      - run: python scripts/check_version_sync.py --strict
+```
+
+### Post-Update Validation
+
+```yaml
+validation_gates:
+  GATE-00: [nav_map.json parseable, VERSION file exists, README.md version == VERSION]
+  GATE-01: [All #anchor links resolve, All internal refs valid]
+  GATE-02: [No hardcoded versions except VERSION file, Badges machine-parseable]
+  GATE-03: [Repository structure matches actual files, Clone URL correct]
+  GATE-04: [Migration guide includes --dry-run, Requirements block present]
+  GATE-05: [metrics.json schema valid, All sections present]
+```
+
+---
+
 ## Contributing
 
 1. Fork the repository
@@ -403,6 +603,8 @@ MIT License - See LICENSE file for details.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 4.1.0 | 2026-04-08 | TIER_7_IN_PROGRESS: Planning DAG, Amendment Control, CycleDetector, 1100+ tests |
+| 3.2.2 | 2026-04-07 | Security hardening, checkpoint isolation, gap objects, secret scanning |
 | 3.2.1 | 2026-04-07 | FILE_INVENTORY, CURSOR_TRACKING, ISSUE_DEPENDENCY_GRAPH, CROSSREF_VALIDATOR, DIAGNOSTICS_MODULE |
 | 3.2.0 | 2024-01-15 | Chunk-level recovery, enhanced llm_query, metrics |
 | 3.1.0 | 2024-01-01 | Session persistence, budget tracking |
@@ -412,13 +614,14 @@ MIT License - See LICENSE file for details.
 
 ---
 
-**Protocol Status**: EARLY_ADOPTER
+**Protocol Status**: TIER_7_IN_PROGRESS
 
-> ⚠️ **Adoption Notice**: This protocol is in EARLY_ADOPTER stage. Architecture is sound but requires:
-> - All Tier 1 fixes applied
-> - Verified integration with target LLM platform
-> - Minimum one full checkpoint recovery test
-> - Independent audit or validation signals
+> ⚠️ **Status Notice**: This protocol is in TIER_7_IN_PROGRESS stage (NOT STABLE). Architecture is production-ready with:
+> - 1100+ tests passing
+> - Security hardening (INVAR-05, secret scanning, workspace isolation)
+> - Multi-agent orchestration (SCOUT roles)
+> - Observability stack (OpenTelemetry, structured logging)
+> - Exit criteria documented in `docs/tiers/TIER_7_EXIT_CRITERIA.md`
 >
 > **Use when**: Files >5000 lines, deterministic output required, human-in-the-loop validation available.
 > **Use alternatives when**: Simple file processing (<1000 lines), rapid prototyping, automatic execution without gates.

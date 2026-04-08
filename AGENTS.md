@@ -79,6 +79,9 @@ graph TD
 | 4 | Rollback Protocol | Backup and recovery | `PROTOCOL.base.md` |
 | 5 | Failsafe Protocol | Edge case handling | `PROTOCOL.base.md` |
 | 6 | Verification Gates | GATE-00 through GATE-05 | `PROTOCOL.base.md` |
+| 7 | Production | Multi-agent, observability, planning | `src/agents/`, `src/planning/` |
+
+> **Note**: TIER_7 status is IN_PROGRESS (NOT STABLE). See `docs/tiers/TIER_7_EXIT_CRITERIA.md`.
 
 ---
 

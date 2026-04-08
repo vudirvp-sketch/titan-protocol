@@ -2,6 +2,101 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.1.0] - 2026-04-08
+
+### TIER_7 Production Features
+
+#### Planning & DAG
+- **CycleDetector**: Prevent infinite loops in execution plan DAG
+  - New `src/planning/cycle_detector.py` module
+  - Gap tag: `[gap: dag_cycle_detected]`
+- **Plan Amendment Gate**: Root model cannot bypass GATE-02
+  - New `src/policy/plan_amendment_gate.py` module
+  - Enforcement of GATE-PLAN and GATE-AMENDMENT
+
+#### Multi-Agent Architecture
+- **SCOUT Roles Matrix**: RADAR/DEVIL/EVAL/STRAT for quality assurance
+  - New `src/agents/scout_matrix.py` module
+  - Adaptive scoring and hype detection
+- **Multi-Agent Orchestrator**: TaskQueue, AgentRegistry, conflict resolution
+  - New `src/agents/multi_agent_orchestrator.py` module
+  - Priority dispatch and heartbeat monitoring
+
+#### Observability
+- **Distributed Tracing**: OpenTelemetry integration
+  - New `src/observability/distributed_tracing.py` module
+  - W3C Trace Context support
+- **Structured Logging**: JSON output with component-level levels
+  - New `src/observability/structured_logging.py` module
+- **Token Attribution**: Per-gate token tracking
+  - New `src/observability/token_attribution.py` module
+- **Budget Forecast**: Proactive warnings for token limits
+  - New `src/observability/budget_forecast.py` module
+
+#### Documentation
+- **README v4.1.0 Sync**: Full documentation synchronization
+  - Project Scale metrics section
+  - Requirements block (YAML format)
+  - Migration guide v3.2.x → v4.1.0
+  - Version Authority section
+  - Security, Multi-Agent, Observability sections
+  - Production Features table
+  - Agent Navigation table with priorities
+  - Automation section
+
+### Test Coverage
+- Total tests: 1100+ passing
+- New module coverage: >80%
+- Integration tests: All phases covered
+
+### Files Created
+```
+scripts/sync_readme_version.py
+scripts/check_version_sync.py
+src/planning/cycle_detector.py
+src/policy/plan_amendment_gate.py
+src/agents/scout_matrix.py
+src/agents/multi_agent_orchestrator.py
+src/observability/distributed_tracing.py
+src/observability/structured_logging.py
+src/observability/token_attribution.py
+src/observability/budget_forecast.py
+```
+
+### Files Modified
+```
+README.md (v4.1.0 sync, all new sections)
+AGENTS.md (TIER 7 addition)
+SKILL.md (version compatibility update)
+CHANGELOG.md (this entry)
+```
+
+## [4.0.0] - 2026-04-08
+
+### Breaking Changes
+- Minimum Python version: 3.10 (was 3.8)
+- Checkpoint format: JSON+zstd mandatory (pickle requires --unsafe)
+- GATE-05 expanded: metrics.json-valid AND audit_trail.sig-verified
+
+### Architecture
+- TIER_7 framework established
+- Multi-agent orchestration foundation
+- Observability stack integration
+- Planning DAG infrastructure
+
+### Security Enhancements
+- INVAR-05 enforcement: Code execution gate mandatory
+- Workspace isolation: All file operations sandboxed
+- Secret scanning: AWS/GitHub/API key detection
+- Session-scoped checkpoint isolation
+
+### Configuration
+- New `planning.cycle_detection.enabled` option
+- New `observability.prometheus_enabled` option
+- Extended GATE configuration options
+
+---
+
 ## [3.2.2] - 2026-04-07
 
 ### Security (Critical)
