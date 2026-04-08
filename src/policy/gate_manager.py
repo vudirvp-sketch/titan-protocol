@@ -41,6 +41,104 @@ from src.observability.token_attribution import (
     end_gate as attribution_end_gate,
 )
 
+# =============================================================================
+# [ITEM-SAE-002] Gate Reference Normalization - Aliases Map
+# =============================================================================
+# Maps alternative/legacy gate names to canonical gate identifiers.
+# This ensures backward compatibility with existing code that may use
+# alternative naming conventions (e.g., GATE_REPO_01 from PROTOCOL.ext.md).
+
+GATE_ALIASES: Dict[str, str] = {
+    # Repository/Bootstrap gates → GATE-00
+    "GATE_REPO_00": "GATE-00",
+    "GATE_REPO_01": "GATE-00",  # Bootstrap sequence complete
+    "GATE_REPO_02": "GATE-00",  # Dependency graph built
+    "GATE_INIT": "GATE-00",
+    "GATE_BOOTSTRAP": "GATE-00",
+    
+    # Discovery gates → GATE-01
+    "GATE_DISCOVERY": "GATE-01",
+    "GATE_PATTERN": "GATE-01",
+    "GATE_SCAN": "GATE-01",
+    
+    # Analysis gates → GATE-02
+    "GATE_ANALYSIS": "GATE-02",
+    "GATE_CLASSIFICATION": "GATE-02",
+    "GATE_ISSUES": "GATE-02",
+    
+    # Planning gates → GATE-03
+    "GATE_PLANNING": "GATE-03",
+    "GATE_PLAN": "GATE-03",
+    "GATE_EXECUTION_PLAN": "GATE-03",
+    
+    # Execution gates → GATE-04
+    "GATE_EXECUTION": "GATE-04",
+    "GATE_VALIDATE": "GATE-04",
+    "GATE_VALIDATION": "GATE-04",
+    "GATE_PRE_EXEC": "GATE-04",
+    "GATE_POST_EXEC": "GATE-04",
+    
+    # Delivery gates → GATE-05
+    "GATE_DELIVERY": "GATE-05",
+    "GATE_ARTIFACTS": "GATE-05",
+    "GATE_HYGIENE": "GATE-05",
+    "GATE_FINAL": "GATE-05",
+}
+
+# Reverse mapping for display purposes
+CANONICAL_GATE_NAMES: Dict[str, str] = {
+    "GATE-00": "Initialization / Navigation Map",
+    "GATE-01": "Search & Discovery",
+    "GATE-02": "Analysis & Classification",
+    "GATE-03": "Planning",
+    "GATE-04": "Execution & Validation",
+    "GATE-05": "Delivery & Hygiene",
+}
+
+
+def normalize_gate_name(gate_name: str) -> str:
+    """
+    Normalize a gate name to its canonical form.
+    
+    [ITEM-SAE-002] Provides backward compatibility for alternative gate naming.
+    
+    Args:
+        gate_name: Gate name (canonical or aliased)
+        
+    Returns:
+        Canonical gate name (e.g., "GATE-00")
+        
+    Example:
+        >>> normalize_gate_name("GATE_REPO_01")
+        'GATE-00'
+        >>> normalize_gate_name("GATE-00")
+        'GATE-00'
+    """
+    # If already canonical, return as-is
+    if gate_name in CANONICAL_GATE_NAMES:
+        return gate_name
+    
+    # Check aliases
+    return GATE_ALIASES.get(gate_name, gate_name)
+
+
+def get_gate_display_name(gate_name: str) -> str:
+    """
+    Get a human-readable display name for a gate.
+    
+    Args:
+        gate_name: Gate name (canonical or aliased)
+        
+    Returns:
+        Human-readable gate description
+        
+    Example:
+        >>> get_gate_display_name("GATE_REPO_01")
+        'Initialization / Navigation Map'
+    """
+    canonical = normalize_gate_name(gate_name)
+    return CANONICAL_GATE_NAMES.get(canonical, gate_name)
+
 
 class GateType(Enum):
     """Type of gate."""

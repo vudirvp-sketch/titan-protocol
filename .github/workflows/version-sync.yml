@@ -6,11 +6,17 @@ on:
       - 'VERSION'
       - '.ai/nav_map.json'
       - '.github/README_META.yaml'
+      - 'README.md'
+      - 'SKILL.md'
+      - 'config.yaml'
   pull_request:
     paths:
       - 'VERSION'
       - '.ai/nav_map.json'
       - '.github/README_META.yaml'
+      - 'README.md'
+      - 'SKILL.md'
+      - 'config.yaml'
 
 jobs:
   check:
@@ -27,61 +33,58 @@ jobs:
       - name: Install dependencies
         run: pip install pyyaml
 
-      - name: Extract versions
-        id: versions
+      - name: Run comprehensive version sync check
+        id: sync_check
         run: |
-          # VERSION file
-          VERSION=$(head -1 VERSION)
-          echo "version_file=$VERSION" >> $GITHUB_OUTPUT
-
-          # nav_map.json
-          NAV_VERSION=$(python3 -c "import json; print(json.load(open('.ai/nav_map.json'))['version'])" 2>/dev/null || echo "not_found")
-          echo "nav_version=$NAV_VERSION" >> $GITHUB_OUTPUT
-
-          # README_META.yaml
-          META_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('.github/README_META.yaml'))['protocol']['version'])" 2>/dev/null || echo "not_found")
-          echo "meta_version=$META_VERSION" >> $GITHUB_OUTPUT
-
-          echo "### Extracted Versions:" >> $GITHUB_STEP_SUMMARY
-          echo "- VERSION file: \`$VERSION\`" >> $GITHUB_STEP_SUMMARY
-          echo "- nav_map.json: \`$NAV_VERSION\`" >> $GITHUB_STEP_SUMMARY
-          echo "- README_META.yaml: \`$META_VERSION\`" >> $GITHUB_STEP_SUMMARY
-
-      - name: Check version sync
-        run: |
-          VERSION="${{ steps.versions.outputs.version_file }}"
-          NAV_VERSION="${{ steps.versions.outputs.nav_version }}"
-          META_VERSION="${{ steps.versions.outputs.meta_version }}"
-
-          ERRORS=""
-
-          if [ "$VERSION" != "$NAV_VERSION" ]; then
-            ERRORS="${ERRORS}DRIFT: nav_map.json ($NAV_VERSION) != VERSION ($VERSION)\n"
+          python scripts/sync_versions.py --check --report --json > sync_report.json 2>&1 || true
+          
+          # Extract status
+          if python scripts/sync_versions.py --check 2>/dev/null; then
+            echo "status=synced" >> $GITHUB_OUTPUT
+          else
+            echo "status=drift" >> $GITHUB_OUTPUT
           fi
-
-          if [ "$VERSION" != "$META_VERSION" ]; then
-            ERRORS="${ERRORS}DRIFT: README_META.yaml ($META_VERSION) != VERSION ($VERSION)\n"
+          
+          # Generate summary
+          echo "### Version Sync Report" >> $GITHUB_STEP_SUMMARY
+          if [ -f sync_report.json ]; then
+            cat sync_report.json | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+print(f\"- **SSOT Version**: v{data.get('ssot_version', 'unknown')}\")
+print(f\"- **Sources Checked**: {data.get('sources_checked', 0)}\")
+print(f\"- **Mismatches**: {data.get('mismatches_count', 0)}\")
+if data.get('mismatches'):
+    print('\n#### Mismatches:')
+    for m in data['mismatches']:
+        print(f\"- {m['source']}: v{m.get('actual', 'N/A')} → v{m['expected']}\")
+" >> $GITHUB_STEP_SUMMARY || true
           fi
-
-          if [ -n "$ERRORS" ]; then
-            echo -e "❌ Version drift detected:\n$ERRORS"
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "## ❌ Version Drift Detected" >> $GITHUB_STEP_SUMMARY
-            echo -e "$ERRORS" >> $GITHUB_STEP_SUMMARY
-            exit 1
-          fi
-
-          echo "✅ All versions are synchronized"
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## ✅ Version Sync Validated" >> $GITHUB_STEP_SUMMARY
-          echo "All sources are synchronized to version \`$VERSION\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Validate version format
         run: |
-          VERSION="${{ steps.versions.outputs.version_file }}"
+          VERSION=$(head -1 VERSION)
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "❌ Invalid version format: $VERSION"
-            echo "Expected semantic version (e.g., 4.1.0)"
+            echo "Expected semantic version (e.g., 5.0.0)"
             exit 1
           fi
           echo "✅ Version format is valid: $VERSION"
+
+      - name: Fail on drift
+        if: steps.sync_check.outputs.status == 'drift'
+        run: |
+          echo "❌ Version drift detected. Please run: python scripts/sync_versions.py --fix"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ❌ Action Required" >> $GITHUB_STEP_SUMMARY
+          echo "Run \`python scripts/sync_versions.py --fix\` to synchronize all versions." >> $GITHUB_STEP_SUMMARY
+          exit 1
+
+      - name: Success
+        if: steps.sync_check.outputs.status == 'synced'
+        run: |
+          echo "✅ All versions are synchronized"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ Version Sync Validated" >> $GITHUB_STEP_SUMMARY
+          VERSION=$(head -1 VERSION)
+          echo "All sources are synchronized to version \`$VERSION\`" >> $GITHUB_STEP_SUMMARY
