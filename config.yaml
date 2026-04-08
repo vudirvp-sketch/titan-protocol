@@ -15,6 +15,19 @@ chunking:
   - '^class '
   - ^---$
   - ^```
+  # ITEM-FEAT-91: Auto-split on Chunk Limit
+  primary_limit: 50000  # chars
+  secondary_limit: 150000  # Force resplit above this
+  auto_split_on_limit: true
+  auto_split:
+    enabled: true
+    max_recursion_depth: 3
+    preserve_boundaries: true
+    boundary_types:
+      - "heading"
+      - "function"
+      - "class"
+      - "paragraph"
 llm_query:
   max_response_tokens: 2048
   max_chunk_tokens: 4000
@@ -55,6 +68,14 @@ checkpoint:
   namespace: default
   auto_cleanup: true
   cleanup_interval_days: 7
+  # ITEM-FEAT-72: Checkpoint compression with deduplication
+  compression:
+    enabled: true
+    algorithm: "zstd"  # gzip | zstd | lz4
+    level: 3  # 1-9 for gzip, 1-22 for zstd
+    deduplication: true
+    min_size_for_dedup: 1024  # bytes
+    pattern_min_length: 50  # chars
 output:
   directory: outputs/
   clean_mode: true
@@ -582,3 +603,28 @@ config_precedence:
     cli_prefix: "--"
     constraints_file: "constraints.yaml"
     local_file: "config.yaml"
+
+# ========================================
+# v3.7.1 Configuration Additions (Phase 20)
+# ========================================
+
+# ITEM-OBS-05: Budget Forecasting
+budget:
+  forecasting:
+    enabled: true
+    warning_threshold: 0.9  # 90% of budget
+    critical_threshold: 0.95
+    history_window: 100
+    recommended_actions:
+      - "compact_context"
+      - "switch_to_leaf_model"
+      - "reduce_chunk_size"
+
+# ITEM-OBS-04: Symbol Map OOM Protection
+symbol_map:
+  enabled: true
+  max_entries: 100000
+  max_memory_mb: 500
+  eviction_batch_size: 1000
+  eviction_policy: "lru"  # lru | lfu | fifo
+  namespace_qualification: true

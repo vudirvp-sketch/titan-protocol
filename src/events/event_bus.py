@@ -78,6 +78,8 @@ def _initialize_severity_map() -> None:
         "CHUNK_PROCESSED": None,
         "CHUNK_COMPLETE": None,
         "CHECKPOINT_SAVED": None,
+        "CHECKPOINT_COMPRESSED": None,  # ITEM-FEAT-72
+        "CHECKPOINT_DECOMPRESSED": None,  # ITEM-FEAT-72
         "PHASE_COMPLETE": None,
         "PHASE_START": None,
         "SESSION_START": None,
@@ -93,6 +95,13 @@ def _initialize_severity_map() -> None:
         "CACHE_MISS": None,
         "DEBUG_TRACE": None,
         "HANDLER_CALLED": None,
+
+        # v3.8.0 Symbol Map events (ITEM-OBS-04)
+        "SYMBOL_EVICTED": None,
+        "SYMBOL_MAP_OVERFLOW": None,
+        
+        # v3.8.0 Auto-split events (ITEM-FEAT-91)
+        "CHUNK_AUTO_SPLIT": None,
     }
 
 
@@ -130,6 +139,8 @@ def get_severity_for_event(event_type: str) -> 'EventSeverity':
             "CHUNK_PROCESSED": EventSeverity.INFO,
             "CHUNK_COMPLETE": EventSeverity.INFO,
             "CHECKPOINT_SAVED": EventSeverity.INFO,
+            "CHECKPOINT_COMPRESSED": EventSeverity.INFO,  # ITEM-FEAT-72
+            "CHECKPOINT_DECOMPRESSED": EventSeverity.INFO,  # ITEM-FEAT-72
             "PHASE_COMPLETE": EventSeverity.INFO,
             "PHASE_START": EventSeverity.INFO,
             "SESSION_START": EventSeverity.INFO,
@@ -144,6 +155,11 @@ def get_severity_for_event(event_type: str) -> 'EventSeverity':
             "CACHE_MISS": EventSeverity.DEBUG,
             "DEBUG_TRACE": EventSeverity.DEBUG,
             "HANDLER_CALLED": EventSeverity.DEBUG,
+            # v3.8.0 Symbol Map events (ITEM-OBS-04)
+            "SYMBOL_EVICTED": EventSeverity.INFO,
+            "SYMBOL_MAP_OVERFLOW": EventSeverity.WARN,
+            # v3.8.0 Auto-split events (ITEM-FEAT-91)
+            "CHUNK_AUTO_SPLIT": EventSeverity.WARN,
         })
 
     return EVENT_SEVERITY_MAP.get(event_type, EventSeverity.INFO)
@@ -1047,8 +1063,19 @@ class EventTypes:
     CROSSREF_BROKEN = "CROSSREF_BROKEN"
     ANOMALY_DETECTED = "ANOMALY_DETECTED"
     CHECKPOINT_SAVED = "CHECKPOINT_SAVED"
+    
+    # v3.7.0 Checkpoint Compression events (ITEM-FEAT-72)
+    CHECKPOINT_COMPRESSED = "CHECKPOINT_COMPRESSED"
+    CHECKPOINT_DECOMPRESSED = "CHECKPOINT_DECOMPRESSED"
 
     # v3.7.0 Drift Policy events (ITEM-ARCH-16)
     STATE_DRIFT = "STATE_DRIFT"
     DRIFT_RESOLVED = "DRIFT_RESOLVED"
     BRANCH_CREATED = "BRANCH_CREATED"
+
+    # v3.8.0 Symbol Map events (ITEM-OBS-04)
+    SYMBOL_EVICTED = "SYMBOL_EVICTED"
+    SYMBOL_MAP_OVERFLOW = "SYMBOL_MAP_OVERFLOW"
+    
+    # v3.8.0 Auto-split events (ITEM-FEAT-91)
+    CHUNK_AUTO_SPLIT = "CHUNK_AUTO_SPLIT"

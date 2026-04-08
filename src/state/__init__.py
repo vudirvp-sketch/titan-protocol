@@ -36,6 +36,15 @@ from .drift_policy import (
     ActionResult,
     check_state_drift
 )
+# ITEM-FEAT-72: Checkpoint Compression with Deduplication
+from .checkpoint_compression import (
+    CheckpointCompressor,
+    CompressionStats,
+    CompressionAlgorithm,
+    compress_checkpoint,
+    decompress_checkpoint,
+    estimate_compression
+)
 
 __all__ = [
     'AssessmentScore',
@@ -74,5 +83,12 @@ __all__ = [
     'DriftDetectedError',
     'MergeConflictError',
     'ActionResult',
-    'check_state_drift'
+    'check_state_drift',
+    # ITEM-FEAT-72: Checkpoint Compression with Deduplication
+    'CheckpointCompressor',
+    'CompressionStats',
+    'CompressionAlgorithm',
+    'compress_checkpoint',
+    'decompress_checkpoint',
+    'estimate_compression'
 ]

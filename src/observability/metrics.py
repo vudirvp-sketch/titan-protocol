@@ -24,10 +24,23 @@ import threading
 
 
 # ITEM-OBS-03: Current metrics schema version
-METRICS_SCHEMA_VERSION = "3.4.0"
+METRICS_SCHEMA_VERSION = "3.7.1"
 
 # ITEM-OBS-03: Supported schema versions for migration
-SUPPORTED_VERSIONS = ["unknown", "3.2.0", "3.3.0", "3.4.0"]
+SUPPORTED_VERSIONS = ["unknown", "3.2.0", "3.3.0", "3.4.0", "3.7.1"]
+
+# ITEM-OBS-05: Budget Forecasting Metrics
+# These metrics are registered by BudgetForecaster when initialized:
+# - titan_budget_forecast_tokens: Predicted token usage at completion (gauge)
+# - titan_budget_velocity_tps: Token velocity in tokens per second (gauge)
+# - titan_budget_remaining_seconds: Estimated seconds until budget exhaustion (gauge)
+# - titan_budget_warning_level: Budget warning level 0=OK, 1=WARNING, 2=CRITICAL (gauge)
+BUDGET_METRICS = {
+    "budget_forecast_tokens": "Predicted token usage at completion",
+    "budget_velocity_tps": "Token velocity in tokens per second",
+    "budget_remaining_seconds": "Estimated seconds until budget exhaustion",
+    "budget_warning_level": "Budget warning level (0=OK, 1=WARNING, 2=CRITICAL)"
+}
 
 
 class UnsupportedSchemaVersionError(Exception):

@@ -9,6 +9,7 @@ This module provides:
 - Debug Controller: Debug mode with reasoning locks
 - Span Tracker: Distributed tracing for tool calls
 - State Validator: Event-state transition contract (ITEM-OBS-06)
+- Budget Forecaster: Token velocity forecasting (ITEM-OBS-05)
 """
 
 from .tracer import (
@@ -30,7 +31,8 @@ from .metrics import (
     get_metrics,
     increment_counter,
     set_gauge,
-    observe_histogram
+    observe_histogram,
+    BUDGET_METRICS
 )
 
 from .debug_controller import (
@@ -64,6 +66,18 @@ from .state_validator import (
     get_state_transition_map
 )
 
+# ITEM-OBS-05: Budget Forecasting
+from .budget_forecast import (
+    BudgetForecaster,
+    UsageRecord,
+    ForecastReport,
+    WarningLevel,
+    get_forecaster,
+    init_forecaster,
+    record_usage,
+    get_budget_report
+)
+
 __all__ = [
     # Tracer
     "ReasoningTracer",
@@ -83,6 +97,7 @@ __all__ = [
     "increment_counter",
     "set_gauge",
     "observe_histogram",
+    "BUDGET_METRICS",
     # Debug Controller
     "DebugController",
     "DebugMode",
@@ -106,7 +121,16 @@ __all__ = [
     "TransitionResult",
     "TransitionValidation",
     "validate_event_transition",
-    "get_state_transition_map"
+    "get_state_transition_map",
+    # Budget Forecaster (ITEM-OBS-05)
+    "BudgetForecaster",
+    "UsageRecord",
+    "ForecastReport",
+    "WarningLevel",
+    "get_forecaster",
+    "init_forecaster",
+    "record_usage",
+    "get_budget_report"
 ]
 
-__version__ = "3.3.0"
+__version__ = "3.7.1"
