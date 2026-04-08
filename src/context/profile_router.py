@@ -567,6 +567,270 @@ class ProfileRouter:
         return profile_type, modified_config
 
 
+# =============================================================================
+# ITEM-SAE-011: Context Graph Integration
+# =============================================================================
+
+# Import for type hints (avoid circular imports)
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from src.context.context_graph import ContextGraph
+    from src.context.drift_detector import DriftDetector, DriftReport
+
+
+class ContextAwareProfileRouter(ProfileRouter):
+    """
+    ITEM-SAE-011: ProfileRouter with Context Graph integration.
+    
+    Extends ProfileRouter to use trust scores and drift detection
+    for intelligent profile selection.
+    
+    Additional Features:
+    - Trust-based profile switching
+    - Drift-aware routing
+    - Context graph integration
+    - Trust warnings in config
+    
+    Usage:
+        from src.context.context_graph import ContextGraph
+        from src.context.drift_detector import DriftDetector
+        
+        graph = ContextGraph.load(".ai/context_graph.json")
+        detector = DriftDetector(context_graph=graph)
+        
+        router = ContextAwareProfileRouter(
+            context_graph=graph,
+            drift_detector=detector
+        )
+        
+        # Detect with context awareness
+        profile = router.detect_profile_with_context(context, graph)
+        
+        # Apply with trust warnings
+        config = router.apply_profile_with_trust(profile, base_config, graph)
+    """
+    
+    # Thresholds for context-aware decisions
+    LOW_TRUST_NODE_THRESHOLD = 10  # Number of low trust nodes to trigger strict mode
+    SEVERE_DRIFT_THRESHOLD = 1     # Number of severe drift nodes to trigger HITL mode
+    MIN_TRUST_THRESHOLD = 0.5      # Minimum trust score for "low trust"
+    
+    def __init__(
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        context_graph: Optional["ContextGraph"] = None,
+        drift_detector: Optional["DriftDetector"] = None,
+    ):
+        """
+        Initialize ContextAwareProfileRouter.
+        
+        Args:
+            config: Optional configuration dictionary
+            context_graph: Optional ContextGraph for trust-based routing
+            drift_detector: Optional DriftDetector for drift-aware routing
+        """
+        super().__init__(config)
+        self._context_graph = context_graph
+        self._drift_detector = drift_detector
+    
+    def set_context_graph(self, graph: "ContextGraph") -> None:
+        """Set the context graph for trust-based routing."""
+        self._context_graph = graph
+    
+    def set_drift_detector(self, detector: "DriftDetector") -> None:
+        """Set the drift detector for drift-aware routing."""
+        self._drift_detector = detector
+    
+    def detect_profile_with_context(
+        self,
+        context: Optional[Dict[str, Any]] = None,
+        graph: Optional["ContextGraph"] = None
+    ) -> ProfileType:
+        """
+        Detect profile with context graph awareness.
+        
+        Considers trust scores and drift status in addition to
+        standard detection rules.
+        
+        Args:
+            context: Execution context dictionary
+            graph: Optional ContextGraph (uses internal if not provided)
+            
+        Returns:
+            ProfileType: Detected profile type
+        """
+        graph = graph or self._context_graph
+        context = context or {}
+        
+        # First check drift status - severe drift requires human oversight
+        if self._drift_detector and graph:
+            drift_report = self._drift_detector.detect_all_drift()
+            if drift_report.has_severe_drift:
+                self._logger.warning(
+                    "[ITEM-SAE-011] Severe drift detected, switching to HUMAN_IN_THE_LOOP"
+                )
+                return ProfileType.HUMAN_IN_THE_LOOP
+        
+        # Check low trust nodes - many low trust nodes require strict mode
+        if graph:
+            low_trust_nodes = graph.get_low_trust_nodes(self.MIN_TRUST_THRESHOLD)
+            if len(low_trust_nodes) > self.LOW_TRUST_NODE_THRESHOLD:
+                self._logger.warning(
+                    f"[ITEM-SAE-011] {len(low_trust_nodes)} low trust nodes, "
+                    f"switching to CI_CD_PIPELINE for strict validation"
+                )
+                return ProfileType.CI_CD_PIPELINE
+        
+        # Fall back to standard detection
+        return self.detect_profile(context)
+    
+    def apply_profile_with_trust(
+        self,
+        profile_type: ProfileType,
+        config: Dict[str, Any],
+        graph: Optional["ContextGraph"] = None
+    ) -> Dict[str, Any]:
+        """
+        Apply profile with trust-based warnings.
+        
+        Adds trust warnings for low-trust nodes in the configuration.
+        
+        Args:
+            profile_type: The profile type to apply
+            config: Configuration dictionary to transform
+            graph: Optional ContextGraph (uses internal if not provided)
+            
+        Returns:
+            Modified configuration with trust warnings
+        """
+        graph = graph or self._context_graph
+        
+        # Apply standard profile transformation
+        result = self.apply_profile(profile_type, config)
+        
+        # Add trust warnings if graph available
+        if graph:
+            low_trust_nodes = graph.get_low_trust_nodes(self.MIN_TRUST_THRESHOLD)
+            
+            if low_trust_nodes:
+                # Extract sections from low trust nodes
+                trust_warnings = []
+                for node in low_trust_nodes:
+                    # Get node location/section
+                    location = node.location or node.id
+                    trust_warnings.append({
+                        "location": location,
+                        "trust_score": round(node.trust_score, 3),
+                        "tier": node.trust_tier.value,
+                    })
+                
+                result["_trust_warnings"] = trust_warnings
+                result["_trust_warning_count"] = len(trust_warnings)
+                
+                # Adjust validation settings if many warnings
+                if len(trust_warnings) > 5:
+                    if "validation" in result:
+                        result["validation"]["increased_sampling"] = True
+                        result["validation"]["trust_mode"] = "verify_all"
+                
+                self._logger.info(
+                    f"[ITEM-SAE-011] Added {len(trust_warnings)} trust warnings to config"
+                )
+        
+        return result
+    
+    def detect_and_apply_with_context(
+        self,
+        context: Optional[Dict[str, Any]],
+        config: Dict[str, Any],
+        graph: Optional["ContextGraph"] = None
+    ) -> tuple[ProfileType, Dict[str, Any]]:
+        """
+        Convenience method to detect and apply with context awareness.
+        
+        Args:
+            context: Execution context dictionary
+            config: Configuration dictionary to transform
+            graph: Optional ContextGraph
+            
+        Returns:
+            Tuple of (detected ProfileType, modified config with trust warnings)
+        """
+        profile_type = self.detect_profile_with_context(context, graph)
+        modified_config = self.apply_profile_with_trust(profile_type, config, graph)
+        return profile_type, modified_config
+    
+    def get_trust_routing_summary(self, graph: Optional["ContextGraph"] = None) -> Dict[str, Any]:
+        """
+        Get a summary of trust-based routing decisions.
+        
+        Args:
+            graph: Optional ContextGraph (uses internal if not provided)
+            
+        Returns:
+            Dictionary with trust routing summary
+        """
+        graph = graph or self._context_graph
+        
+        if not graph:
+            return {"error": "No context graph available"}
+        
+        low_trust_nodes = graph.get_low_trust_nodes(self.MIN_TRUST_THRESHOLD)
+        stats = graph.get_stats()
+        
+        summary = {
+            "total_nodes": stats.get("total_nodes", 0),
+            "low_trust_count": len(low_trust_nodes),
+            "avg_trust": stats.get("avg_trust_score", 0),
+            "min_trust": stats.get("min_trust_score", 0),
+            "recommended_profile": None,
+            "routing_reason": None,
+        }
+        
+        # Determine recommended profile
+        if len(low_trust_nodes) > self.LOW_TRUST_NODE_THRESHOLD:
+            summary["recommended_profile"] = ProfileType.CI_CD_PIPELINE.value
+            summary["routing_reason"] = f"{len(low_trust_nodes)} low trust nodes detected"
+        else:
+            summary["recommended_profile"] = ProfileType.SINGLE_LLM_EXECUTOR.value
+            summary["routing_reason"] = "Normal trust levels"
+        
+        # Add drift info if detector available
+        if self._drift_detector:
+            drift_report = self._drift_detector.detect_all_drift()
+            summary["drift_detected"] = drift_report.has_severe_drift
+            summary["drift_count"] = len(drift_report.drifted_nodes)
+            
+            if drift_report.has_severe_drift:
+                summary["recommended_profile"] = ProfileType.HUMAN_IN_THE_LOOP.value
+                summary["routing_reason"] = "Severe drift detected"
+        
+        return summary
+
+
+def create_context_aware_router(
+    config: Optional[Dict[str, Any]] = None,
+    context_graph: Optional["ContextGraph"] = None,
+    drift_detector: Optional["DriftDetector"] = None,
+) -> ContextAwareProfileRouter:
+    """
+    Factory function to create ContextAwareProfileRouter.
+    
+    Args:
+        config: Optional configuration dictionary
+        context_graph: Optional ContextGraph
+        drift_detector: Optional DriftDetector
+    
+    Returns:
+        ContextAwareProfileRouter instance
+    """
+    return ContextAwareProfileRouter(
+        config=config,
+        context_graph=context_graph,
+        drift_detector=drift_detector
+    )
+
+
 def create_profile_router(config: Optional[Dict[str, Any]] = None) -> ProfileRouter:
     """
     Factory function to create ProfileRouter.
