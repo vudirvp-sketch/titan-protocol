@@ -102,6 +102,14 @@ def _initialize_severity_map() -> None:
         
         # v3.8.0 Auto-split events (ITEM-FEAT-91)
         "CHUNK_AUTO_SPLIT": None,
+
+        # v4.0.0 Plan Amendment events (ITEM-DAG-114)
+        "PLAN_AMENDMENT_REQUESTED": None,
+        "PLAN_AMENDMENT_APPROVED": None,
+        "PLAN_AMENDMENT_REJECTED": None,
+        
+        # ITEM-DAG-112: DAG cycle detection events
+        "DAG_CYCLE_DETECTED": None,
     }
 
 
@@ -160,6 +168,12 @@ def get_severity_for_event(event_type: str) -> 'EventSeverity':
             "SYMBOL_MAP_OVERFLOW": EventSeverity.WARN,
             # v3.8.0 Auto-split events (ITEM-FEAT-91)
             "CHUNK_AUTO_SPLIT": EventSeverity.WARN,
+            # v4.0.0 Plan Amendment events (ITEM-DAG-114)
+            "PLAN_AMENDMENT_REQUESTED": EventSeverity.INFO,
+            "PLAN_AMENDMENT_APPROVED": EventSeverity.INFO,
+            "PLAN_AMENDMENT_REJECTED": EventSeverity.WARN,
+            # ITEM-DAG-112: DAG cycle detection events
+            "DAG_CYCLE_DETECTED": EventSeverity.WARN,
         })
 
     return EVENT_SEVERITY_MAP.get(event_type, EventSeverity.INFO)
@@ -1079,3 +1093,11 @@ class EventTypes:
     
     # v3.8.0 Auto-split events (ITEM-FEAT-91)
     CHUNK_AUTO_SPLIT = "CHUNK_AUTO_SPLIT"
+    
+    # ITEM-DAG-112: DAG cycle detection events
+    DAG_CYCLE_DETECTED = "DAG_CYCLE_DETECTED"
+
+    # v4.0.0 Plan Amendment events (ITEM-DAG-114)
+    PLAN_AMENDMENT_REQUESTED = "PLAN_AMENDMENT_REQUESTED"
+    PLAN_AMENDMENT_APPROVED = "PLAN_AMENDMENT_APPROVED"
+    PLAN_AMENDMENT_REJECTED = "PLAN_AMENDMENT_REJECTED"

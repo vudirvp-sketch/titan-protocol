@@ -1,7 +1,7 @@
-4.0.0
+4.1.0
 
 # TITAN Protocol Version
-# TIER_6_ADVANCED
+# TIER_7_PRODUCTION (IN PROGRESS)
 #
 # Completed versions:
 # PHASE_1 (SECURITY_CRITICAL):
@@ -113,6 +113,10 @@
 #
 # PHASE_26 (STREAMING_PERFORMANCE) - TIER_6:
 # - ITEM-PERF-01: Streaming Response Support (chunk callbacks, early termination)
+#
+# PHASE_30 (PLANNING_DAG_ENHANCEMENT) - TIER_7:
+# - ITEM-DAG-112: CycleDetector in PlanningEngine (DAG cycle detection, amendment validation)
+# - ITEM-DAG-114: Root Model Plan Amendment Control (GATE-02 approval, audit logging)
 #
 # Catalog Compliance:
 # - Tier 1 Mechanics Coverage: 100%

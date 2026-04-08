@@ -729,3 +729,30 @@ streaming:
   max_stream_time_seconds: 300
   early_termination_on_gate_fail: true
   buffer_size: 4096
+
+# ========================================
+# v4.1.0 Configuration Additions (TIER_7 - PHASE_30)
+# ========================================
+
+# ITEM-DAG-112: CycleDetector in PlanningEngine
+planning:
+  cycle_detection:
+    enabled: true
+    check_before_iteration: true
+    check_on_amendment: true
+    emit_events: true
+    halt_on_cycle: true
+
+# ITEM-DAG-114: Root Model Plan Amendment Control
+amendment_control:
+  enabled: true
+  auto_approve: false  # Security: require explicit approval
+  require_gate_validation: true
+  audit_enabled: true
+  max_pending_requests: 100
+  protected_fields:
+    - execution_order
+    - dependencies
+    - batches
+    - keep_veto_markers
+    - critical_path
