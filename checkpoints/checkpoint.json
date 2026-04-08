@@ -1,7 +1,7 @@
 {
   "id": "7a4f12c5-ad71-42de-8a82-4bc852d3bdec",
   "status": "INITIALIZED",
-  "protocol_version": "3.2.2",
+  "protocol_version": "4.1.0",
   "created_at": "2026-04-08T02:50:44.424648Z",
   "source_file": "/home/z/my-project/titan-protocol/inputs/test.md",
   "source_checksum": "f1c2b13f897272c08e0d37df9975a4767848c94c38c475a45bf43c3ab845ac05",

@@ -1,7 +1,7 @@
 ---
 title: TITAN FUSE Agent Skill Configuration
 skill_version: 2.1.0
-protocol_version: 3.2.1
+protocol_version: 4.1.0
 extends: Large-File Agent Protocol v3.2.1
 domain: large_file_processing; repo_bootstrap; agent_orchestration
 constraints:
