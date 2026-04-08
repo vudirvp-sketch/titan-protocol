@@ -13,11 +13,17 @@ Tracks provider-side model version to ensure reproducibility.
 Different model versions may produce different outputs,
 breaking reproducibility guarantees.
 
+ITEM-MODEL-001: Root/Leaf Routing Optimization
+Intelligent task-to-model routing based on task complexity
+and model capabilities. Routes orchestration tasks to root model
+and chunk processing tasks to leaf model, with complexity-based
+tier adjustment for optimal cost/performance balance.
+
 Author: TITAN FUSE Team
-Version: 3.4.0
+Version: 5.0.0
 """
 
-from typing import Dict, List, Optional, Any, Literal
+from typing import Dict, List, Optional, Any, Literal, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -25,6 +31,104 @@ import logging
 import hashlib
 
 from src.utils.timezone import now_utc_iso
+
+
+# ============================================================================
+# ITEM-MODEL-001: Root/Leaf Routing Optimization Classes
+# ============================================================================
+
+class ModelTier(Enum):
+    """Model tier for routing decisions.
+    
+    ITEM-MODEL-001: Defines the capability tier for model selection.
+    """
+    ROOT = "root"      # High-capability model for orchestration
+    LEAF = "leaf"      # Efficient model for simple tasks
+    HYBRID = "hybrid"  # Use both with coordination
+
+
+class TaskType(Enum):
+    """Task type classification for routing.
+    
+    ITEM-MODEL-001: Maps task types to appropriate model tiers.
+    """
+    ORCHESTRATION = "orchestration"
+    PLANNING = "planning"
+    CONFLICT_RESOLUTION = "conflict_resolution"
+    GATE_DECISION = "gate_decision"
+    CHUNK_QUERY = "chunk_query"
+    CODE_ANALYSIS = "code_analysis"
+    PATTERN_MATCHING = "pattern_matching"
+    VALIDATION = "validation"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class TaskComplexity:
+    """Complexity factors for routing decision.
+    
+    ITEM-MODEL-001: Normalized complexity metrics for intelligent routing.
+    """
+    context_length: float = 0.0      # Normalized 0-1
+    dependency_depth: float = 0.0    # Normalized 0-1
+    gate_count: float = 0.0          # Normalized 0-1
+    pattern_complexity: float = 0.0  # Normalized 0-1
+    overall_score: float = 0.0
+    
+    def __post_init__(self):
+        """Calculate overall complexity score after initialization."""
+        if self.overall_score == 0.0:
+            # Default weights for overall calculation
+            weights = {
+                "context_length": 0.3,
+                "dependency_depth": 0.2,
+                "gate_count": 0.2,
+                "pattern_complexity": 0.3,
+            }
+            self.overall_score = (
+                self.context_length * weights["context_length"] +
+                self.dependency_depth * weights["dependency_depth"] +
+                self.gate_count * weights["gate_count"] +
+                self.pattern_complexity * weights["pattern_complexity"]
+            )
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for serialization."""
+        return {
+            "context_length": round(self.context_length, 3),
+            "dependency_depth": round(self.dependency_depth, 3),
+            "gate_count": round(self.gate_count, 3),
+            "pattern_complexity": round(self.pattern_complexity, 3),
+            "overall_score": round(self.overall_score, 3)
+        }
+
+
+@dataclass
+class RoutingDecision:
+    """Routing decision result.
+    
+    ITEM-MODEL-001: Encapsulates the routing decision with rationale.
+    """
+    tier: ModelTier
+    model_id: str
+    complexity: TaskComplexity
+    confidence: float
+    rationale: str
+    task_type: TaskType = TaskType.UNKNOWN
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for serialization."""
+        return {
+            "tier": self.tier.value,
+            "model_id": self.model_id,
+            "complexity": self.complexity.to_dict(),
+            "confidence": round(self.confidence, 3),
+            "rationale": self.rationale,
+            "task_type": self.task_type.value
+        }
+
+
+# End ITEM-MODEL-001 class definitions
 
 
 class ExecutionStrictness(Enum):
@@ -175,6 +279,13 @@ class ModelRouter:
     - guided_autonomy: Allows downgrade to first fallback model
     - fast_prototype: Allows downgrade to cheapest model
     
+    ITEM-MODEL-001: Root/Leaf Routing Optimization
+    
+    Intelligent task-to-model routing based on task complexity:
+    - Task type determines base tier (ROOT or LEAF)
+    - Complexity score can adjust tier (demote ROOT to LEAF, promote LEAF to ROOT)
+    - Cost optimization via tier demotion for low-complexity tasks
+    
     Usage:
         config = {
             "model_routing": {
@@ -190,12 +301,37 @@ class ModelRouter:
         }
         router = ModelRouter(config)
         model = router.get_model(strictness="deterministic", budget_status)
+        # ITEM-MODEL-001: Task-based routing
+        decision = router.route_task({"type": "orchestration", "context": "..."})
     """
 
     # Phases that use root model (orchestration)
     ROOT_PHASES = {0, 1, 2, 3, 5}
     # Phases that use leaf model (chunk processing)
     LEAF_PHASES = {4}
+    
+    # ========================================================================
+    # ITEM-MODEL-001: Task type -> preferred tier mapping
+    # ========================================================================
+    TASK_TIER_MAP = {
+        TaskType.ORCHESTRATION: ModelTier.ROOT,
+        TaskType.PLANNING: ModelTier.ROOT,
+        TaskType.CONFLICT_RESOLUTION: ModelTier.ROOT,
+        TaskType.GATE_DECISION: ModelTier.ROOT,
+        TaskType.CHUNK_QUERY: ModelTier.LEAF,
+        TaskType.CODE_ANALYSIS: ModelTier.LEAF,
+        TaskType.PATTERN_MATCHING: ModelTier.LEAF,
+        TaskType.VALIDATION: ModelTier.LEAF,
+        TaskType.UNKNOWN: ModelTier.ROOT,  # Default to root for unknown
+    }
+    
+    # ITEM-MODEL-001: Complexity weights for overall score
+    DEFAULT_COMPLEXITY_WEIGHTS = {
+        "context_length": 0.3,
+        "dependency_depth": 0.2,
+        "gate_count": 0.2,
+        "pattern_complexity": 0.3,
+    }
 
     def __init__(self, config: Dict):
         self.config = config
@@ -226,6 +362,25 @@ class ModelRouter:
         self.triggers = fb_config.get("triggers", {})
         self.timeout_ms = self.triggers.get("timeout_ms", 30000)
         self.error_rate_threshold = self.triggers.get("error_rate_threshold", 0.3)
+        
+        # ====================================================================
+        # ITEM-MODEL-001: Routing optimization configuration
+        # ====================================================================
+        self._complexity_weights = routing.get(
+            "complexity_weights", 
+            self.DEFAULT_COMPLEXITY_WEIGHTS.copy()
+        )
+        
+        # Tier demotion configuration
+        tier_demotion = routing.get("tier_demotion", {})
+        self._tier_demotion_enabled = tier_demotion.get("enabled", True)
+        self._low_complexity_threshold = tier_demotion.get("low_complexity_threshold", 0.3)
+        self._high_complexity_threshold = tier_demotion.get("high_complexity_threshold", 0.7)
+        self._high_confidence_threshold = tier_demotion.get("high_confidence_threshold", 0.9)
+        
+        # Cost tracking for routing decisions
+        self._track_costs = routing.get("track_costs", True)
+        self._log_model_usage = routing.get("log_model_usage", True)
 
         # Track usage
         self._usage_stats = {
@@ -237,14 +392,20 @@ class ModelRouter:
             "downgrade_blocks": 0,
             # ITEM-ARCH-15: Version tracking stats
             "version_mismatches": 0,
-            "version_checks": 0
+            "version_checks": 0,
+            # ITEM-MODEL-001: Routing optimization stats
+            "tier_demotions": 0,      # ROOT -> LEAF demotions
+            "tier_promotions": 0,     # LEAF -> ROOT promotions
+            "routing_decisions": 0,   # Total routing decisions made
+            "cost_saved_tokens": 0,   # Estimated tokens saved by demotion
         }
 
         self._logger.info(
-            f"ModelRouter initialized: root={self.root_model.model}, "
+            f"[ITEM-MODEL-001] ModelRouter initialized: root={self.root_model.model}, "
             f"leaf={self.leaf_model.model}, fallback_enabled={self.fallback_enabled}, "
             f"downgrade_allowed={self.downgrade_allowed}, strictness={self.strictness.value}, "
-            f"strict_version_check={self.strict_version_check}"
+            f"strict_version_check={self.strict_version_check}, "
+            f"tier_demotion_enabled={self._tier_demotion_enabled}"
         )
     
     def _get_strictness_from_config(self) -> ExecutionStrictness:
@@ -590,7 +751,9 @@ class ModelRouter:
             "fallback_rate": (
                 self._usage_stats["fallback_calls"] /
                 max(1, self._usage_stats["root_calls"] + self._usage_stats["leaf_calls"])
-            )
+            ),
+            # ITEM-MODEL-001: Routing optimization stats
+            "routing_optimization": self.get_routing_stats()
         }
     
     def validate_downgrade_config(self) -> List[str]:
@@ -620,6 +783,295 @@ class ModelRouter:
             )
         
         return issues
+    
+    # ========================================================================
+    # ITEM-MODEL-001: Root/Leaf Routing Optimization Methods
+    # ========================================================================
+    
+    def route_task(self, task: Dict[str, Any]) -> RoutingDecision:
+        """
+        Route task to appropriate model tier.
+        
+        ITEM-MODEL-001: Intelligent routing based on task type and complexity.
+        
+        Args:
+            task: Task dictionary with type, context, dependencies, gates, patterns
+            
+        Returns:
+            RoutingDecision with tier, model_id, complexity, confidence, rationale
+        """
+        self._usage_stats["routing_decisions"] += 1
+        
+        # Classify task type
+        task_type = self._classify_task(task)
+        
+        # Estimate complexity
+        complexity = self.estimate_complexity(task)
+        
+        # Get base tier from task type
+        base_tier = self.TASK_TIER_MAP.get(task_type, ModelTier.ROOT)
+        
+        # Adjust tier based on complexity (if tier demotion enabled)
+        tier, rationale = self._adjust_tier_for_complexity(
+            base_tier, complexity, task_type
+        )
+        
+        # Select specific model for tier
+        model_id = self._select_model_for_tier(tier, complexity)
+        
+        # Calculate confidence
+        confidence = self._calculate_routing_confidence(complexity, tier, base_tier)
+        
+        decision = RoutingDecision(
+            tier=tier,
+            model_id=model_id,
+            complexity=complexity,
+            confidence=confidence,
+            rationale=rationale,
+            task_type=task_type
+        )
+        
+        # Log routing decision if enabled
+        if self._log_model_usage:
+            self._logger.info(
+                f"[ITEM-MODEL-001] Routing decision: task_type={task_type.value}, "
+                f"tier={tier.value}, model={model_id}, "
+                f"complexity={complexity.overall_score:.3f}, confidence={confidence:.3f}"
+            )
+        
+        return decision
+    
+    def estimate_complexity(self, task: Dict[str, Any]) -> TaskComplexity:
+        """
+        Estimate task complexity for routing.
+        
+        ITEM-MODEL-001: Calculates normalized complexity metrics.
+        
+        Args:
+            task: Task dictionary with context, dependencies, gates, patterns
+            
+        Returns:
+            TaskComplexity with normalized metrics
+        """
+        # Extract metrics from task
+        context = task.get("context", "")
+        context_len = len(str(context)) if context else 0
+        
+        deps = task.get("dependencies", [])
+        if not isinstance(deps, list):
+            deps = []
+        
+        gates = task.get("gates", [])
+        if not isinstance(gates, list):
+            gates = []
+        
+        patterns = task.get("patterns", [])
+        if not isinstance(patterns, list):
+            patterns = []
+        
+        # Normalize to 0-1 range
+        complexity = TaskComplexity(
+            context_length=min(context_len / 100000, 1.0),
+            dependency_depth=min(len(deps) / 10, 1.0),
+            gate_count=min(len(gates) / 5, 1.0),
+            pattern_complexity=min(len(patterns) / 20, 1.0),
+            overall_score=0.0  # Will be calculated in __post_init__
+        )
+        
+        # Recalculate with configured weights
+        complexity.overall_score = (
+            complexity.context_length * self._complexity_weights.get("context_length", 0.3) +
+            complexity.dependency_depth * self._complexity_weights.get("dependency_depth", 0.2) +
+            complexity.gate_count * self._complexity_weights.get("gate_count", 0.2) +
+            complexity.pattern_complexity * self._complexity_weights.get("pattern_complexity", 0.3)
+        )
+        
+        return complexity
+    
+    def _classify_task(self, task: Dict[str, Any]) -> TaskType:
+        """
+        Classify task type from task dictionary.
+        
+        ITEM-MODEL-001: Determines task type for routing.
+        
+        Args:
+            task: Task dictionary
+            
+        Returns:
+            TaskType enum value
+        """
+        # Check explicit task type
+        task_type_str = task.get("type", "")
+        if task_type_str:
+            try:
+                return TaskType(task_type_str.lower())
+            except ValueError:
+                pass
+        
+        # Infer from task properties
+        has_gates = bool(task.get("gates"))
+        has_dependencies = bool(task.get("dependencies"))
+        has_conflicts = task.get("has_conflicts", False)
+        is_chunk = task.get("is_chunk", False)
+        
+        # Decision logic for classification
+        if has_conflicts:
+            return TaskType.CONFLICT_RESOLUTION
+        if has_gates and has_dependencies:
+            return TaskType.PLANNING
+        if has_gates:
+            return TaskType.GATE_DECISION
+        if is_chunk:
+            return TaskType.CHUNK_QUERY
+        if task.get("is_orchestration", False):
+            return TaskType.ORCHESTRATION
+        if task.get("is_validation", False):
+            return TaskType.VALIDATION
+        if task.get("is_pattern_matching", False):
+            return TaskType.PATTERN_MATCHING
+        if task.get("is_code_analysis", False):
+            return TaskType.CODE_ANALYSIS
+        
+        # Default to UNKNOWN (will route to ROOT)
+        return TaskType.UNKNOWN
+    
+    def _adjust_tier_for_complexity(
+        self, 
+        base_tier: ModelTier, 
+        complexity: TaskComplexity,
+        task_type: TaskType
+    ) -> tuple:
+        """
+        Adjust model tier based on task complexity.
+        
+        ITEM-MODEL-001: Implements tier demotion and promotion logic.
+        
+        Args:
+            base_tier: Initial tier from task type
+            complexity: Task complexity metrics
+            task_type: Classified task type
+            
+        Returns:
+            Tuple of (adjusted_tier, rationale)
+        """
+        if not self._tier_demotion_enabled:
+            return base_tier, f"Task type {task_type.value} routes to {base_tier.value} (tier demotion disabled)"
+        
+        # Low complexity ROOT task -> can use LEAF
+        if (base_tier == ModelTier.ROOT and 
+            complexity.overall_score < self._low_complexity_threshold):
+            self._usage_stats["tier_demotions"] += 1
+            self._usage_stats["cost_saved_tokens"] += 1000  # Estimate
+            rationale = (
+                f"Low complexity ({complexity.overall_score:.3f} < {self._low_complexity_threshold}) "
+                f"allows demotion from ROOT to LEAF for {task_type.value}"
+            )
+            self._logger.info(f"[ITEM-MODEL-001] Tier demotion: {rationale}")
+            return ModelTier.LEAF, rationale
+        
+        # High complexity LEAF task -> upgrade to ROOT
+        if (base_tier == ModelTier.LEAF and 
+            complexity.overall_score > self._high_complexity_threshold):
+            self._usage_stats["tier_promotions"] += 1
+            rationale = (
+                f"High complexity ({complexity.overall_score:.3f} > {self._high_complexity_threshold}) "
+                f"requires promotion from LEAF to ROOT for {task_type.value}"
+            )
+            self._logger.info(f"[ITEM-MODEL-001] Tier promotion: {rationale}")
+            return ModelTier.ROOT, rationale
+        
+        # No adjustment
+        return base_tier, f"Task type {task_type.value} routes to {base_tier.value}"
+    
+    def _select_model_for_tier(
+        self, 
+        tier: ModelTier, 
+        complexity: TaskComplexity
+    ) -> str:
+        """
+        Select specific model for tier.
+        
+        ITEM-MODEL-001: Returns model ID for the given tier.
+        
+        Args:
+            tier: Model tier
+            complexity: Task complexity (for future model selection logic)
+            
+        Returns:
+            Model ID string
+        """
+        if tier == ModelTier.ROOT:
+            self._usage_stats["root_calls"] += 1
+            return self.root_model.model
+        elif tier == ModelTier.LEAF:
+            self._usage_stats["leaf_calls"] += 1
+            return self.leaf_model.model
+        else:  # HYBRID
+            # For hybrid, default to root (could be enhanced for parallel execution)
+            self._usage_stats["root_calls"] += 1
+            return self.root_model.model
+    
+    def _calculate_routing_confidence(
+        self, 
+        complexity: TaskComplexity, 
+        final_tier: ModelTier,
+        base_tier: ModelTier
+    ) -> float:
+        """
+        Calculate routing confidence.
+        
+        ITEM-MODEL-001: Higher confidence for clear-cut routing decisions.
+        
+        Args:
+            complexity: Task complexity metrics
+            final_tier: Final selected tier
+            base_tier: Original tier before adjustment
+            
+        Returns:
+            Confidence score 0.0-1.0
+        """
+        # High confidence when complexity is clearly low or high
+        if complexity.overall_score < self._low_complexity_threshold:
+            return self._high_confidence_threshold
+        if complexity.overall_score > self._high_complexity_threshold:
+            return self._high_confidence_threshold
+        
+        # Medium confidence for middle-ground complexity
+        if final_tier != base_tier:
+            # Tier was adjusted - slightly lower confidence
+            return 0.75
+        
+        # Base confidence for unambiguous routing
+        return 0.8
+    
+    def get_routing_stats(self) -> Dict:
+        """
+        Get routing optimization statistics.
+        
+        ITEM-MODEL-001: Returns stats for monitoring routing behavior.
+        
+        Returns:
+            Dictionary with routing statistics
+        """
+        total_decisions = self._usage_stats["routing_decisions"]
+        return {
+            "total_routing_decisions": total_decisions,
+            "tier_demotions": self._usage_stats["tier_demotions"],
+            "tier_promotions": self._usage_stats["tier_promotions"],
+            "demotion_rate": (
+                self._usage_stats["tier_demotions"] / max(1, total_decisions)
+            ),
+            "promotion_rate": (
+                self._usage_stats["tier_promotions"] / max(1, total_decisions)
+            ),
+            "estimated_cost_savings_tokens": self._usage_stats["cost_saved_tokens"],
+            "complexity_weights": self._complexity_weights,
+            "tier_demotion_config": {
+                "enabled": self._tier_demotion_enabled,
+                "low_complexity_threshold": self._low_complexity_threshold,
+                "high_complexity_threshold": self._high_complexity_threshold,
+            }
+        }
 
 
 def create_model_router(config: Dict) -> ModelRouter:

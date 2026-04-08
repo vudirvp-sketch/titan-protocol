@@ -1,6 +1,7 @@
 """
 Tiered Validator for TITAN FUSE Protocol.
 
+ITEM-VAL-001: TieredValidatorSampling Enhancement.
 ITEM-VAL-69: Validation Tiering by Severity.
 
 Optimizes validation performance by sampling SEV-3/4 validators
@@ -11,8 +12,11 @@ Sampling Rules:
 - SEV-3: Run 100% for files <50KB, sample 50% for larger
 - SEV-4: Run 100% for files <10KB, sample 20% for larger
 
+Enhanced with content-type heuristics for critical file types
+(config, schema, manifest) which receive increased sampling rates.
+
 Author: TITAN FUSE Team
-Version: 4.1.0
+Version: 5.0.0
 """
 
 from __future__ import annotations
@@ -93,6 +97,62 @@ class SamplingDecision:
 
 
 @dataclass
+class SamplingConfig:
+    """
+    ITEM-VAL-001: Sampling configuration by severity.
+    
+    Configuration dataclass for controlling sampling behavior
+    across different severity tiers and file characteristics.
+
+    Attributes:
+        sev1_rate: Sampling rate for SEV-1 validators (always 1.0)
+        sev2_rate: Sampling rate for SEV-2 validators (always 1.0)
+        sev3_small_file_rate: Rate for SEV-3 on files < sev3_size_threshold
+        sev3_large_file_rate: Rate for SEV-3 on files >= sev3_size_threshold
+        sev3_size_threshold: File size threshold for SEV-3 sampling (bytes)
+        sev4_small_file_rate: Rate for SEV-4 on files < sev4_size_threshold
+        sev4_large_file_rate: Rate for SEV-4 on files >= sev4_size_threshold
+        sev4_size_threshold: File size threshold for SEV-4 sampling (bytes)
+        critical_content_multiplier: Multiplier for critical content types
+        critical_content_types: List of content types considered critical
+    """
+    # SEV-1 and SEV-2 always run (100%)
+    sev1_rate: float = 1.0
+    sev2_rate: float = 1.0
+    
+    # SEV-3: file size based
+    sev3_small_file_rate: float = 1.0  # < 50KB
+    sev3_large_file_rate: float = 0.5  # >= 50KB
+    sev3_size_threshold: int = 50000  # bytes
+    
+    # SEV-4: file size based
+    sev4_small_file_rate: float = 1.0  # < 10KB
+    sev4_large_file_rate: float = 0.2  # >= 10KB
+    sev4_size_threshold: int = 10000  # bytes
+    
+    # Content type heuristics
+    critical_content_multiplier: float = 1.5  # config, schema files
+    critical_content_types: List[str] = field(
+        default_factory=lambda: ["config", "schema", "manifest"]
+    )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "sev1_rate": self.sev1_rate,
+            "sev2_rate": self.sev2_rate,
+            "sev3_small_file_rate": self.sev3_small_file_rate,
+            "sev3_large_file_rate": self.sev3_large_file_rate,
+            "sev3_size_threshold": self.sev3_size_threshold,
+            "sev4_small_file_rate": self.sev4_small_file_rate,
+            "sev4_large_file_rate": self.sev4_large_file_rate,
+            "sev4_size_threshold": self.sev4_size_threshold,
+            "critical_content_multiplier": self.critical_content_multiplier,
+            "critical_content_types": self.critical_content_types,
+        }
+
+
+@dataclass
 class TieredValidatorStats:
     """
     Statistics for the TieredValidator.
@@ -139,30 +199,43 @@ class TieredValidatorStats:
 
 class TieredValidator:
     """
+    ITEM-VAL-001: Enhanced tiered validation with severity-based sampling.
     ITEM-VAL-69: Tiered validation with severity-based sampling.
 
     Optimizes validation performance by sampling lower-priority validators
     (SEV-3/SEV-4) on large files while ensuring critical validators
     (SEV-1/SEV-2) always run.
 
+    Enhanced with content-type heuristics for critical file types
+    (config, schema, manifest) which receive increased sampling rates.
+
     Configuration is loaded from config.yaml under the validation_tiering section:
         validation_tiering:
           enabled: true
-          thresholds:
-            sev1_sev2: 1.0
+          sampling:
             sev3_large_file_threshold: 50000
-            sev3_sampling_rate: 0.5
-            sev4_sampling_rate: 0.2
+            sev3_large_file_rate: 0.5
+            sev4_small_file_threshold: 10000
+            sev4_small_file_rate: 1.0
+            sev4_large_file_rate: 0.2
+            critical_content_types:
+              - config
+              - schema
+              - manifest
+            critical_content_multiplier: 1.5
 
     Usage:
         tiered = TieredValidator(config)
         
         # Check if a validator should run
-        if tiered.should_run(validator, file_size=75000):
+        if tiered.should_run(validator, file_size=75000, content_type="config"):
             validator.execute(content)
         
         # Get sampling rate for a specific case
-        rate = tiered.get_sampling_rate(file_size=75000, severity="SEV-3")
+        rate = tiered.get_sampling_rate(file_size=75000, severity="SEV-3", content_type="config")
+        
+        # Sample content for validation
+        sampled = tiered.sample_content(content, rate=0.5)
         
         # Get statistics
         stats = tiered.get_stats()
@@ -171,6 +244,7 @@ class TieredValidator:
     - Critical validators (SEV-1/SEV-2) always execute for correctness
     - Standard validators (SEV-3) are sampled on large files (>50KB)
     - Optional validators (SEV-4) are heavily sampled on large files (>10KB)
+    - Critical content types get increased sampling rates
     """
 
     # Default thresholds (in bytes)
@@ -196,11 +270,14 @@ class TieredValidator:
             config: Configuration dictionary. Expected structure:
                 validation_tiering:
                     enabled: bool
-                    thresholds:
-                        sev1_sev2: float (should be 1.0)
+                    sampling:
                         sev3_large_file_threshold: int (bytes)
-                        sev3_sampling_rate: float (0.0-1.0)
-                        sev4_sampling_rate: float (0.0-1.0)
+                        sev3_large_file_rate: float (0.0-1.0)
+                        sev4_small_file_threshold: int (bytes)
+                        sev4_small_file_rate: float (0.0-1.0)
+                        sev4_large_file_rate: float (0.0-1.0)
+                        critical_content_types: list
+                        critical_content_multiplier: float
             seed: Optional random seed for deterministic testing.
         """
         self._config = config or {}
@@ -210,27 +287,8 @@ class TieredValidator:
         tiering_config = self._config.get("validation_tiering", {})
         self._enabled = tiering_config.get("enabled", True)
         
-        # Get thresholds from config or use defaults
-        thresholds = tiering_config.get("thresholds", {})
-        self._sev3_large_file_threshold = thresholds.get(
-            "sev3_large_file_threshold",
-            self.DEFAULT_SEV3_LARGE_FILE_THRESHOLD
-        )
-        self._sev3_sampling_rate = thresholds.get(
-            "sev3_sampling_rate",
-            self.DEFAULT_SEV3_SAMPLING_RATE
-        )
-        self._sev4_sampling_rate = thresholds.get(
-            "sev4_sampling_rate",
-            self.DEFAULT_SEV4_SAMPLING_RATE
-        )
-        
-        # SEV-4 large file threshold is not in config, use default
-        # (can be overridden in thresholds if provided)
-        self._sev4_large_file_threshold = thresholds.get(
-            "sev4_large_file_threshold",
-            self.DEFAULT_SEV4_LARGE_FILE_THRESHOLD
-        )
+        # Initialize sampling configuration
+        self._sampling_config = self._build_sampling_config(tiering_config)
         
         # Initialize random number generator
         self._rng = random.Random(seed)
@@ -239,17 +297,76 @@ class TieredValidator:
         self._stats = TieredValidatorStats()
         
         self._logger.info(
-            f"TieredValidator initialized: enabled={self._enabled}, "
-            f"sev3_threshold={self._sev3_large_file_threshold}, "
-            f"sev3_rate={self._sev3_sampling_rate}, "
-            f"sev4_threshold={self._sev4_large_file_threshold}, "
-            f"sev4_rate={self._sev4_sampling_rate}"
+            f"[ITEM-VAL-001] TieredValidator initialized: enabled={self._enabled}, "
+            f"sev3_threshold={self._sampling_config.sev3_size_threshold}, "
+            f"sev3_rate={self._sampling_config.sev3_large_file_rate}, "
+            f"sev4_threshold={self._sampling_config.sev4_size_threshold}, "
+            f"sev4_rate={self._sampling_config.sev4_large_file_rate}, "
+            f"critical_types={self._sampling_config.critical_content_types}"
+        )
+
+    def _build_sampling_config(self, tiering_config: Dict[str, Any]) -> SamplingConfig:
+        """
+        Build SamplingConfig from configuration dictionary.
+        
+        Supports both old 'thresholds' format and new 'sampling' format.
+        
+        Args:
+            tiering_config: The validation_tiering section from config
+            
+        Returns:
+            Configured SamplingConfig instance
+        """
+        # Check for new 'sampling' section first
+        sampling = tiering_config.get("sampling", {})
+        
+        # Fall back to old 'thresholds' format for backward compatibility
+        thresholds = tiering_config.get("thresholds", {})
+        
+        # Build config with precedence: sampling > thresholds > defaults
+        return SamplingConfig(
+            sev1_rate=1.0,
+            sev2_rate=1.0,
+            sev3_small_file_rate=sampling.get("sev3_small_file_rate", 1.0),
+            sev3_large_file_rate=sampling.get(
+                "sev3_large_file_rate",
+                thresholds.get("sev3_sampling_rate", self.DEFAULT_SEV3_SAMPLING_RATE)
+            ),
+            sev3_size_threshold=sampling.get(
+                "sev3_large_file_threshold",
+                thresholds.get(
+                    "sev3_large_file_threshold",
+                    self.DEFAULT_SEV3_LARGE_FILE_THRESHOLD
+                )
+            ),
+            sev4_small_file_rate=sampling.get("sev4_small_file_rate", 1.0),
+            sev4_large_file_rate=sampling.get(
+                "sev4_large_file_rate",
+                thresholds.get("sev4_sampling_rate", self.DEFAULT_SEV4_SAMPLING_RATE)
+            ),
+            sev4_size_threshold=sampling.get(
+                "sev4_small_file_threshold",
+                thresholds.get(
+                    "sev4_large_file_threshold",
+                    self.DEFAULT_SEV4_LARGE_FILE_THRESHOLD
+                )
+            ),
+            critical_content_multiplier=sampling.get("critical_content_multiplier", 1.5),
+            critical_content_types=sampling.get(
+                "critical_content_types",
+                ["config", "schema", "manifest"]
+            ),
         )
 
     @property
     def enabled(self) -> bool:
         """Check if tiered validation is enabled."""
         return self._enabled
+    
+    @property
+    def sampling_config(self) -> SamplingConfig:
+        """Get the current sampling configuration."""
+        return self._sampling_config
 
     def get_tier_for_severity(self, severity: str) -> SeverityTier:
         """
@@ -285,13 +402,22 @@ class TieredValidator:
         
         return tier_map[severity_upper]
 
-    def get_sampling_rate(self, file_size: int, severity: str) -> float:
+    def get_sampling_rate(
+        self,
+        file_size: int,
+        severity: str,
+        content_type: Optional[str] = None,
+    ) -> float:
         """
-        Get the sampling rate for a validator based on file size and severity.
+        Get the sampling rate for a validator based on file size, severity,
+        and optional content type.
+
+        ITEM-VAL-001: Enhanced with content type heuristics.
 
         Args:
             file_size: Size of the file in bytes
             severity: Severity level of the validator
+            content_type: Optional content type (e.g., "config", "schema", "manifest")
 
         Returns:
             Sampling rate as a float between 0.0 and 1.0
@@ -300,39 +426,64 @@ class TieredValidator:
             return self.ALWAYS_RUN_RATE
         
         tier = self.get_tier_for_severity(severity)
+        config = self._sampling_config
         
         if tier in (SeverityTier.TIER_1, SeverityTier.TIER_2):
             # SEV-1/SEV-2 always run
             return self.ALWAYS_RUN_RATE
         
+        rate: float
+        
         if tier == SeverityTier.TIER_3:
-            # SEV-3: 100% for small files, sampled for large files
-            if file_size < self._sev3_large_file_threshold:
-                return self.ALWAYS_RUN_RATE
-            return self._sev3_sampling_rate
+            # SEV-3: file size based sampling
+            if file_size < config.sev3_size_threshold:
+                rate = config.sev3_small_file_rate
+            else:
+                rate = config.sev3_large_file_rate
+        elif tier == SeverityTier.TIER_4:
+            # SEV-4: file size based sampling
+            if file_size < config.sev4_size_threshold:
+                rate = config.sev4_small_file_rate
+            else:
+                rate = config.sev4_large_file_rate
+        else:
+            # Default to always run for unknown tiers
+            rate = self.ALWAYS_RUN_RATE
         
-        if tier == SeverityTier.TIER_4:
-            # SEV-4: 100% for small files, heavily sampled for large files
-            if file_size < self._sev4_large_file_threshold:
-                return self.ALWAYS_RUN_RATE
-            return self._sev4_sampling_rate
+        # ITEM-VAL-001: Apply content type heuristic for critical content
+        if content_type and content_type in config.critical_content_types:
+            original_rate = rate
+            rate *= config.critical_content_multiplier
+            rate = min(rate, 1.0)  # Cap at 100%
+            self._logger.debug(
+                f"[ITEM-VAL-001] Critical content type '{content_type}': "
+                f"rate increased from {original_rate:.2f} to {rate:.2f}"
+            )
         
-        # Default to always run for unknown tiers
-        return self.ALWAYS_RUN_RATE
+        return rate
 
-    def should_run(self, validator: ValidatorProtocol, file_size: int) -> bool:
+    def should_run(
+        self,
+        validator: ValidatorProtocol,
+        file_size: int,
+        content_type: Optional[str] = None,
+    ) -> bool:
         """
-        Determine if a validator should run based on severity and file size.
+        Determine if a validator should run based on severity, file size,
+        and optional content type.
+
+        ITEM-VAL-001: Enhanced with content type support.
 
         This is the main method for making sampling decisions. It:
         1. Gets the severity tier for the validator
-        2. Calculates the sampling rate
+        2. Calculates the sampling rate (with content type heuristic)
         3. Makes a probabilistic decision
         4. Records the decision in statistics
 
         Args:
             validator: Validator object with severity and name attributes
             file_size: Size of the file in bytes
+            content_type: Optional content type (e.g., "config", "schema", "manifest")
 
         Returns:
             True if the validator should run, False to skip
@@ -341,8 +492,8 @@ class TieredValidator:
         severity = getattr(validator, "severity", "SEV-3")
         name = getattr(validator, "name", validator.__class__.__name__)
         
-        # Get sampling rate
-        sampling_rate = self.get_sampling_rate(file_size, severity)
+        # Get sampling rate (with content type heuristic)
+        sampling_rate = self.get_sampling_rate(file_size, severity, content_type)
         tier = self.get_tier_for_severity(severity)
         
         # Make decision
@@ -369,17 +520,84 @@ class TieredValidator:
         if should_run:
             self._stats.validators_run += 1
             self._logger.debug(
-                f"Validator '{name}' (severity={severity}) will run: "
-                f"file_size={file_size}, rate={sampling_rate:.2f}"
+                f"[ITEM-VAL-001] Validator '{name}' (severity={severity}) will run: "
+                f"file_size={file_size}, rate={sampling_rate:.2f}, "
+                f"content_type={content_type}"
             )
         else:
             self._stats.validators_skipped += 1
             self._logger.debug(
-                f"Validator '{name}' (severity={severity}) skipped: "
-                f"file_size={file_size}, rate={sampling_rate:.2f}"
+                f"[ITEM-VAL-001] Validator '{name}' (severity={severity}) skipped: "
+                f"file_size={file_size}, rate={sampling_rate:.2f}, "
+                f"content_type={content_type}"
             )
         
         return should_run
+
+    def sample_content(self, content: str, rate: float) -> str:
+        """
+        Sample content for validation when rate < 1.0.
+        
+        ITEM-VAL-001: Stratified sampling for large file validation.
+
+        Uses stratified sampling to get representative portions from
+        the beginning, middle, and end of the content.
+
+        Args:
+            content: The full content string to sample
+            rate: Sampling rate (0.0 to 1.0)
+
+        Returns:
+            Sampled content string
+        """
+        if rate >= 1.0:
+            return content
+        
+        if rate <= 0.0:
+            return ""
+        
+        lines = content.split('\n')
+        total_lines = len(lines)
+        
+        if total_lines == 0:
+            return content
+        
+        sample_size = max(1, int(total_lines * rate))
+        
+        # Stratified sampling - get samples from beginning, middle, end
+        sample: List[str] = []
+        
+        # Calculate segment sizes
+        segment_size = sample_size // 3
+        remainder = sample_size % 3
+        
+        # Beginning segment
+        beginning_size = segment_size + (1 if remainder > 0 else 0)
+        sample.extend(lines[:beginning_size])
+        
+        # Middle segment
+        mid_start = (total_lines // 2) - (segment_size // 2)
+        mid_end = mid_start + segment_size + (1 if remainder > 1 else 0)
+        sample.extend(lines[mid_start:mid_end])
+        
+        # End segment
+        end_size = segment_size
+        sample.extend(lines[-end_size:] if end_size > 0 else [])
+        
+        # Reconstruct content with markers for clarity
+        result_parts: List[str] = []
+        if beginning_size > 0:
+            result_parts.append('\n'.join(lines[:beginning_size]))
+        if mid_start < mid_end and mid_start < total_lines:
+            mid_segment = '\n'.join(lines[mid_start:mid_end])
+            if mid_segment:
+                result_parts.append(f"\n# ... [MIDDLE SECTION SAMPLED] ...\n{mid_segment}")
+        if end_size > 0:
+            end_segment = '\n'.join(lines[-end_size:])
+            if end_segment:
+                result_parts.append(f"\n# ... [END SECTION] ...\n{end_segment}")
+        
+        return '\n'.join(result_parts)
 
     def get_stats(self) -> TieredValidatorStats:
         """
@@ -404,10 +622,7 @@ class TieredValidator:
         """
         return {
             "enabled": self._enabled,
-            "sev3_large_file_threshold": self._sev3_large_file_threshold,
-            "sev3_sampling_rate": self._sev3_sampling_rate,
-            "sev4_large_file_threshold": self._sev4_large_file_threshold,
-            "sev4_sampling_rate": self._sev4_sampling_rate,
+            "sampling_config": self._sampling_config.to_dict(),
         }
 
     def get_recent_decisions(self, limit: int = 100) -> List[SamplingDecision]:

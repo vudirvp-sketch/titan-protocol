@@ -4,9 +4,12 @@ Orchestrator for TITAN FUSE Protocol.
 Provides mode-specific gate behavior and execution coordination.
 
 Author: TITAN FUSE Team
-Version: 3.3.0
+Version: 5.0.0
 
 ITEM-SEC-04: Secret scanning integrated with GATE-00
+ITEM-PROT-002: Invariant runtime enforcement integrated
+ITEM-ART-001: Audit trail signing in DELIVERY phase
+ITEM-ART-002: Decision record enforcement in DELIVERY phase
 """
 
 from dataclasses import dataclass
@@ -14,6 +17,7 @@ from typing import Dict, Any, Optional, List, Tuple
 from enum import Enum
 from pathlib import Path
 import logging
+import json
 
 # ITEM-SEC-04: Import secret scanner for GATE-00
 try:
@@ -23,6 +27,66 @@ except ImportError:
     SECRET_SCAN_AVAILABLE = False
     SecretScanner = None
     run_secret_scan = None
+
+# ITEM-PROT-002: Import invariant enforcer
+try:
+    from src.validation.invariant_enforcer import (
+        InvariantEnforcer,
+        InvariantCheckResult,
+        InvariantViolation,
+        EnforcementLevel,
+        InvariantType,
+        create_invariant_enforcer,
+    )
+    INVARIANT_ENFORCER_AVAILABLE = True
+except ImportError:
+    INVARIANT_ENFORCER_AVAILABLE = False
+    InvariantEnforcer = None
+    InvariantCheckResult = None
+    InvariantViolation = None
+    EnforcementLevel = None
+    InvariantType = None
+    create_invariant_enforcer = None
+
+# ITEM-ART-001: Import audit signer for trail signing
+try:
+    from src.events.audit_signer import (
+        AuditSigner,
+        AuditTrailV2,
+        AuditEventV2,
+        SignedTrail,
+        create_audit_signer,
+        generate_audit_trail,
+        write_signed_trail,
+    )
+    AUDIT_SIGNER_AVAILABLE = True
+except ImportError:
+    AUDIT_SIGNER_AVAILABLE = False
+    AuditSigner = None
+    AuditTrailV2 = None
+    AuditEventV2 = None
+    SignedTrail = None
+    create_audit_signer = None
+    generate_audit_trail = None
+    write_signed_trail = None
+
+# ITEM-ART-002: Import decision record manager
+try:
+    from src.decision.decision_record import (
+        DecisionRecordManager,
+        DecisionType,
+        Decision,
+        write_decision_record,
+        create_decision_record_manager,
+    )
+    DECISION_RECORD_AVAILABLE = True
+except ImportError:
+    DECISION_RECORD_AVAILABLE = False
+    DecisionRecordManager = None
+    DecisionType = None
+    Decision = None
+    write_decision_record = None
+    create_decision_record_manager = None
 
 
 class ExecutionMode(Enum):
@@ -218,6 +282,39 @@ class Orchestrator:
         self._logger = logging.getLogger(__name__)
         self._current_phase = 0
         self._state = "INIT"
+        
+        # ITEM-PROT-002: Initialize invariant enforcer
+        self._invariant_enforcer = None
+        self._invariant_results: List[Dict] = []
+        if INVARIANT_ENFORCER_AVAILABLE:
+            enforcement_level = self.config.get("invariant_enforcement", "standard")
+            self._invariant_enforcer = create_invariant_enforcer(enforcement_level, config)
+            self._logger.info(
+                f"[ITEM-PROT-002] InvariantEnforcer initialized with level: {enforcement_level}"
+            )
+        
+        # ITEM-ART-001: Initialize audit signer
+        self._audit_signer = None
+        self._audit_events: List[Dict] = []
+        if AUDIT_SIGNER_AVAILABLE:
+            audit_config = self.config.get('audit', {})
+            if audit_config.get('enabled', True):
+                self._audit_signer = create_audit_signer(self.config)
+                self._logger.info(
+                    f"[ITEM-ART-001] AuditSigner initialized with backend: "
+                    f"{self._audit_signer.get_backend_type()}"
+                )
+        
+        # ITEM-ART-002: Initialize decision record manager
+        self._decision_record_manager = None
+        if DECISION_RECORD_AVAILABLE:
+            decision_record_config = self.config.get('decision_record', {})
+            if decision_record_config.get('enabled', True):
+                # Session ID will be set when session is created
+                self._decision_record_manager = None  # Initialize lazily
+                self._logger.info(
+                    "[ITEM-ART-002] DecisionRecordManager will be initialized on session start"
+                )
 
     def get_current_state(self) -> Dict:
         """Get current orchestration state."""
@@ -487,8 +584,14 @@ class Orchestrator:
             "success": True,
             "phases_completed": [],
             "gates_passed": [],
-            "artifacts": []
+            "artifacts": [],
+            "invariant_checks": []
         }
+        
+        # ITEM-ART-002: Initialize decision record manager with session ID
+        session_id = session.get('session_id', 'unknown')
+        if DECISION_RECORD_AVAILABLE:
+            self.get_decision_record_manager(session_id)
         
         start_idx = 0
         if start_phase:
@@ -511,12 +614,33 @@ class Orchestrator:
             
             results["phases_completed"].append(phase)
             
+            # ITEM-PROT-002: Run invariant checks after phase
+            invariant_result = self._run_invariant_check(session, phase)
+            if invariant_result:
+                results["invariant_checks"].append(invariant_result)
+                # If invariant check failed with blocking violations, halt
+                if not invariant_result.get("passed", True):
+                    blocking = [v for v in invariant_result.get("violations", []) 
+                               if v.get("severity") in ("error", "critical")]
+                    if blocking:
+                        results["success"] = False
+                        results["error"] = f"Invariant violation at {phase}"
+                        results["invariant_violations"] = blocking
+                        self._logger.error(
+                            f"[ITEM-PROT-002] Pipeline halted due to invariant violations at {phase}"
+                        )
+                        break
+            
             # Validate gate
             passed, details = self.validate_gate(gate, session)
             if passed:
                 results["gates_passed"].append(gate)
                 session["gates_passed"] = results["gates_passed"]
+                # ITEM-ART-001: Record gate pass event
+                self.record_audit_event("GATE_PASS", {"gate": gate})
             else:
+                # ITEM-ART-001: Record gate fail event
+                self.record_audit_event("GATE_FAIL", {"gate": gate, "details": details})
                 # Check if gate is blocking
                 if gate in ["GATE-00", "GATE-01", "GATE-02", "GATE-03"]:
                     results["success"] = False
@@ -528,4 +652,364 @@ class Orchestrator:
                     results["warnings"] = results.get("warnings", [])
                     results["warnings"].append(f"{gate} warning")
         
+        # ITEM-ART-001: Deliver artifacts (including signed audit trail)
+        # ITEM-ART-002: Deliver decision record artifact
+        if results["success"]:
+            delivery_result = self._deliver_artifacts(session)
+            results["artifacts"].extend(delivery_result.get("artifacts_delivered", []))
+            results["audit_trail_signed"] = delivery_result.get("audit_trail_signed", False)
+            results["decision_record_delivered"] = delivery_result.get("decision_record_delivered", False)
+            
+            # ITEM-ART-002: Handle decision record blocking
+            if delivery_result.get("decision_record_blocked"):
+                results["success"] = False
+                results["error"] = delivery_result.get("error", "Decision record required but empty")
+                results["gate_details"] = {"gate": "GATE-05", "reason": "decision_record_required"}
+            
+            if delivery_result.get("error") and not delivery_result.get("decision_record_blocked"):
+                results["warnings"] = results.get("warnings", [])
+                results["warnings"].append(f"Delivery warning: {delivery_result['error']}")
+        
         return results
+    
+    def _run_invariant_check(self, session: Dict, phase: str) -> Optional[Dict]:
+        """
+        Run invariant checks for the current phase.
+        
+        ITEM-PROT-002: Runtime enforcement of INVARIANTS_GLOBAL
+        
+        Args:
+            session: Current session dictionary
+            phase: Current phase name
+            
+        Returns:
+            Dictionary with invariant check results, or None if enforcer unavailable
+        """
+        if not self._invariant_enforcer:
+            return None
+        
+        # Build context for invariant check
+        context = {
+            "output": session.get("output", ""),
+            "domain": session.get("domain", ""),
+            "sources": session.get("sources", []),
+            "evidence": session.get("evidence", []),
+            "output_claims": session.get("output_claims", []),
+            "forbidden_conditions": session.get("forbidden_conditions", []),
+            "code_blocks": session.get("code_blocks", []),
+            "declared_scope": session.get("declared_scope", set()),
+            "actual_scope": session.get("actual_scope", set()),
+            "extracted_count": session.get("extracted_count", 0),
+            "classified_count": session.get("classified_count", 0),
+            "exclusions_count": session.get("exclusions_count", 0),
+            "current_phase": self._current_phase,
+            "validation_result": session.get("last_validation_result"),
+        }
+        
+        # Add session snapshot for drift check if available
+        if "session_snapshot" in session:
+            context["session"] = session["session_snapshot"]
+        
+        # Run the check
+        result = self._invariant_enforcer.check_all(context)
+        
+        # Log result
+        if result.violations:
+            for violation in result.violations:
+                self._logger.warning(
+                    f"[ITEM-PROT-002] {violation.gap_tag or ''} "
+                    f"{violation.invariant_type.value}: {violation.message}"
+                )
+        
+        # Store result
+        result_dict = result.to_dict()
+        result_dict["phase"] = phase
+        self._invariant_results.append(result_dict)
+        
+        return result_dict
+    
+    def get_invariant_stats(self) -> Dict:
+        """
+        Get invariant enforcement statistics.
+        
+        ITEM-PROT-002: Statistics for monitoring
+        
+        Returns:
+            Dictionary with invariant stats
+        """
+        if not self._invariant_enforcer:
+            return {"available": False}
+        
+        return {
+            "available": True,
+            "enforcer_stats": self._invariant_enforcer.get_stats(),
+            "check_count": len(self._invariant_results),
+            "results": self._invariant_results,
+        }
+    
+    # ========================================================================
+    # ITEM-ART-001: Audit Trail Integration
+    # ========================================================================
+    
+    def record_audit_event(self, event_type: str, data: Dict = None) -> None:
+        """
+        Record an audit event for the trail.
+        
+        Args:
+            event_type: Type of event (e.g., 'GATE_PASS', 'GATE_FAIL')
+            data: Optional event data
+        """
+        import uuid
+        from datetime import datetime
+        
+        event = {
+            'event_id': f"evt-{uuid.uuid4().hex[:8]}",
+            'type': event_type,
+            'timestamp': datetime.utcnow().isoformat() + "Z",
+            'data': data or {}
+        }
+        self._audit_events.append(event)
+        
+        # Log critical events
+        if self._audit_signer and self._audit_signer.is_critical_event(event_type):
+            self._logger.info(f"[ITEM-ART-001] Critical audit event: {event_type}")
+    
+    def _deliver_artifacts(self, session: Dict) -> Dict:
+        """
+        Deliver artifacts including signed audit trail and decision record.
+        
+        ITEM-ART-001: Integration with DELIVERY phase
+        ITEM-ART-002: Decision record enforcement in DELIVERY phase
+        
+        Args:
+            session: Session dictionary with execution data
+            
+        Returns:
+            Dictionary with delivery results
+        """
+        results = {
+            'artifacts_delivered': [],
+            'audit_trail_signed': False,
+            'decision_record_delivered': False
+        }
+        
+        # ====================================================================
+        # ITEM-ART-001: Audit Trail Signing
+        # ====================================================================
+        if not AUDIT_SIGNER_AVAILABLE or not self._audit_signer:
+            self._logger.warning(
+                "[ITEM-ART-001] Audit signer not available, skipping trail signing"
+            )
+        else:
+            try:
+                # Get session ID
+                session_id = session.get('session_id', 'unknown')
+                
+                # Generate audit trail from recorded events
+                trail = generate_audit_trail(session_id, self._audit_events)
+                
+                # Sign the trail
+                signed_trail = self._audit_signer.sign_trail(trail)
+                
+                # Write to configured path
+                trail_path = self.config.get('audit', {}).get(
+                    'trail_path', '.titan/audit_trail.json'
+                )
+                if self.repo_root:
+                    trail_path = Path(self.repo_root) / trail_path
+                
+                write_signed_trail(signed_trail, trail_path)
+                
+                results['artifacts_delivered'].append('audit_trail.json')
+                results['audit_trail_signed'] = True
+                results['audit_trail_path'] = str(trail_path)
+                results['audit_backend_type'] = signed_trail.backend_type
+                
+                self._logger.info(
+                    f"[ITEM-ART-001] Signed audit trail delivered to {trail_path}"
+                )
+                
+            except Exception as e:
+                self._logger.error(f"[ITEM-ART-001] Failed to deliver audit trail: {e}")
+                results['error'] = str(e)
+        
+        # ====================================================================
+        # ITEM-ART-002: Decision Record Enforcement
+        # ====================================================================
+        decision_record_config = self.config.get('decision_record', {})
+        require_for_delivery = decision_record_config.get('require_for_delivery', True)
+        
+        if DECISION_RECORD_AVAILABLE:
+            manager = self._decision_record_manager
+            
+            # Check if decision record is required but empty
+            if manager is not None and manager.empty():
+                if require_for_delivery:
+                    # Emit gap tag
+                    self._logger.error(
+                        "[gap:decision_record_required] "
+                        "DECISION_RECORD is REQUIRED by ARTIFACT_CONTRACT but no decisions recorded"
+                    )
+                    results['decision_record_blocked'] = True
+                    results['error'] = "Decision record required but empty"
+                    return results
+                else:
+                    self._logger.warning(
+                        "[ITEM-ART-002] Decision record is empty but not required for delivery"
+                    )
+            
+            # Generate and write decision record artifact
+            if manager is not None and not manager.empty():
+                try:
+                    # Get output path from config
+                    output_dir = self.config.get('output', {}).get('directory', 'outputs/')
+                    decision_record_path = Path(output_dir) / 'decision_record.json'
+                    if self.repo_root:
+                        decision_record_path = Path(self.repo_root) / decision_record_path
+                    
+                    # Write the decision record
+                    write_result = write_decision_record(manager, str(decision_record_path))
+                    
+                    results['artifacts_delivered'].append('decision_record.json')
+                    results['decision_record_delivered'] = True
+                    results['decision_record_path'] = str(decision_record_path)
+                    results['decision_count'] = write_result.get('decision_count', 0)
+                    results['decision_summary'] = write_result.get('summary', {})
+                    
+                    self._logger.info(
+                        f"[ITEM-ART-002] Decision record delivered to {decision_record_path} "
+                        f"with {write_result.get('decision_count', 0)} decisions"
+                    )
+                    
+                except Exception as e:
+                    self._logger.error(f"[ITEM-ART-002] Failed to deliver decision record: {e}")
+                    if results.get('error'):
+                        results['error'] += f"; Decision record error: {e}"
+                    else:
+                        results['error'] = str(e)
+        else:
+            self._logger.warning(
+                "[ITEM-ART-002] DecisionRecordManager not available"
+            )
+        
+        return results
+    
+    def get_audit_stats(self) -> Dict:
+        """
+        Get audit trail statistics.
+        
+        ITEM-ART-001: Statistics for monitoring
+        
+        Returns:
+            Dictionary with audit stats
+        """
+        return {
+            "available": AUDIT_SIGNER_AVAILABLE,
+            "signer_initialized": self._audit_signer is not None,
+            "event_count": len(self._audit_events),
+            "backend_type": self._audit_signer.get_backend_type() if self._audit_signer else None,
+            "public_key_id": self._audit_signer.get_public_key_id() if self._audit_signer else None,
+        }
+    
+    # ========================================================================
+    # ITEM-ART-002: Decision Record Integration
+    # ========================================================================
+    
+    def get_decision_record_manager(self, session_id: str = None) -> Optional["DecisionRecordManager"]:
+        """
+        Get or create the DecisionRecordManager for this session.
+        
+        ITEM-ART-002: Lazy initialization of decision record manager
+        
+        Args:
+            session_id: Optional session ID. Required for first initialization.
+        
+        Returns:
+            DecisionRecordManager instance or None if unavailable.
+        """
+        if not DECISION_RECORD_AVAILABLE:
+            return None
+        
+        # Check if decision record is disabled in config
+        decision_record_config = self.config.get('decision_record', {})
+        if not decision_record_config.get('enabled', True):
+            return None
+        
+        # Initialize if needed
+        if self._decision_record_manager is None and session_id:
+            self._decision_record_manager = create_decision_record_manager(session_id)
+            self._logger.info(
+                f"[ITEM-ART-002] DecisionRecordManager initialized for session: {session_id}"
+            )
+        
+        return self._decision_record_manager
+    
+    def record_decision(
+        self,
+        decision_type: "DecisionType",
+        context: Dict[str, Any],
+        options_considered: List[Dict[str, Any]],
+        selected_option: str,
+        rationale: str,
+        confidence: float,
+        gate_id: Optional[str] = None,
+        conflict_id: Optional[str] = None,
+        metadata: Dict[str, Any] = None
+    ) -> Optional["Decision"]:
+        """
+        Record a decision in the decision record.
+        
+        ITEM-ART-002: Convenience method for recording decisions
+        
+        Args:
+            decision_type: Type of decision
+            context: Contextual information
+            options_considered: Options that were evaluated
+            selected_option: The selected option
+            rationale: Explanation for the selection
+            confidence: Confidence level (0.0-1.0)
+            gate_id: Optional gate ID
+            conflict_id: Optional conflict ID
+            metadata: Additional metadata
+        
+        Returns:
+            The created Decision or None if manager unavailable.
+        """
+        manager = self._decision_record_manager
+        if manager is None:
+            self._logger.warning(
+                "[ITEM-ART-002] Cannot record decision: manager not initialized"
+            )
+            return None
+        
+        decision = manager.record_decision(
+            decision_type=decision_type,
+            context=context,
+            options_considered=options_considered,
+            selected_option=selected_option,
+            rationale=rationale,
+            confidence=confidence,
+            gate_id=gate_id,
+            conflict_id=conflict_id,
+            metadata=metadata
+        )
+        
+        return decision
+    
+    def get_decision_stats(self) -> Dict:
+        """
+        Get decision record statistics.
+        
+        ITEM-ART-002: Statistics for monitoring
+        
+        Returns:
+            Dictionary with decision stats
+        """
+        manager = self._decision_record_manager
+        return {
+            "available": DECISION_RECORD_AVAILABLE,
+            "manager_initialized": manager is not None,
+            "decision_count": manager.get_decision_count() if manager else 0,
+            "enabled": self.config.get('decision_record', {}).get('enabled', True),
+            "require_for_delivery": self.config.get('decision_record', {}).get('require_for_delivery', True),
+        }

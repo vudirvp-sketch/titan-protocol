@@ -5,6 +5,7 @@ OpenTelemetry-compatible distributed tracing for cross-service trace correlation
 Implements W3C TraceContext propagation standard.
 
 ITEM-OBS-06: Distributed Tracing Integration for TITAN Protocol v4.0.0
+ITEM-OBS-001: OpenTelemetry Traces Enhancement for TITAN Protocol v5.0.0
 
 Features:
 - Span creation with parent-child relationships
@@ -12,6 +13,23 @@ Features:
 - Exporters for Jaeger, Zipkin, and OTLP
 - EventBus integration for automatic trace_id/span_id injection
 - W3C TraceContext format support
+- Session lifecycle span hierarchy (ITEM-OBS-001)
+- Gate transitions and batch execution spans (ITEM-OBS-001)
+
+Span Hierarchy:
+```
+session_span
+  ├── init_span
+  ├── discovery_span
+  │     └── tool_scan_spans
+  ├── analysis_span
+  ├── planning_span
+  │     └── dag_build_span
+  ├── execution_span
+  │     └── gate_spans
+  │           └── batch_spans
+  └── delivery_span
+```
 """
 
 import json
@@ -85,6 +103,83 @@ class ExporterType(Enum):
     NONE = "none"
 
 
+class SpanKind(Enum):
+    """
+    ITEM-OBS-001: Span kinds for TITAN Protocol session lifecycle.
+    
+    These represent the different phases and operations in a session.
+    """
+    # Root span
+    SESSION = "session"
+    
+    # Phase spans (children of session)
+    INIT = "init"
+    DISCOVERY = "discovery"
+    ANALYSIS = "analysis"
+    PLANNING = "planning"
+    EXECUTION = "execution"
+    DELIVERY = "delivery"
+    
+    # Nested spans
+    TOOL_SCAN = "tool_scan"
+    DAG_BUILD = "dag_build"
+    GATE = "gate"
+    BATCH = "batch"
+    
+    # Event span
+    EVENT = "event"
+
+
+# ITEM-OBS-001: Span hierarchy definition
+SPAN_HIERARCHY = {
+    SpanKind.SESSION: {
+        "children": [SpanKind.INIT, SpanKind.DISCOVERY, SpanKind.ANALYSIS, 
+                     SpanKind.PLANNING, SpanKind.EXECUTION, SpanKind.DELIVERY],
+        "parent": None
+    },
+    SpanKind.DISCOVERY: {
+        "children": [SpanKind.TOOL_SCAN],
+        "parent": SpanKind.SESSION
+    },
+    SpanKind.PLANNING: {
+        "children": [SpanKind.DAG_BUILD],
+        "parent": SpanKind.SESSION
+    },
+    SpanKind.EXECUTION: {
+        "children": [SpanKind.GATE],
+        "parent": SpanKind.SESSION
+    },
+    SpanKind.GATE: {
+        "children": [SpanKind.BATCH],
+        "parent": SpanKind.EXECUTION
+    },
+    SpanKind.BATCH: {
+        "children": [],
+        "parent": SpanKind.GATE
+    },
+    SpanKind.TOOL_SCAN: {
+        "children": [],
+        "parent": SpanKind.DISCOVERY
+    },
+    SpanKind.DAG_BUILD: {
+        "children": [],
+        "parent": SpanKind.PLANNING
+    },
+    SpanKind.INIT: {
+        "children": [],
+        "parent": SpanKind.SESSION
+    },
+    SpanKind.ANALYSIS: {
+        "children": [],
+        "parent": SpanKind.SESSION
+    },
+    SpanKind.DELIVERY: {
+        "children": [],
+        "parent": SpanKind.SESSION
+    },
+}
+
+
 @dataclass
 class Span:
     """
@@ -92,6 +187,8 @@ class Span:
 
     This is a pure Python implementation that mirrors OpenTelemetry Span concepts.
     Can be used independently or synchronized with OpenTelemetry when available.
+
+    ITEM-OBS-001: Enhanced with span_kind for session lifecycle tracking.
 
     Attributes:
         trace_id: Unique trace identifier (W3C format: 32 hex chars)
@@ -102,6 +199,7 @@ class Span:
         end_time: When span ended (None if still active)
         attributes: Key-value pairs for span metadata
         status: Span status (UNSET, OK, ERROR)
+        span_kind: Type of span (ITEM-OBS-001)
     """
     trace_id: str
     span_id: str
@@ -113,6 +211,7 @@ class Span:
     status: SpanStatus = SpanStatus.UNSET
     status_message: str = ""
     events: List[Dict[str, Any]] = field(default_factory=list)
+    span_kind: Optional[SpanKind] = None  # ITEM-OBS-001
     _start_ns: int = field(default_factory=time.time_ns, repr=False)
 
     def set_attribute(self, key: str, value: Any) -> "Span":
@@ -178,7 +277,8 @@ class Span:
             "attributes": self.attributes,
             "status": self.status.value,
             "status_message": self.status_message,
-            "events": self.events
+            "events": self.events,
+            "span_kind": self.span_kind.value if self.span_kind else None  # ITEM-OBS-001
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -292,6 +392,11 @@ class DistributedTracer:
         self._spans: List[Span] = []
         self._active_span: Optional[Span] = None
         self._span_stack: List[Span] = []
+        
+        # ITEM-OBS-001: Track spans by kind for hierarchy management
+        self._kind_spans: Dict[SpanKind, Span] = {}
+        self._gate_spans: Dict[str, Span] = {}  # gate_id -> Span
+        self._batch_spans: Dict[str, Span] = {}  # batch_id -> Span
 
         # OpenTelemetry integration
         self._otel_tracer = None
@@ -638,6 +743,350 @@ class DistributedTracer:
         self._spans.clear()
         self._span_stack.clear()
         self._active_span = None
+        self._kind_spans.clear()  # ITEM-OBS-001
+        self._gate_spans.clear()  # ITEM-OBS-001
+        self._batch_spans.clear()  # ITEM-OBS-001
+
+    # =========================================================================
+    # ITEM-OBS-001: Session Lifecycle Span Methods
+    # =========================================================================
+    
+    def start_session_span(self, session_id: str, attributes: Optional[Dict[str, Any]] = None) -> Span:
+        """
+        ITEM-OBS-001: Start the root session span.
+        
+        This is the top-level span for a TITAN Protocol session, containing
+        all phase spans (init, discovery, analysis, planning, execution, delivery).
+        
+        Args:
+            session_id: Unique session identifier
+            attributes: Optional initial attributes
+            
+        Returns:
+            The created session Span
+        """
+        logger.info(f"[ITEM-OBS-001] Starting session span: {session_id}")
+        
+        span = self.start_span(
+            name=f"session.{session_id}",
+            attributes={
+                "session.id": session_id,
+                "titan.version": "5.0.0",
+                "service.name": self.service_name,
+                **(attributes or {})
+            }
+        )
+        span.span_kind = SpanKind.SESSION
+        self._kind_spans[SpanKind.SESSION] = span
+        
+        return span
+    
+    def start_phase_span(
+        self, 
+        phase: SpanKind, 
+        attributes: Optional[Dict[str, Any]] = None
+    ) -> Span:
+        """
+        ITEM-OBS-001: Start a phase span within the session.
+        
+        Phase spans are direct children of the session span and represent
+        the major phases of TITAN Protocol execution:
+        - INIT: Session initialization
+        - DISCOVERY: Tool and file discovery
+        - ANALYSIS: Content analysis
+        - PLANNING: Execution planning (DAG building)
+        - EXECUTION: Plan execution with gates
+        - DELIVERY: Output delivery
+        
+        Args:
+            phase: The SpanKind for the phase (must be a phase type)
+            attributes: Optional initial attributes
+            
+        Returns:
+            The created phase Span
+            
+        Raises:
+            ValueError: If phase is not a valid phase type or session not started
+        """
+        valid_phases = {
+            SpanKind.INIT, SpanKind.DISCOVERY, SpanKind.ANALYSIS,
+            SpanKind.PLANNING, SpanKind.EXECUTION, SpanKind.DELIVERY
+        }
+        
+        if phase not in valid_phases:
+            raise ValueError(f"Invalid phase type: {phase}. Must be one of {valid_phases}")
+        
+        session_span = self._kind_spans.get(SpanKind.SESSION)
+        if not session_span:
+            logger.warning(f"[ITEM-OBS-001] No session span found, creating orphan phase span: {phase.value}")
+        
+        logger.debug(f"[ITEM-OBS-001] Starting phase span: {phase.value}")
+        
+        span = self.start_span(
+            name=f"phase.{phase.value}",
+            parent=session_span,
+            attributes={
+                "phase.type": phase.value,
+                **(attributes or {})
+            }
+        )
+        span.span_kind = phase
+        self._kind_spans[phase] = span
+        
+        return span
+    
+    def start_gate_span(
+        self, 
+        gate_id: str, 
+        gate_type: str = "validation",
+        attributes: Optional[Dict[str, Any]] = None
+    ) -> Span:
+        """
+        ITEM-OBS-001: Start a gate span within execution phase.
+        
+        Gate spans represent the validation gates that chunks must pass through
+        during execution. They are children of the execution phase span.
+        
+        Args:
+            gate_id: Unique gate identifier (e.g., "GATE-01", "GATE-02")
+            gate_type: Type of gate (validation, security, quality, etc.)
+            attributes: Optional initial attributes
+            
+        Returns:
+            The created gate Span
+        """
+        # Find the execution phase span as parent
+        execution_span = self._kind_spans.get(SpanKind.EXECUTION)
+        if not execution_span:
+            # Fallback to session span if execution not started
+            execution_span = self._kind_spans.get(SpanKind.SESSION)
+            logger.warning(f"[ITEM-OBS-001] No execution span found for gate {gate_id}")
+        
+        logger.debug(f"[ITEM-OBS-001] Starting gate span: {gate_id}")
+        
+        span = self.start_span(
+            name=f"gate.{gate_id}",
+            parent=execution_span,
+            attributes={
+                "gate.id": gate_id,
+                "gate.type": gate_type,
+                **(attributes or {})
+            }
+        )
+        span.span_kind = SpanKind.GATE
+        self._gate_spans[gate_id] = span
+        
+        return span
+    
+    def start_batch_span(
+        self, 
+        batch_id: str, 
+        gate_id: Optional[str] = None,
+        attributes: Optional[Dict[str, Any]] = None
+    ) -> Span:
+        """
+        ITEM-OBS-001: Start a batch span within a gate.
+        
+        Batch spans represent individual batches of work being processed
+        within a gate. They are children of gate spans.
+        
+        Args:
+            batch_id: Unique batch identifier
+            gate_id: Parent gate ID (optional, uses most recent gate if not provided)
+            attributes: Optional initial attributes
+            
+        Returns:
+            The created batch Span
+        """
+        # Find the parent gate span
+        parent_span = None
+        if gate_id and gate_id in self._gate_spans:
+            parent_span = self._gate_spans[gate_id]
+        else:
+            # Fallback to execution or session span
+            parent_span = self._kind_spans.get(SpanKind.EXECUTION) or self._kind_spans.get(SpanKind.SESSION)
+        
+        logger.debug(f"[ITEM-OBS-001] Starting batch span: {batch_id}")
+        
+        span = self.start_span(
+            name=f"batch.{batch_id}",
+            parent=parent_span,
+            attributes={
+                "batch.id": batch_id,
+                "gate.id": gate_id,
+                **(attributes or {})
+            }
+        )
+        span.span_kind = SpanKind.BATCH
+        self._batch_spans[batch_id] = span
+        
+        return span
+    
+    def start_tool_scan_span(
+        self, 
+        tool_name: str,
+        attributes: Optional[Dict[str, Any]] = None
+    ) -> Span:
+        """
+        ITEM-OBS-001: Start a tool scan span within discovery phase.
+        
+        Tool scan spans represent individual tool discovery operations
+        during the discovery phase.
+        
+        Args:
+            tool_name: Name of the tool being scanned
+            attributes: Optional initial attributes
+            
+        Returns:
+            The created tool scan Span
+        """
+        discovery_span = self._kind_spans.get(SpanKind.DISCOVERY)
+        if not discovery_span:
+            discovery_span = self._kind_spans.get(SpanKind.SESSION)
+            logger.warning(f"[ITEM-OBS-001] No discovery span found for tool scan: {tool_name}")
+        
+        logger.debug(f"[ITEM-OBS-001] Starting tool scan span: {tool_name}")
+        
+        span = self.start_span(
+            name=f"tool_scan.{tool_name}",
+            parent=discovery_span,
+            attributes={
+                "tool.name": tool_name,
+                **(attributes or {})
+            }
+        )
+        span.span_kind = SpanKind.TOOL_SCAN
+        
+        return span
+    
+    def start_dag_build_span(
+        self, 
+        dag_name: str = "execution_dag",
+        attributes: Optional[Dict[str, Any]] = None
+    ) -> Span:
+        """
+        ITEM-OBS-001: Start a DAG build span within planning phase.
+        
+        DAG build spans represent the construction of the execution DAG
+        during the planning phase.
+        
+        Args:
+            dag_name: Name of the DAG being built
+            attributes: Optional initial attributes
+            
+        Returns:
+            The created DAG build Span
+        """
+        planning_span = self._kind_spans.get(SpanKind.PLANNING)
+        if not planning_span:
+            planning_span = self._kind_spans.get(SpanKind.SESSION)
+            logger.warning(f"[ITEM-OBS-001] No planning span found for DAG build: {dag_name}")
+        
+        logger.debug(f"[ITEM-OBS-001] Starting DAG build span: {dag_name}")
+        
+        span = self.start_span(
+            name=f"dag_build.{dag_name}",
+            parent=planning_span,
+            attributes={
+                "dag.name": dag_name,
+                **(attributes or {})
+            }
+        )
+        span.span_kind = SpanKind.DAG_BUILD
+        
+        return span
+    
+    def get_span_by_kind(self, kind: SpanKind) -> Optional[Span]:
+        """
+        ITEM-OBS-001: Get a span by its kind.
+        
+        Args:
+            kind: The SpanKind to search for
+            
+        Returns:
+            The Span if found, None otherwise
+        """
+        return self._kind_spans.get(kind)
+    
+    def get_gate_span(self, gate_id: str) -> Optional[Span]:
+        """
+        ITEM-OBS-001: Get a gate span by gate ID.
+        
+        Args:
+            gate_id: The gate ID to search for
+            
+        Returns:
+            The Span if found, None otherwise
+        """
+        return self._gate_spans.get(gate_id)
+    
+    def get_batch_span(self, batch_id: str) -> Optional[Span]:
+        """
+        ITEM-OBS-001: Get a batch span by batch ID.
+        
+        Args:
+            batch_id: The batch ID to search for
+            
+        Returns:
+            The Span if found, None otherwise
+        """
+        return self._batch_spans.get(batch_id)
+    
+    def validate_span_hierarchy(self, span: Span) -> bool:
+        """
+        ITEM-OBS-001: Validate that a span's parent is correct according to hierarchy.
+        
+        Args:
+            span: The span to validate
+            
+        Returns:
+            True if hierarchy is valid, False otherwise
+        """
+        if not span.span_kind:
+            return True  # No kind specified, cannot validate
+        
+        hierarchy_info = SPAN_HIERARCHY.get(span.span_kind)
+        if not hierarchy_info:
+            return True  # Unknown kind, skip validation
+        
+        expected_parent_kind = hierarchy_info.get("parent")
+        
+        # Root span has no parent
+        if expected_parent_kind is None:
+            return span.parent_span_id is None
+        
+        # Check if parent is of expected kind
+        for s in self._spans:
+            if s.span_id == span.parent_span_id:
+                if s.span_kind == expected_parent_kind:
+                    return True
+                # Also allow direct session parent for any phase
+                if expected_parent_kind == SpanKind.SESSION and s.span_kind == SpanKind.SESSION:
+                    return True
+        
+        return False  # Parent not found or wrong kind
+    
+    def get_hierarchy_stats(self) -> Dict[str, Any]:
+        """
+        ITEM-OBS-001: Get statistics about the span hierarchy.
+        
+        Returns:
+            Dictionary with hierarchy statistics
+        """
+        stats = {
+            "session_started": SpanKind.SESSION in self._kind_spans,
+            "phases_started": [],
+            "gates_count": len(self._gate_spans),
+            "batches_count": len(self._batch_spans),
+            "total_spans": len(self._spans),
+        }
+        
+        for phase in [SpanKind.INIT, SpanKind.DISCOVERY, SpanKind.ANALYSIS,
+                      SpanKind.PLANNING, SpanKind.EXECUTION, SpanKind.DELIVERY]:
+            if phase in self._kind_spans:
+                stats["phases_started"].append(phase.value)
+        
+        return stats
 
     def export_to_jaeger(self, endpoint: str) -> None:
         """
@@ -909,3 +1358,43 @@ def inject_context(carrier: Dict[str, str]) -> None:
 def extract_context(carrier: Dict[str, str]) -> Optional[TraceContext]:
     """Extract trace context from carrier using global tracer."""
     return get_distributed_tracer().extract_context(carrier)
+
+
+# ITEM-OBS-001: Convenience aliases
+get_tracer = get_distributed_tracer
+
+
+def start_session_span(session_id: str, attributes: Optional[Dict[str, Any]] = None) -> Span:
+    """ITEM-OBS-001: Start a session span in the global tracer."""
+    return get_distributed_tracer().start_session_span(session_id, attributes)
+
+
+def start_phase_span(phase: SpanKind, attributes: Optional[Dict[str, Any]] = None) -> Span:
+    """ITEM-OBS-001: Start a phase span in the global tracer."""
+    return get_distributed_tracer().start_phase_span(phase, attributes)
+
+
+def start_gate_span(gate_id: str, gate_type: str = "validation", 
+                    attributes: Optional[Dict[str, Any]] = None) -> Span:
+    """ITEM-OBS-001: Start a gate span in the global tracer."""
+    return get_distributed_tracer().start_gate_span(gate_id, gate_type, attributes)
+
+
+def start_batch_span(batch_id: str, gate_id: Optional[str] = None,
+                     attributes: Optional[Dict[str, Any]] = None) -> Span:
+    """ITEM-OBS-001: Start a batch span in the global tracer."""
+    return get_distributed_tracer().start_batch_span(batch_id, gate_id, attributes)
+
+
+def record_event(event_name: str, attributes: Optional[Dict[str, Any]] = None) -> None:
+    """ITEM-OBS-001: Record an event on the current span."""
+    span = get_active_span()
+    if span:
+        span.add_event(event_name, attributes or {})
+
+
+def record_exception(exception: Exception) -> None:
+    """ITEM-OBS-001: Record an exception on the current span."""
+    span = get_active_span()
+    if span:
+        span.record_exception(exception)

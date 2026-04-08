@@ -211,10 +211,11 @@ class TestTieredValidatorInitialization:
         tiered = TieredValidator()
         
         assert tiered.enabled is True
-        assert tiered._sev3_large_file_threshold == 50000
-        assert tiered._sev3_sampling_rate == 0.5
-        assert tiered._sev4_sampling_rate == 0.2
-        assert tiered._sev4_large_file_threshold == 10000
+        # Access via sampling_config property (ITEM-VAL-001)
+        assert tiered.sampling_config.sev3_size_threshold == 50000
+        assert tiered.sampling_config.sev3_large_file_rate == 0.5
+        assert tiered.sampling_config.sev4_large_file_rate == 0.2
+        assert tiered.sampling_config.sev4_size_threshold == 10000
 
     def test_initialization_with_config(self):
         """Test initialization with custom config."""
@@ -230,9 +231,10 @@ class TestTieredValidatorInitialization:
         }
         tiered = TieredValidator(config)
         
-        assert tiered._sev3_large_file_threshold == 100000
-        assert tiered._sev3_sampling_rate == 0.3
-        assert tiered._sev4_sampling_rate == 0.1
+        # Access via sampling_config property (ITEM-VAL-001)
+        assert tiered.sampling_config.sev3_size_threshold == 100000
+        assert tiered.sampling_config.sev3_large_file_rate == 0.3
+        assert tiered.sampling_config.sev4_large_file_rate == 0.1
 
     def test_initialization_disabled(self):
         """Test initialization with tiering disabled."""
@@ -576,9 +578,10 @@ class TestStatisticsMethods:
         config_out = tiered.get_config()
         
         assert config_out["enabled"] is True
-        assert config_out["sev3_large_file_threshold"] == 75000
-        assert config_out["sev3_sampling_rate"] == 0.4
-        assert config_out["sev4_sampling_rate"] == 0.15
+        # ITEM-VAL-001: Configuration now nested under sampling_config
+        assert config_out["sampling_config"]["sev3_size_threshold"] == 75000
+        assert config_out["sampling_config"]["sev3_large_file_rate"] == 0.4
+        assert config_out["sampling_config"]["sev4_large_file_rate"] == 0.15
 
 
 # =============================================================================

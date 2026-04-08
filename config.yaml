@@ -85,8 +85,15 @@ output:
     index: true
     symbol_map: true
     change_log: true
-    decision_record: false
+    decision_record: true  # ITEM-ART-002: Enable decision record generation
     metrics: true
+
+# ITEM-ART-002: Decision Record Configuration
+decision_record:
+  enabled: true
+  require_for_delivery: true  # Block DELIVERY if empty (ARTIFACT_CONTRACT enforcement)
+  include_in_metrics: true
+  output_path: outputs/decision_record.json
 multi_file:
   default_limit: 3
   hard_limit: 10
@@ -187,11 +194,28 @@ secrets:
   prefix: TITAN_SECRET_
 
 # ITEM-SEC-05: Audit trail configuration
+# ITEM-ART-001: Enhanced audit signing with multiple backends
 audit:
   enabled: true
-  signing_key_path: .titan/audit_key
-  trail_path: .titan/audit_trail.json
+  backend: hmac  # Options: hmac | rsa | kms | ed25519
+  hmac:
+    secret_path: .titan/hmac_secret
+  rsa:
+    private_key_path: .titan/audit_private.pem
+    public_key_path: .titan/audit_public.pem
+  kms:
+    endpoint: null
+    key_id: null
+    api_key: null
+  ed25519:
+    key_path: .titan/audit_key
   sign_critical_events: true
+  trail_path: .titan/audit_trail.json
+  # Key rotation settings
+  key_rotation:
+    enabled: false
+    interval_days: 90
+    warn_before_days: 7
 
 chunking_limits:
   max_chars_per_chunk: 150000
@@ -228,6 +252,19 @@ model_routing:
     require_root_model: false  # Set true to enforce model configuration
     require_leaf_model: false
     warn_on_empty: true
+  
+  # ITEM-MODEL-001: Routing optimization
+  complexity_weights:
+    context_length: 0.3
+    dependency_depth: 0.2
+    gate_count: 0.2
+    pattern_complexity: 0.3
+  
+  tier_demotion:
+    enabled: true
+    low_complexity_threshold: 0.3
+    high_complexity_threshold: 0.7
+    high_confidence_threshold: 0.9
 confidence:
   enable_advisory: true
   early_exit_threshold: HIGH
@@ -241,6 +278,64 @@ telemetry:
 mode:
   current: direct
   presets_dir: presets/
+  # [ITEM-GATE-001] Execution mode profiles for gate behavior
+  profiles:
+    ci_cd_pipeline:
+      strict_mode: true
+      fail_fast: true
+      sensitivity_multiplier: 0.8
+      retry_generous: false
+      consensus_required: false
+      max_retries: 1
+      description: "Production CI/CD - strictest settings"
+    single_llm_executor:
+      strict_mode: false
+      fail_fast: false
+      sensitivity_multiplier: 1.0
+      retry_generous: true
+      consensus_required: false
+      max_retries: 5
+      description: "Single LLM - balanced settings"
+    multi_agent_swarm:
+      strict_mode: true
+      fail_fast: false
+      sensitivity_multiplier: 0.9
+      retry_generous: false
+      consensus_required: true
+      max_retries: 3
+      description: "Multi-agent - consensus-based"
+    deterministic:
+      strict_mode: true
+      fail_fast: true
+      sensitivity_multiplier: 0.85
+      retry_generous: false
+      consensus_required: false
+      max_retries: 2
+      description: "Deterministic - production/critical"
+    guided_autonomy:
+      strict_mode: false
+      fail_fast: false
+      sensitivity_multiplier: 1.0
+      retry_generous: true
+      consensus_required: false
+      max_retries: 4
+      description: "Guided autonomy - assisted operations"
+    fast_prototype:
+      strict_mode: false
+      fail_fast: false
+      sensitivity_multiplier: 1.2
+      retry_generous: true
+      consensus_required: false
+      max_retries: 10
+      description: "Fast prototype - rapid iteration"
+    direct:
+      strict_mode: false
+      fail_fast: false
+      sensitivity_multiplier: 1.0
+      retry_generous: false
+      consensus_required: false
+      max_retries: 3
+      description: "Direct - default mode"
 intent_classifier:
   enabled: false
   method: rule_based
@@ -634,6 +729,7 @@ symbol_map:
 # ========================================
 
 # ITEM-OBS-06: Distributed Tracing Integration
+# ITEM-OBS-001: OpenTelemetry Traces Enhancement
 tracing:
   enabled: true
   provider: "opentelemetry"  # opentelemetry | jaeger | zipkin | none
@@ -644,6 +740,19 @@ tracing:
     - type: "jaeger"
       endpoint: "http://localhost:14268/api/traces"
   propagation: "w3c"  # w3c | b3 | jaeger
+  span_hierarchy: "session_lifecycle"  # ITEM-OBS-001: Enables session/gate/batch hierarchy
+  # Span hierarchy structure:
+  # session_span
+  #   ├── init_span
+  #   ├── discovery_span
+  #   │     └── tool_scan_spans
+  #   ├── analysis_span
+  #   ├── planning_span
+  #   │     └── dag_build_span
+  #   ├── execution_span
+  #   │     └── gate_spans
+  #   │           └── batch_spans
+  #   └── delivery_span
 
 # ITEM-OBS-07: Structured Logging Format
 structured_logging:
@@ -793,14 +902,28 @@ schema_migration:
   backup_before_migrate: true
   validate_after_migrate: true
 
+# ITEM-VAL-001: TieredValidatorSampling Enhancement
 # ITEM-VAL-69: Validation Tiering by Severity
 validation_tiering:
   enabled: true
+  # Legacy thresholds format (backward compatible)
   thresholds:
     sev1_sev2: 1.0  # Always run
     sev3_large_file_threshold: 50000
     sev3_sampling_rate: 0.5
     sev4_sampling_rate: 0.2
+  # ITEM-VAL-001: New sampling configuration
+  sampling:
+    sev3_large_file_threshold: 50000  # bytes
+    sev3_large_file_rate: 0.5
+    sev4_small_file_threshold: 10000  # bytes
+    sev4_small_file_rate: 1.0
+    sev4_large_file_rate: 0.2
+    critical_content_types:
+      - config
+      - schema
+      - manifest
+    critical_content_multiplier: 1.5
 
 # ITEM-OBS-81: Real-time p50/p95 Export
 realtime_metrics:
@@ -830,3 +953,129 @@ deterministic_seed:
   enforce: true
   require_temperature_zero: true
   inject_on_all_calls: true
+
+# ITEM-PROT-001: Hyperparameter Enforcement Gate
+hyperparameters:
+  enforcement: strict  # Options: strict, relaxed
+  on_violation: reject  # Options: reject, warn, auto_fix
+  allowed_temperature: 0.0  # Required temperature in strict mode
+  max_top_p: 0.1  # Maximum allowed top_p in strict mode
+  require_seed: true  # Whether seed is required
+
+# ========================================
+# v5.0.0 Configuration Additions
+# ========================================
+
+# ITEM-GAP-002: ABI_LOCKED_PROTOCOL
+abi_locked:
+  enabled: true
+  clusters_path: .titan/abi_clusters.json
+  auto_detect: true
+  rollback_on_failure: true
+  # Known ABI-sensitive packages (extended at runtime)
+  abi_sensitive_packages:
+    - numpy
+    - pandas
+    - scipy
+    - numba
+    - tensorflow
+    - torch
+    - cupy
+    - arrow
+    - pyarrow
+    - h5py
+  # Cascade dependency mappings
+  cascade_dependencies:
+    numpy:
+      - pandas
+      - scipy
+      - numba
+      - matplotlib
+      - sklearn
+    torch:
+      - torchvision
+      - torchaudio
+      - transformers
+    tensorflow:
+      - tensorflow-hub
+      - tensorflow-datasets
+
+# ========================================
+# v5.0.0 Context Adaptation Configuration
+# ========================================
+
+# ITEM-CTX-001: ProfileRouter Enhancement
+context_adaptation:
+  enabled: true
+  auto_detect: true
+  default_profile: single_llm_executor
+  profiles:
+    ci_cd_pipeline:
+      retain: [validation, security, output]
+      modify:
+        gate_sensitivity:
+          deterministic:
+            fail_on_any_gap: true
+        mode:
+          current: ci_cd_pipeline
+          strict_mode: true
+          fail_fast: true
+      remove: [interactive, approval]
+    multi_agent_swarm:
+      retain: [multi_agent, coordination, decision]
+      modify:
+        gate_sensitivity:
+          multi_agent_swarm:
+            consensus_required: true
+        mode:
+          current: multi_agent_swarm
+      remove: []
+    human_in_the_loop:
+      retain: [interactive, approval, feedback]
+      modify:
+        mode:
+          current: guided_autonomy
+        interactive:
+          enabled: true
+      remove: []
+    resource_constrained:
+      retain: [validation, output]
+      modify:
+        chunking:
+          default_size: 500
+        validation_tiering:
+          sev3_large_file_rate: 0.3
+      remove: [observability, tracing]
+    real_time_streaming:
+      retain: [streaming, output]
+      modify:
+        streaming:
+          enabled: true
+          early_termination_on_gate_fail: true
+      remove: [interactive, approval]
+    non_code_domain:
+      retain: [validation, output]
+      modify:
+        scoring:
+          adaptive_weights:
+            default_profile: narrative
+      remove: [sandbox, dependency_resolution]
+    small_scripts_lt1k:
+      retain: [validation]
+      modify:
+        chunking:
+          default_size: 1500
+      remove: [multi_file, dependency_resolution]
+    repo_bootstrap:
+      retain: [navigation, discovery]
+      modify:
+        mode:
+          current: repo_bootstrap
+      remove: [execution]
+    single_llm_executor:
+      retain: [validation, output, checkpoint]
+      modify:
+        gate_sensitivity:
+          deterministic:
+            fail_on_any_gap: false
+      remove: [multi_agent]

@@ -21,13 +21,148 @@ from enum import Enum
 import logging
 import copy
 
+# [ITEM-GATE-001] Mode-aware gate behavior imports
+
 
 class ExecutionMode(Enum):
-    """Execution modes with different gate sensitivity."""
+    """
+    Execution modes with different gate sensitivity.
+    
+    [ITEM-GATE-001] Extended with CI/CD and multi-agent modes.
+    
+    Mode Hierarchy (strictness descending):
+    1. CI_CD_PIPELINE - Strictest, fail-fast, production CI/CD
+    2. DETERMINISTIC - Production/critical operations
+    3. MULTI_AGENT_SWARM - Consensus-based, strict
+    4. GUIDED_AUTONOMY - Moderate strictness, assisted operations
+    5. SINGLE_LLM_EXECUTOR - Balanced, retry-generous
+    6. DIRECT - Default mode, standard operations
+    7. FAST_PROTOTYPE - Most lenient, rapid iteration
+    """
+    # [ITEM-GATE-001] New modes for v5.0.0
+    CI_CD_PIPELINE = "ci_cd_pipeline"
+    SINGLE_LLM_EXECUTOR = "single_llm_executor"
+    MULTI_AGENT_SWARM = "multi_agent_swarm"
+    
+    # Existing modes
     DETERMINISTIC = "deterministic"
     GUIDED_AUTONOMY = "guided_autonomy"
     FAST_PROTOTYPE = "fast_prototype"
     DIRECT = "direct"  # Default mode
+
+
+@dataclass
+class ModeProfile:
+    """
+    [ITEM-GATE-001] Mode profile with sensitivity multiplier.
+    
+    Defines behavior characteristics for each execution mode.
+    
+    Attributes:
+        mode: The execution mode this profile describes
+        strict_mode: Whether to use strict validation
+        fail_fast: Whether to fail immediately on any violation
+        sensitivity_multiplier: Multiplier applied to gate thresholds (0.8 = stricter)
+        retry_generous: Whether to allow generous retries
+        consensus_required: Whether multi-agent consensus is required
+        max_retries: Maximum number of retries allowed
+        description: Human-readable description of the mode
+    """
+    mode: 'ExecutionMode'
+    strict_mode: bool
+    fail_fast: bool
+    sensitivity_multiplier: float
+    retry_generous: bool = False
+    consensus_required: bool = False
+    max_retries: int = 3
+    description: str = ""
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "mode": self.mode.value,
+            "strict_mode": self.strict_mode,
+            "fail_fast": self.fail_fast,
+            "sensitivity_multiplier": self.sensitivity_multiplier,
+            "retry_generous": self.retry_generous,
+            "consensus_required": self.consensus_required,
+            "max_retries": self.max_retries,
+            "description": self.description
+        }
+
+
+# [ITEM-GATE-001] Mode profiles as defined in protocol
+MODE_PROFILES: Dict[ExecutionMode, ModeProfile] = {
+    ExecutionMode.CI_CD_PIPELINE: ModeProfile(
+        mode=ExecutionMode.CI_CD_PIPELINE,
+        strict_mode=True,
+        fail_fast=True,
+        sensitivity_multiplier=0.8,
+        retry_generous=False,
+        consensus_required=False,
+        max_retries=1,
+        description="Production CI/CD - strictest settings, fail-fast on any violation"
+    ),
+    ExecutionMode.SINGLE_LLM_EXECUTOR: ModeProfile(
+        mode=ExecutionMode.SINGLE_LLM_EXECUTOR,
+        strict_mode=False,
+        fail_fast=False,
+        sensitivity_multiplier=1.0,
+        retry_generous=True,
+        consensus_required=False,
+        max_retries=5,
+        description="Single LLM - balanced settings, generous retries"
+    ),
+    ExecutionMode.MULTI_AGENT_SWARM: ModeProfile(
+        mode=ExecutionMode.MULTI_AGENT_SWARM,
+        strict_mode=True,
+        fail_fast=False,
+        sensitivity_multiplier=0.9,
+        retry_generous=False,
+        consensus_required=True,
+        max_retries=3,
+        description="Multi-agent - consensus-based, strict validation"
+    ),
+    ExecutionMode.DETERMINISTIC: ModeProfile(
+        mode=ExecutionMode.DETERMINISTIC,
+        strict_mode=True,
+        fail_fast=True,
+        sensitivity_multiplier=0.85,
+        retry_generous=False,
+        consensus_required=False,
+        max_retries=2,
+        description="Deterministic - production/critical operations, fail on any gap"
+    ),
+    ExecutionMode.GUIDED_AUTONOMY: ModeProfile(
+        mode=ExecutionMode.GUIDED_AUTONOMY,
+        strict_mode=False,
+        fail_fast=False,
+        sensitivity_multiplier=1.0,
+        retry_generous=True,
+        consensus_required=False,
+        max_retries=4,
+        description="Guided autonomy - moderate strictness, assisted operations"
+    ),
+    ExecutionMode.FAST_PROTOTYPE: ModeProfile(
+        mode=ExecutionMode.FAST_PROTOTYPE,
+        strict_mode=False,
+        fail_fast=False,
+        sensitivity_multiplier=1.2,
+        retry_generous=True,
+        consensus_required=False,
+        max_retries=10,
+        description="Fast prototype - most lenient, rapid iteration"
+    ),
+    ExecutionMode.DIRECT: ModeProfile(
+        mode=ExecutionMode.DIRECT,
+        strict_mode=False,
+        fail_fast=False,
+        sensitivity_multiplier=1.0,
+        retry_generous=False,
+        consensus_required=False,
+        max_retries=3,
+        description="Direct - default mode, standard operations"
+    ),
+}
 
 
 @dataclass
@@ -72,6 +207,41 @@ class GateSensitivityConfig:
 
 # Default sensitivity configurations per mode
 MODE_SENSITIVITY_DEFAULTS: Dict[str, GateSensitivityConfig] = {
+    # [ITEM-GATE-001] New modes for v5.0.0
+    "ci_cd_pipeline": GateSensitivityConfig(
+        fail_on_any_gap=True,
+        warn_threshold_pct=3.0,
+        max_sev1_gaps=0,
+        max_sev2_gaps=0,
+        max_sev3_gaps=0,
+        max_sev4_gaps=0,
+        allow_advisory_pass=False,
+        allow_unsafe=False,
+        confidence_override=False
+    ),
+    "single_llm_executor": GateSensitivityConfig(
+        fail_on_any_gap=False,
+        warn_threshold_pct=15.0,
+        max_sev1_gaps=0,
+        max_sev2_gaps=3,
+        max_sev3_gaps=8,
+        max_sev4_gaps=15,
+        allow_advisory_pass=True,
+        allow_unsafe=False,
+        confidence_override=True
+    ),
+    "multi_agent_swarm": GateSensitivityConfig(
+        fail_on_any_gap=False,
+        warn_threshold_pct=10.0,
+        max_sev1_gaps=0,
+        max_sev2_gaps=1,
+        max_sev3_gaps=5,
+        max_sev4_gaps=10,
+        allow_advisory_pass=True,
+        allow_unsafe=False,
+        confidence_override=False
+    ),
+    # Existing modes
     "deterministic": GateSensitivityConfig(
         fail_on_any_gap=True,
         warn_threshold_pct=5.0,
@@ -149,12 +319,29 @@ class ModifiedGateResult:
 class GateBehaviorModifier:
     """
     ITEM-GATE-02: Modifies gate behavior based on execution mode.
+    ITEM-GATE-001: Mode-aware gate behavior with sensitivity multiplier.
     
     This class applies mode-specific sensitivity settings to gate
     evaluation results, allowing different strictness levels for
     different use cases.
     
     Mode Behaviors:
+    
+    **ci_cd_pipeline** [ITEM-GATE-001]:
+    - Strictest mode for production CI/CD pipelines
+    - fail_fast=True, immediate failure on any violation
+    - sensitivity_multiplier=0.8 (stricter thresholds)
+    - Single retry only
+    
+    **single_llm_executor** [ITEM-GATE-001]:
+    - Balanced mode for single LLM execution
+    - retry_generous=True, multiple attempts allowed
+    - sensitivity_multiplier=1.0 (default thresholds)
+    
+    **multi_agent_swarm** [ITEM-GATE-001]:
+    - Consensus-based mode for multi-agent systems
+    - consensus_required=True
+    - sensitivity_multiplier=0.9
     
     **deterministic**:
     - Strictest mode for production/critical operations
@@ -177,27 +364,50 @@ class GateBehaviorModifier:
     - Confidence override enabled
     
     Usage:
-        modifier = GateBehaviorModifier(config)
+        # [ITEM-GATE-001] New mode-aware initialization
+        modifier = GateBehaviorModifier(mode=ExecutionMode.CI_CD_PIPELINE, config=config)
         
-        # Get sensitivity for a mode
-        sensitivity = modifier.get_sensitivity("deterministic")
+        # Get mode profile
+        profile = modifier.get_mode_profile()
         
-        # Apply mode rules to a result
-        modified = modifier.apply_mode_rules(result, "guided_autonomy", gaps)
+        # Apply sensitivity multiplier to thresholds
+        adjusted = modifier.apply_sensitivity(thresholds)
+        
+        # Check if should fail fast
+        if modifier.should_fail_fast("SEV-2"):
+            return GateResult.FAIL
     """
     
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, mode: ExecutionMode = None, config: Dict[str, Any] = None):
         """
         Initialize gate behavior modifier.
         
+        [ITEM-GATE-001] Enhanced with mode parameter.
+        
         Args:
+            mode: Execution mode (optional, for mode-aware behavior)
             config: Configuration dictionary with mode-specific settings
         """
         self.config = config or {}
         self._logger = logging.getLogger(__name__)
         
+        # [ITEM-GATE-001] Store execution mode
+        self._mode = mode or ExecutionMode.DIRECT
+        self._profile = self._load_mode_profile()
+        
         # Load sensitivity configurations
         self._sensitivity_configs = self._load_sensitivity_configs()
+    
+    def _load_mode_profile(self) -> ModeProfile:
+        """[ITEM-GATE-001] Load mode profile from MODE_PROFILES."""
+        if self._mode in MODE_PROFILES:
+            return MODE_PROFILES[self._mode]
+        
+        # Fallback to DIRECT profile
+        self._logger.warning(
+            f"[ITEM-GATE-001] No profile for mode '{self._mode}', using DIRECT"
+        )
+        return MODE_PROFILES[ExecutionMode.DIRECT]
     
     def _load_sensitivity_configs(self) -> Dict[str, GateSensitivityConfig]:
         """Load sensitivity configurations from config or defaults."""
@@ -250,21 +460,32 @@ class GateBehaviorModifier:
         # Normalize mode name
         mode_normalized = mode.lower().replace("-", "_").replace(" ", "_")
         
-        # Map common aliases
+        # [ITEM-GATE-001] Extended mode aliases for new modes
         mode_aliases = {
             "guided_autonomy": "guided_autonomy",
             "guided autonomy": "guided_autonomy",
             "fast_prototype": "fast_prototype",
             "fast prototype": "fast_prototype",
             "fast": "fast_prototype",
-            "proto": "fast_prototype"
+            "proto": "fast_prototype",
+            # [ITEM-GATE-001] New mode aliases
+            "ci_cd_pipeline": "ci_cd_pipeline",
+            "ci-cd": "ci_cd_pipeline",
+            "ci_cd": "ci_cd_pipeline",
+            "cicd": "ci_cd_pipeline",
+            "single_llm_executor": "single_llm_executor",
+            "single_llm": "single_llm_executor",
+            "single": "single_llm_executor",
+            "multi_agent_swarm": "multi_agent_swarm",
+            "multi_agent": "multi_agent_swarm",
+            "swarm": "multi_agent_swarm",
         }
         
         mode_key = mode_aliases.get(mode_normalized, mode_normalized)
         
         if mode_key not in self._sensitivity_configs:
             self._logger.warning(
-                f"Unknown mode '{mode}', using 'direct' as default"
+                f"[ITEM-GATE-001] Unknown mode '{mode}', using 'direct' as default"
             )
             mode_key = "direct"
         
@@ -520,6 +741,173 @@ class GateBehaviorModifier:
             )
         
         return errors
+    
+    # [ITEM-GATE-001] New mode-aware methods
+    
+    def get_mode_profile(self) -> ModeProfile:
+        """
+        Get the current mode profile.
+        
+        [ITEM-GATE-001] Returns the ModeProfile for the configured execution mode.
+        
+        Returns:
+            ModeProfile for the current mode
+        """
+        self._logger.debug(
+            f"[ITEM-GATE-001] Getting profile for mode '{self._mode.value}'"
+        )
+        return self._profile
+    
+    def apply_sensitivity(self, thresholds: Dict[str, float]) -> Dict[str, float]:
+        """
+        Apply sensitivity_multiplier to thresholds.
+        
+        [ITEM-GATE-001] Adjusts gate thresholds based on mode sensitivity.
+        Lower multiplier = stricter thresholds.
+        
+        Args:
+            thresholds: Dict of threshold names to values
+            
+        Returns:
+            Dict with adjusted threshold values
+            
+        Example:
+            >>> modifier = GateBehaviorModifier(ExecutionMode.CI_CD_PIPELINE)
+            >>> modifier.apply_sensitivity({"max_sev2": 10})
+            {"max_sev2": 8.0}  # 10 * 0.8 = 8.0
+        """
+        adjusted = {}
+        multiplier = self._profile.sensitivity_multiplier
+        
+        for key, value in thresholds.items():
+            if isinstance(value, (int, float)):
+                adjusted[key] = value * multiplier
+            else:
+                adjusted[key] = value
+        
+        self._logger.debug(
+            f"[ITEM-GATE-001] Applied sensitivity multiplier {multiplier} "
+            f"to {len(thresholds)} thresholds for mode '{self._mode.value}'"
+        )
+        
+        return adjusted
+    
+    def should_fail_fast(self, error_severity: str) -> bool:
+        """
+        Determine if error should cause immediate failure.
+        
+        [ITEM-GATE-001] Checks if the mode's fail_fast setting should
+        trigger immediate termination for the given error severity.
+        
+        Args:
+            error_severity: Severity of the error (SEV-1, SEV-2, SEV-3, SEV-4)
+            
+        Returns:
+            True if should fail immediately, False otherwise
+            
+        Rules:
+            - SEV-1 always causes fail_fast (regardless of mode)
+            - fail_fast=True modes fail on any severity
+            - fail_fast=False modes only fail on SEV-1
+        """
+        # SEV-1 always causes immediate failure
+        if error_severity == "SEV-1":
+            return True
+        
+        # Check mode's fail_fast setting
+        should_fail = self._profile.fail_fast
+        
+        if should_fail:
+            self._logger.info(
+                f"[ITEM-GATE-001] Mode '{self._mode.value}' failing fast on "
+                f"{error_severity} (fail_fast=True)"
+            )
+        else:
+            self._logger.debug(
+                f"[ITEM-GATE-001] Mode '{self._mode.value}' NOT failing fast on "
+                f"{error_severity} (fail_fast=False)"
+            )
+        
+        return should_fail
+    
+    def get_retry_count(self) -> int:
+        """
+        Get max retries based on mode.
+        
+        [ITEM-GATE-001] Returns the maximum number of retries allowed
+        for the current execution mode.
+        
+        Returns:
+            Maximum number of retries allowed
+            
+        Mode defaults:
+            - CI_CD_PIPELINE: 1 (minimal retries)
+            - SINGLE_LLM_EXECUTOR: 5 (generous retries)
+            - MULTI_AGENT_SWARM: 3 (standard)
+            - DETERMINISTIC: 2 (limited)
+            - GUIDED_AUTONOMY: 4 (moderate)
+            - FAST_PROTOTYPE: 10 (very generous)
+            - DIRECT: 3 (standard)
+        """
+        retries = self._profile.max_retries
+        
+        # Check if retry_generous is enabled - may add bonus retries
+        if self._profile.retry_generous:
+            retries = max(retries, 3)  # At least 3 retries when generous
+        
+        self._logger.debug(
+            f"[ITEM-GATE-001] Mode '{self._mode.value}' allows {retries} retries "
+            f"(retry_generous={self._profile.retry_generous})"
+        )
+        
+        return retries
+    
+    def requires_consensus(self) -> bool:
+        """
+        Check if consensus is required for this mode.
+        
+        [ITEM-GATE-001] Determines whether multi-agent consensus is
+        required before proceeding with gate decisions.
+        
+        Returns:
+            True if consensus is required, False otherwise
+            
+        Use cases:
+            - MULTI_AGENT_SWARM requires consensus
+            - Other modes do not require consensus
+        """
+        required = self._profile.consensus_required
+        
+        if required:
+            self._logger.info(
+                f"[ITEM-GATE-001] Mode '{self._mode.value}' requires consensus "
+                f"for gate decisions"
+            )
+        
+        return required
+    
+    def is_strict_mode(self) -> bool:
+        """
+        Check if strict mode is enabled.
+        
+        [ITEM-GATE-001] Returns whether the current mode uses strict
+        validation rules.
+        
+        Returns:
+            True if strict mode is enabled
+        """
+        return self._profile.strict_mode
+    
+    def get_current_mode(self) -> ExecutionMode:
+        """
+        Get the current execution mode.
+        
+        [ITEM-GATE-001] Returns the ExecutionMode enum value for this modifier.
+        
+        Returns:
+            Current ExecutionMode
+        """
+        return self._mode
 
 
 def get_gate_behavior_modifier(config: Dict[str, Any] = None) -> GateBehaviorModifier:

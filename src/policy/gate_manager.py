@@ -2,6 +2,7 @@
 Gate Manager for TITAN FUSE Protocol.
 
 ITEM-GATE-04: Split Pre/Post Exec Gates
+ITEM-GATE-002: GATE_PREPOST_SPLIT_VALIDATION
 
 Separates gate evaluation into two distinct phases:
 1. Pre-execution gates: Run before LLM operations
@@ -10,8 +11,12 @@ Separates gate evaluation into two distinct phases:
 This separation allows for early detection of policy violations
 before expensive LLM calls, and validates outputs after processing.
 
+GATE_04 Pre/Post Split Validation:
+- Pre: [validation_pass, idempotent_check]
+- Post: [orphan_scan, artifact_verify]
+
 Author: TITAN FUSE Team
-Version: 3.3.0
+Version: 5.0.0
 """
 
 from dataclasses import dataclass, field
@@ -20,8 +25,21 @@ from enum import Enum
 from datetime import datetime
 import logging
 import copy
+import hashlib
 
 from src.utils.timezone import now_utc, now_utc_iso
+# [ITEM-GATE-001] Import GateBehaviorModifier for mode-aware behavior
+from src.policy.gate_behavior import (
+    GateBehaviorModifier,
+    ExecutionMode,
+    ModeProfile,
+    MODE_PROFILES,
+)
+# [ITEM-MODEL-002] Import token attribution for per-gate tracking
+from src.observability.token_attribution import (
+    start_gate as attribution_start_gate,
+    end_gate as attribution_end_gate,
+)
 
 
 class GateType(Enum):
@@ -111,6 +129,72 @@ class GateManagerResult:
         }
 
 
+@dataclass
+class PreValidationResult:
+    """
+    [ITEM-GATE-002] Result of pre-execution validation phase.
+    
+    Captures the state before patches are applied for GATE_04.
+    
+    Attributes:
+        validation_pass: Whether all validators passed
+        idempotent_check: Whether state allows idempotent operations
+        state_checksum: Checksum of state for post-validation comparison
+        errors: List of error messages if validation failed
+    """
+    validation_pass: bool
+    idempotent_check: bool
+    state_checksum: str
+    errors: List[str] = field(default_factory=list)
+    
+    @property
+    def passed(self) -> bool:
+        """Check if all pre-validation checks passed."""
+        return self.validation_pass and self.idempotent_check
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "validation_pass": self.validation_pass,
+            "idempotent_check": self.idempotent_check,
+            "state_checksum": self.state_checksum,
+            "passed": self.passed,
+            "errors": self.errors
+        }
+
+
+@dataclass
+class PostValidationResult:
+    """
+    [ITEM-GATE-002] Result of post-execution validation phase.
+    
+    Validates the state after patches are applied for GATE_04.
+    
+    Attributes:
+        orphan_scan: Whether orphan reference scan passed
+        artifact_verify: Whether all required artifacts are verified
+        gaps_found: List of gaps discovered during validation
+        errors: List of error messages if validation failed
+    """
+    orphan_scan: bool
+    artifact_verify: bool
+    gaps_found: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
+    
+    @property
+    def passed(self) -> bool:
+        """Check if all post-validation checks passed."""
+        return self.orphan_scan and self.artifact_verify
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "orphan_scan": self.orphan_scan,
+            "artifact_verify": self.artifact_verify,
+            "gaps_found": self.gaps_found,
+            "passed": self.passed,
+            "errors": self.errors
+        }
+
+
 # Default gate definitions
 DEFAULT_PRE_EXEC_GATES = [
     GateCheck(
@@ -147,6 +231,14 @@ DEFAULT_PRE_EXEC_GATES = [
         description="Token budget available for operation",
         required=False,
         severity="SEV-3"
+    ),
+    # ITEM-PROT-001: Hyperparameter Enforcement Gate
+    GateCheck(
+        name="Hyperparameter Check",
+        check_type=GateType.PRE_EXEC,
+        description="LLM hyperparameters valid for deterministic mode",
+        required=True,
+        severity="SEV-1"
     )
 ]
 
@@ -192,6 +284,7 @@ DEFAULT_POST_EXEC_GATES = [
 class GateManager:
     """
     ITEM-GATE-04: Manages pre and post-execution gate evaluation.
+    ITEM-GATE-001: Mode-aware gate behavior with sensitivity multiplier.
     
     The GateManager provides a structured way to run validation gates
     before and after LLM operations:
@@ -210,10 +303,15 @@ class GateManager:
     - No Fabrication: Detect fabricated content
     - Gap Tracking: Ensure gaps are tracked
     
+    [ITEM-GATE-001] Mode Integration:
+    - GateBehaviorModifier is used for mode-aware behavior
+    - Sensitivity multiplier adjusts thresholds per mode
+    - fail_fast and retry settings are mode-dependent
+    
     Usage:
         manager = GateManager()
         
-        # Run pre-exec gates
+        # Run pre-exec gates with mode awareness
         pre_result = manager.run_pre_exec_gates(context)
         if pre_result.overall_result != GateResult.PASS:
             return pre_result
@@ -230,6 +328,8 @@ class GateManager:
         """
         Initialize gate manager.
         
+        [ITEM-GATE-001] Enhanced with mode-aware behavior.
+        
         Args:
             config: Configuration dictionary
         """
@@ -240,6 +340,15 @@ class GateManager:
         self._pre_exec_gates: Dict[str, GateCheck] = {}
         self._post_exec_gates: Dict[str, GateCheck] = {}
         self._check_functions: Dict[str, Callable] = {}
+        
+        # [ITEM-GATE-001] Initialize mode-aware behavior
+        self._mode_modifier: Optional[GateBehaviorModifier] = None
+        self._thresholds: Dict[str, float] = {
+            "max_sev1_gaps": 0,
+            "max_sev2_gaps": 2,
+            "max_sev3_gaps": 5,
+            "max_sev4_gaps": 10,
+        }
         
         # Load default gates
         self._load_default_gates()
@@ -322,6 +431,8 @@ class GateManager:
         ITEM-GATE-04: Pre-exec gates run after intent routing, before LLM call.
         This allows early detection of policy violations.
         
+        ITEM-GATE-001: Mode-aware gate behavior with sensitivity multiplier.
+        
         Args:
             context: Execution context with input data, policies, etc.
             
@@ -333,16 +444,68 @@ class GateManager:
         failed_gates: List[str] = []
         warnings: List[str] = []
         
+        # [ITEM-GATE-001] Get execution mode from context and initialize modifier
+        mode_str = context.get("execution_mode", "direct")
+        try:
+            mode = ExecutionMode(mode_str)
+        except ValueError:
+            self._logger.warning(
+                f"[ITEM-GATE-001] Unknown execution mode '{mode_str}', using DIRECT"
+            )
+            mode = ExecutionMode.DIRECT
+        
+        self._mode_modifier = GateBehaviorModifier(mode, self.config)
+        
+        # [ITEM-GATE-001] Apply sensitivity to thresholds
+        adjusted_thresholds = self._mode_modifier.apply_sensitivity(self._thresholds)
+        self._logger.info(
+            f"[ITEM-GATE-001] Running gates with mode '{mode.value}', "
+            f"sensitivity_multiplier={self._mode_modifier.get_mode_profile().sensitivity_multiplier}"
+        )
+        
         self._logger.info(
             f"Running {len(self._pre_exec_gates)} pre-exec gates"
         )
         
         for gate_name, gate in self._pre_exec_gates.items():
+            # [ITEM-MODEL-002] Start token attribution tracking for this gate
+            gate_id = f"PRE_{gate_name.replace(' ', '_')}"
+            attribution_start_gate(gate_id)
+            
             result = self._run_single_gate(gate, context)
             results.append(result)
             
+            # [ITEM-MODEL-002] End token attribution tracking
+            # Pre-exec gates typically don't use LLM tokens
+            attribution_end_gate(gate_id, tokens_used=0)
+            
+            self._logger.debug(
+                f"[ITEM-MODEL-002] Completed pre-exec gate '{gate_name}' "
+                f"with token attribution tracking"
+            )
+            
             if result.result == GateResult.FAIL:
                 failed_gates.append(gate_name)
+                
+                # [ITEM-GATE-001] Check if should fail fast
+                error_severity = gate.severity  # Use gate's configured severity
+                if self._mode_modifier.should_fail_fast(error_severity):
+                    self._logger.error(
+                        f"[ITEM-GATE-001] Mode '{mode.value}' failing fast on "
+                        f"gate '{gate_name}' with severity {error_severity}"
+                    )
+                    # Return immediately on fail-fast
+                    end_time = now_utc()
+                    return GateManagerResult(
+                        overall_result=GateResult.FAIL,
+                        pre_exec_results=results,
+                        failed_gates=failed_gates,
+                        warnings=[
+                            f"[ITEM-GATE-001] Fail-fast triggered by gate '{gate_name}'"
+                        ],
+                        execution_time_ms=(end_time - start_time).total_seconds() * 1000
+                    )
+                
                 if gate.required:
                     self._logger.error(
                         f"[gate_manager] Pre-exec gate '{gate_name}' FAILED: "
@@ -407,8 +570,21 @@ class GateManager:
         )
         
         for gate_name, gate in self._post_exec_gates.items():
+            # [ITEM-MODEL-002] Start token attribution tracking for this gate
+            gate_id = f"POST_{gate_name.replace(' ', '_')}"
+            attribution_start_gate(gate_id)
+            
             result = self._run_single_gate(gate, check_context)
             results.append(result)
+            
+            # [ITEM-MODEL-002] End token attribution tracking
+            # Post-exec gates typically don't use LLM tokens
+            attribution_end_gate(gate_id, tokens_used=0)
+            
+            self._logger.debug(
+                f"[ITEM-MODEL-002] Completed post-exec gate '{gate_name}' "
+                f"with token attribution tracking"
+            )
             
             if result.result == GateResult.FAIL:
                 failed_gates.append(gate_name)
@@ -519,6 +695,8 @@ class GateManager:
             return self._check_no_fabrication(context)
         elif gate.name == "Gap Tracking":
             return self._check_gap_tracking(context)
+        elif gate.name == "Hyperparameter Check":
+            return self._check_hyperparameters(context)
         else:
             # Unknown gate - skip with warning
             return GateCheckResult(
@@ -819,6 +997,510 @@ class GateManager:
             check_type=GateType.POST_EXEC,
             result=GateResult.PASS,
             message=f"{len(gaps)} gaps properly tracked"
+        )
+    
+    def _check_hyperparameters(self, context: Dict[str, Any]) -> GateCheckResult:
+        """
+        ITEM-PROT-001: Check LLM hyperparameters for deterministic mode.
+        
+        Validates that LLM call parameters meet deterministic requirements:
+        - temperature must be 0.0 in strict mode
+        - top_p must be ≤ 0.1 in strict mode
+        - seed must be a valid integer
+        
+        Args:
+            context: Execution context containing 'llm_params' and 'determinism_mode'
+        
+        Returns:
+            GateCheckResult with validation outcome
+        """
+        # Import here to avoid circular imports
+        from src.validation.guardian import (
+            HyperparameterValidator,
+            HyperparameterConfig,
+            EnforcementMode,
+            ViolationAction,
+        )
+        
+        # Get LLM parameters from context
+        llm_params = context.get("llm_params", {})
+        determinism_mode = context.get("determinism_mode", "strict")
+        hyperparam_config = context.get("hyperparameters", {})
+        
+        # Skip check if no LLM parameters provided
+        if not llm_params:
+            return GateCheckResult(
+                gate_name="Hyperparameter Check",
+                check_type=GateType.PRE_EXEC,
+                result=GateResult.PASS,
+                message="No LLM parameters to validate"
+            )
+        
+        # Determine enforcement mode from context
+        enforcement = EnforcementMode.STRICT if determinism_mode == "strict" else EnforcementMode.RELAXED
+        
+        # Get on_violation action from config
+        on_violation_str = hyperparam_config.get("on_violation", "reject")
+        try:
+            on_violation = ViolationAction(on_violation_str)
+        except ValueError:
+            on_violation = ViolationAction.REJECT
+        
+        # Create validator config
+        config = HyperparameterConfig(
+            enforcement=enforcement,
+            on_violation=on_violation,
+            allowed_temperature=hyperparam_config.get("allowed_temperature", 0.0),
+            max_top_p=hyperparam_config.get("max_top_p", 0.1),
+            require_seed=hyperparam_config.get("require_seed", True),
+        )
+        
+        # Create validator and validate
+        validator = HyperparameterValidator(config)
+        result = validator.validate_deterministic(llm_params)
+        
+        if result.valid:
+            message = "Hyperparameters valid for deterministic mode"
+            if result.was_auto_fixed:
+                message = f"Hyperparameters auto-fixed: {[v.param_name for v in result.violations]}"
+            
+            gate_result = GateResult.PASS
+            
+            # Store fixed params in context if auto-fixed
+            if result.was_auto_fixed:
+                context["llm_params"] = result.fixed_params
+                self._logger.info(
+                    f"[ITEM-PROT-001] Gate auto-fixed hyperparameters: "
+                    f"{result.fixed_params}"
+                )
+        else:
+            message = f"Hyperparameter validation failed: {[v.message for v in result.violations]}"
+            gate_result = GateResult.FAIL
+            self._logger.error(
+                f"[ITEM-PROT-001] Gate rejected hyperparameters: "
+                f"{[v.message for v in result.violations]}"
+            )
+        
+        return GateCheckResult(
+            gate_name="Hyperparameter Check",
+            check_type=GateType.PRE_EXEC,
+            result=gate_result,
+            message=message,
+            details={
+                "violations": [v.to_dict() for v in result.violations],
+                "was_auto_fixed": result.was_auto_fixed,
+                "determinism_mode": determinism_mode,
+            }
+        )
+    
+    # =========================================================================
+    # [ITEM-GATE-002] GATE_04 Pre/Post Split Validation
+    # =========================================================================
+    
+    def _pre_gate_04_validation(self, context: Dict[str, Any]) -> PreValidationResult:
+        """
+        [ITEM-GATE-002] Pre-execution validation for GATE_04.
+        
+        Runs BEFORE patches are applied to ensure:
+        - All validators pass
+        - State allows idempotent operations
+        - State is captured for post-validation comparison
+        
+        Args:
+            context: Execution context containing validation requirements
+            
+        Returns:
+            PreValidationResult with validation status and state checksum
+        """
+        self._logger.info("[ITEM-GATE-002] Running GATE_04 pre-validation")
+        errors: List[str] = []
+        
+        # 1. Run all validators
+        validation_pass = self._run_all_validators(context)
+        if not validation_pass:
+            errors.append("One or more validators failed")
+            self._logger.warning("[ITEM-GATE-002] Validation pass check failed")
+        
+        # 2. Check idempotent state
+        idempotent_check = self._check_idempotent_state(context)
+        if not idempotent_check:
+            errors.append("Idempotent state check failed")
+            self._logger.warning("[ITEM-GATE-002] Idempotent state check failed")
+        
+        # 3. Capture state checksum for post-validation
+        state_checksum = self._capture_state_checksum(context)
+        self._logger.info(
+            f"[ITEM-GATE-002] Pre-validation complete - "
+            f"validation_pass={validation_pass}, idempotent_check={idempotent_check}, "
+            f"checksum={state_checksum}"
+        )
+        
+        return PreValidationResult(
+            validation_pass=validation_pass,
+            idempotent_check=idempotent_check,
+            state_checksum=state_checksum,
+            errors=errors
+        )
+    
+    def _post_gate_04_validation(self, context: Dict[str, Any]) -> PostValidationResult:
+        """
+        [ITEM-GATE-002] Post-execution validation for GATE_04.
+        
+        Runs AFTER patches are applied to ensure:
+        - No orphan references remain
+        - All required artifacts are verified
+        - Gaps are properly collected
+        
+        Args:
+            context: Execution context containing output and gaps
+            
+        Returns:
+            PostValidationResult with validation status and gaps found
+        """
+        self._logger.info("[ITEM-GATE-002] Running GATE_04 post-validation")
+        errors: List[str] = []
+        
+        # 1. Scan for orphan references
+        orphan_scan = self._scan_orphan_references(context)
+        if not orphan_scan:
+            errors.append("Orphan references detected")
+            self._logger.warning("[ITEM-GATE-002] Orphan scan failed")
+        
+        # 2. Verify artifacts
+        artifact_verify = self._verify_artifacts(context)
+        if not artifact_verify:
+            errors.append("Artifact verification failed")
+            self._logger.warning("[ITEM-GATE-002] Artifact verification failed")
+        
+        # 3. Collect gaps found
+        gaps_found = context.get("gaps", [])
+        gaps_str = []
+        for g in gaps_found:
+            if hasattr(g, 'to_string'):
+                gaps_str.append(g.to_string())
+            elif hasattr(g, 'to_dict'):
+                gaps_str.append(str(g.to_dict()))
+            else:
+                gaps_str.append(str(g))
+        
+        self._logger.info(
+            f"[ITEM-GATE-002] Post-validation complete - "
+            f"orphan_scan={orphan_scan}, artifact_verify={artifact_verify}, "
+            f"gaps_found={len(gaps_str)}"
+        )
+        
+        return PostValidationResult(
+            orphan_scan=orphan_scan,
+            artifact_verify=artifact_verify,
+            gaps_found=gaps_str,
+            errors=errors
+        )
+    
+    def _run_all_validators(self, context: Dict[str, Any]) -> bool:
+        """
+        [ITEM-GATE-002] Run all registered validators.
+        
+        Executes all pre-execution gates and returns True if all required
+        gates pass.
+        
+        Args:
+            context: Execution context
+            
+        Returns:
+            True if all validators pass, False otherwise
+        """
+        # Run pre-exec gates and check results
+        pre_result = self.run_pre_exec_gates(context)
+        
+        # Check if any required gates failed
+        for gate_name in pre_result.failed_gates:
+            gate = self._pre_exec_gates.get(gate_name)
+            if gate and gate.required:
+                self._logger.error(
+                    f"[ITEM-GATE-002] Required validator '{gate_name}' failed"
+                )
+                return False
+        
+        return pre_result.overall_result in (GateResult.PASS, GateResult.ADVISORY_PASS)
+    
+    def _check_idempotent_state(self, context: Dict[str, Any]) -> bool:
+        """
+        [ITEM-GATE-002] Verify state allows idempotent operations.
+        
+        Checks if the patch can be re-applied with the same result:
+        - No pending state changes
+        - No duplicate operations in progress
+        - State version matches expected
+        
+        Args:
+            context: Execution context with idempotency info
+            
+        Returns:
+            True if idempotent operation is allowed
+        """
+        # Check for idempotency key
+        idempotency_key = context.get("idempotency_key")
+        if not idempotency_key:
+            # No idempotency key means we assume idempotent
+            return True
+        
+        # Check for duplicate operation tracking
+        seen_keys = context.get("seen_idempotency_keys", set())
+        if idempotency_key in seen_keys:
+            self._logger.warning(
+                f"[ITEM-GATE-002] Duplicate idempotency key detected: {idempotency_key}"
+            )
+            return False
+        
+        # Check state version if provided
+        expected_version = context.get("expected_state_version")
+        current_version = context.get("current_state_version")
+        if expected_version is not None and current_version != expected_version:
+            self._logger.warning(
+                f"[ITEM-GATE-002] State version mismatch: "
+                f"expected={expected_version}, current={current_version}"
+            )
+            return False
+        
+        # Check for pending operations
+        pending_ops = context.get("pending_operations", [])
+        if pending_ops:
+            self._logger.warning(
+                f"[ITEM-GATE-002] Pending operations exist: {len(pending_ops)}"
+            )
+            # Not blocking, just warning
+        
+        return True
+    
+    def _capture_state_checksum(self, context: Dict[str, Any]) -> str:
+        """
+        [ITEM-GATE-002] Capture checksum of current state for comparison.
+        
+        Creates a hash of the relevant state fields for post-validation
+        comparison to detect unexpected changes.
+        
+        Args:
+            context: Execution context
+            
+        Returns:
+            SHA256 checksum (truncated to 16 chars) of state
+        """
+        # Extract state-relevant fields for checksum
+        state_fields = {
+            "input": context.get("input", {}),
+            "policies": sorted(context.get("policies", {}).keys()),
+            "session_id": context.get("session_id", ""),
+            "chunk_ids": sorted(context.get("chunks", {}).keys()) if context.get("chunks") else [],
+        }
+        
+        # Create deterministic string representation
+        state_str = str(sorted(state_fields.items()))
+        
+        # Generate checksum
+        checksum = hashlib.sha256(state_str.encode()).hexdigest()[:16]
+        
+        self._logger.debug(
+            f"[ITEM-GATE-002] Captured state checksum: {checksum}"
+        )
+        
+        return checksum
+    
+    def _scan_orphan_references(self, context: Dict[str, Any]) -> bool:
+        """
+        [ITEM-GATE-002] Scan for orphan file references after changes.
+        
+        Checks that all referenced files in the output exist and are
+        accessible. Detects broken references from patch operations.
+        
+        Args:
+            context: Execution context with output containing references
+            
+        Returns:
+            True if no orphans found, False otherwise
+        """
+        output = context.get("output", {})
+        file_references = context.get("file_references", [])
+        
+        # Get referenced files from output
+        referenced_files = set()
+        
+        # Check various output structures for file references
+        if isinstance(output, dict):
+            # Check for explicit file references
+            if "files_modified" in output:
+                referenced_files.update(output["files_modified"])
+            if "files_created" in output:
+                referenced_files.update(output["files_created"])
+            if "references" in output:
+                referenced_files.update(output["references"])
+            
+            # Check patches for file references
+            for patch in output.get("patches", []):
+                if "file_path" in patch:
+                    referenced_files.add(patch["file_path"])
+        
+        # Add any provided file references
+        referenced_files.update(file_references)
+        
+        # If no references, pass
+        if not referenced_files:
+            return True
+        
+        # Check if all referenced files exist (simulated check)
+        # In production, this would verify actual file existence
+        existing_files = set(context.get("existing_files", []))
+        
+        # If existing_files not provided, assume all exist
+        if not existing_files:
+            self._logger.debug(
+                "[ITEM-GATE-002] No existing_files in context, assuming all refs valid"
+            )
+            return True
+        
+        orphans = referenced_files - existing_files
+        if orphans:
+            self._logger.warning(
+                f"[ITEM-GATE-002] Orphan references found: {orphans}"
+            )
+            return False
+        
+        return True
+    
+    def _verify_artifacts(self, context: Dict[str, Any]) -> bool:
+        """
+        [ITEM-GATE-002] Verify all required artifacts are present.
+        
+        Checks that all artifacts required by the operation are present
+        in the output or context.
+        
+        Args:
+            context: Execution context with artifacts and requirements
+            
+        Returns:
+            True if all required artifacts present, False otherwise
+        """
+        required_artifacts = context.get("required_artifacts", [])
+        
+        # If no requirements, pass
+        if not required_artifacts:
+            return True
+        
+        artifacts = context.get("artifacts", {})
+        output = context.get("output", {})
+        
+        # Check for artifacts in both artifacts dict and output
+        available_artifacts = set(artifacts.keys())
+        
+        # Also check output for artifacts
+        if isinstance(output, dict):
+            if "artifacts" in output:
+                available_artifacts.update(output["artifacts"].keys())
+            if "generated_artifacts" in output:
+                available_artifacts.update(output["generated_artifacts"])
+        
+        # Check each required artifact
+        missing = []
+        for artifact in required_artifacts:
+            if artifact not in available_artifacts:
+                missing.append(artifact)
+        
+        if missing:
+            self._logger.warning(
+                f"[ITEM-GATE-002] Missing required artifacts: {missing}"
+            )
+            return False
+        
+        return True
+    
+    def run_gate_04_with_prepost(
+        self, 
+        context: Dict[str, Any], 
+        execute_patches: Callable[[Dict[str, Any]], Dict[str, Any]]
+    ) -> GateManagerResult:
+        """
+        [ITEM-GATE-002] Execute GATE_04 with pre/post validation phases.
+        
+        This method implements the full GATE_04 pre/post split validation:
+        1. Pre-validation: Run validators, check idempotency, capture state
+        2. Execution: Run the provided patch execution function
+        3. Post-validation: Scan for orphans, verify artifacts, collect gaps
+        
+        Args:
+            context: Execution context with all required data
+            execute_patches: Callable that executes patches and returns output
+            
+        Returns:
+            GateManagerResult with overall status and any warnings/gaps
+        """
+        start_time = now_utc()
+        self._logger.info("[ITEM-GATE-002] Starting GATE_04 with pre/post validation")
+        
+        # Store pre-validation checksum in context
+        pre_checksum_store = {}
+        context["_pre_checksum_store"] = pre_checksum_store
+        
+        # ========== PRE-VALIDATION PHASE ==========
+        pre_result = self._pre_gate_04_validation(context)
+        
+        if not pre_result.passed:
+            end_time = now_utc()
+            self._logger.error(
+                f"[ITEM-GATE-002] Pre-validation failed: {pre_result.errors}"
+            )
+            return GateManagerResult(
+                overall_result=GateResult.FAIL,
+                failed_gates=["GATE_04_PRE"],
+                warnings=[f"Pre-validation failed: {pre_result.errors}"],
+                execution_time_ms=(end_time - start_time).total_seconds() * 1000
+            )
+        
+        # Store checksum for post-validation
+        pre_checksum_store["checksum"] = pre_result.state_checksum
+        
+        # ========== EXECUTION PHASE ==========
+        self._logger.info("[ITEM-GATE-002] Executing patches")
+        
+        try:
+            output = execute_patches(context)
+            context["output"] = output
+            self._logger.info("[ITEM-GATE-002] Patch execution completed successfully")
+        except Exception as e:
+            end_time = now_utc()
+            self._logger.error(
+                f"[ITEM-GATE-002] Patch execution failed: {e}"
+            )
+            return GateManagerResult(
+                overall_result=GateResult.FAIL,
+                failed_gates=["GATE_04_EXECUTION"],
+                warnings=[f"Execution failed: {e}"],
+                execution_time_ms=(end_time - start_time).total_seconds() * 1000
+            )
+        
+        # ========== POST-VALIDATION PHASE ==========
+        post_result = self._post_gate_04_validation(context)
+        
+        end_time = now_utc()
+        
+        if not post_result.passed:
+            self._logger.error(
+                f"[ITEM-GATE-002] Post-validation failed: {post_result.errors}"
+            )
+            return GateManagerResult(
+                overall_result=GateResult.FAIL,
+                failed_gates=["GATE_04_POST"],
+                warnings=[f"Post-validation failed: {post_result.errors}"] + post_result.gaps_found,
+                execution_time_ms=(end_time - start_time).total_seconds() * 1000
+            )
+        
+        # ========== SUCCESS ==========
+        self._logger.info(
+            f"[ITEM-GATE-002] GATE_04 validation completed successfully"
+        )
+        
+        return GateManagerResult(
+            overall_result=GateResult.PASS,
+            warnings=post_result.gaps_found,
+            execution_time_ms=(end_time - start_time).total_seconds() * 1000
         )
     
     def list_gates(self) -> Dict[str, List[Dict[str, Any]]]:

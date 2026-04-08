@@ -7,10 +7,11 @@ ITEM-CAT-02: Four specialized agents with explicit roles:
 - EVAL: Readiness assessment with veto power
 - STRAT: Strategy synthesis respecting EVAL constraints
 
+ITEM-AGENT-001: ScoutMatrix integration with RoleWeightedConsensus.
 Enforces mandatory DEVIL→EVAL→STRAT pipeline with veto propagation.
 
 Author: TITAN FUSE Team
-Version: 3.2.3
+Version: 5.0.0
 """
 
 import logging
@@ -77,9 +78,191 @@ class PipelineContext(Enum):
     VALIDATE = "validate"      # Validation mode (requires DEVIL)
 
 
+class ScoutFindingType(Enum):
+    """
+    ITEM-AGENT-001: Types of findings from scout agents.
+    
+    Categories of findings that scouts can report:
+    - SIGNAL: Positive signal detected by RADAR
+    - RISK: Risk factor identified by DEVIL
+    - HYPE: Hype indicator detected by DEVIL
+    - VULNERABILITY: Security vulnerability found
+    - BLOCKER: Blocking issue that prevents progress
+    - RECOMMENDATION: Actionable recommendation
+    - VETO: Veto trigger from EVAL
+    - CAVEAT: Caveat from STRAT
+    """
+    SIGNAL = "signal"
+    RISK = "risk"
+    HYPE = "hype"
+    VULNERABILITY = "vulnerability"
+    BLOCKER = "blocker"
+    RECOMMENDATION = "recommendation"
+    VETO = "veto"
+    CAVEAT = "caveat"
+
+
 # =============================================================================
 # Dataclasses
 # =============================================================================
+
+@dataclass
+class ScoutFinding:
+    """
+    ITEM-AGENT-001: A finding from a scout agent.
+    
+    Represents a single observation, risk, or recommendation
+    from any scout agent during analysis.
+    
+    Attributes:
+        finding_id: Unique identifier for this finding
+        role: The scout role that produced this finding
+        finding_type: Category of the finding
+        severity: Severity level (SEV-1 to SEV-4)
+        title: Brief title of the finding
+        description: Detailed description
+        confidence: Confidence level (0.0 - 1.0)
+        impact: Impact level ("critical", "high", "medium", "low")
+        recommendation: Recommended action
+        metadata: Additional context data
+    """
+    finding_id: str
+    role: AgentRole
+    finding_type: ScoutFindingType
+    severity: str  # SEV-1 to SEV-4
+    title: str
+    description: str
+    confidence: float
+    impact: str  # "critical", "high", "medium", "low"
+    recommendation: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def __post_init__(self) -> None:
+        """Validate finding attributes."""
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError(f"Confidence must be in [0.0, 1.0], got {self.confidence}")
+        valid_severities = {"SEV-1", "SEV-2", "SEV-3", "SEV-4"}
+        if self.severity not in valid_severities:
+            raise ValueError(f"Severity must be one of {valid_severities}, got {self.severity}")
+        valid_impacts = {"critical", "high", "medium", "low"}
+        if self.impact not in valid_impacts:
+            raise ValueError(f"Impact must be one of {valid_impacts}, got {self.impact}")
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "finding_id": self.finding_id,
+            "role": self.role.value,
+            "finding_type": self.finding_type.value,
+            "severity": self.severity,
+            "title": self.title,
+            "description": self.description,
+            "confidence": self.confidence,
+            "impact": self.impact,
+            "recommendation": self.recommendation,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class AggregatedFindings:
+    """
+    ITEM-AGENT-001: Aggregated findings from all scouts.
+    
+    Collects and summarizes findings from all scout agents
+    for submission to the consensus engine.
+    
+    Attributes:
+        radar_findings: Findings from RADAR agent
+        devil_findings: Findings from DEVIL agent
+        eval_findings: Findings from EVAL agent
+        strat_findings: Findings from STRAT agent
+        veto_active: Whether a veto is currently active
+        veto_reason: Reason for veto if active
+        consensus_score: Calculated consensus score (0.0 - 1.0)
+        overall_readiness: Overall readiness assessment
+    """
+    radar_findings: List[ScoutFinding] = field(default_factory=list)
+    devil_findings: List[ScoutFinding] = field(default_factory=list)
+    eval_findings: List[ScoutFinding] = field(default_factory=list)
+    strat_findings: List[ScoutFinding] = field(default_factory=list)
+    veto_active: bool = False
+    veto_reason: Optional[str] = None
+    consensus_score: float = 0.0
+    overall_readiness: str = "EXPERIMENTAL"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "radar_findings": [f.to_dict() for f in self.radar_findings],
+            "devil_findings": [f.to_dict() for f in self.devil_findings],
+            "eval_findings": [f.to_dict() for f in self.eval_findings],
+            "strat_findings": [f.to_dict() for f in self.strat_findings],
+            "veto_active": self.veto_active,
+            "veto_reason": self.veto_reason,
+            "consensus_score": self.consensus_score,
+            "overall_readiness": self.overall_readiness,
+        }
+    
+    @property
+    def total_findings(self) -> int:
+        """Total number of findings across all scouts."""
+        return (
+            len(self.radar_findings) +
+            len(self.devil_findings) +
+            len(self.eval_findings) +
+            len(self.strat_findings)
+        )
+    
+    @property
+    def critical_findings(self) -> List[ScoutFinding]:
+        """Get all critical severity findings."""
+        all_findings = (
+            self.radar_findings +
+            self.devil_findings +
+            self.eval_findings +
+            self.strat_findings
+        )
+        return [f for f in all_findings if f.severity == "SEV-1" or f.impact == "critical"]
+
+
+@dataclass
+class ConsensusResult:
+    """
+    ITEM-AGENT-001: Result from consensus calculation.
+    
+    Contains the outcome of submitting scout findings
+    to the RoleWeightedConsensus engine.
+    
+    Attributes:
+        approved: Whether the consensus approves the action
+        score: Final consensus score (0.0 - 1.0)
+        confidence: Confidence level in the result
+        veto_triggered: Whether a veto was triggered
+        veto_source: Source of veto if triggered
+        weighted_scores: Per-role weighted scores
+        rationale: Explanation of the decision
+    """
+    approved: bool
+    score: float
+    confidence: float
+    veto_triggered: bool = False
+    veto_source: Optional[str] = None
+    weighted_scores: Dict[str, float] = field(default_factory=dict)
+    rationale: str = ""
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "approved": self.approved,
+            "score": self.score,
+            "confidence": self.confidence,
+            "veto_triggered": self.veto_triggered,
+            "veto_source": self.veto_source,
+            "weighted_scores": self.weighted_scores,
+            "rationale": self.rationale,
+        }
+
 
 @dataclass
 class AnalysisContext:
@@ -1390,6 +1573,655 @@ class ScoutPipeline:
             agent_outputs=agent_outputs,
             confidence=context.confidence,
         )
+
+
+# =============================================================================
+# ScoutMatrix - ITEM-AGENT-001
+# =============================================================================
+
+class ScoutMatrix:
+    """
+    ITEM-AGENT-001: Scout Matrix for multi-agent analysis.
+    
+    Collects findings from RADAR, DEVIL, EVAL, STRAT scouts and
+    integrates with RoleWeightedConsensus for decision making.
+    
+    The ScoutMatrix provides:
+    - Role-weighted consensus calculation
+    - Veto rule enforcement
+    - Finding aggregation across scouts
+    - Integration with ConflictResolver
+    
+    ROLE_WEIGHTED_CONSENSUS Weights:
+    - EVAL (Security): 35% - highest weight, veto power
+    - DEVIL (Risk): 30% - risk identification
+    - STRAT (Strategy): 20% - strategy synthesis
+    - RADAR (Signal): 15% - signal detection
+    
+    Veto Rules:
+    - SEC_VETO: CRITICAL finding or SEV-1 overrides majority
+    - DVL_VETO: HYPE/ABANDONED/VULNERABILITY blocks adoption
+    - S5_VETO: Security+Strategy >= 55% overrides convenience
+    
+    Example:
+        >>> matrix = ScoutMatrix()
+        >>> findings = matrix.aggregate_findings(all_scout_findings)
+        >>> result = matrix.submit_to_consensus(findings)
+        >>> if result.approved:
+        ...     print(f"Approved with score {result.score}")
+    """
+    
+    # Role weights for consensus - aligns with ROLE_WEIGHTED_CONSENSUS
+    # SECURITY (EVAL): 35%, RELIABILITY (DEVIL): 25%, UTILITY (STRAT): 25%, CONVENIENCE (RADAR): 15%
+    # Adjusted for scout roles: EVAL=35%, DEVIL=30% (reliability+risk), STRAT=20%, RADAR=15%
+    ROLE_WEIGHTS: Dict[AgentRole, float] = {
+        AgentRole.EVAL: 0.35,    # Security/Evaluation - highest weight, veto power
+        AgentRole.DEVIL: 0.30,   # Risk identification - reliability
+        AgentRole.STRAT: 0.20,   # Strategy synthesis - utility
+        AgentRole.RADAR: 0.15,   # Signal detection - convenience
+    }
+    
+    # Veto rules from protocol
+    VETO_RULES: Dict[str, Any] = {
+        # SEC_VETO: CRITICAL finding or SEV-1 overrides majority
+        "security_veto": ["CRITICAL", "SEV-1", "critical"],
+        # DVL_VETO: HYPE/ABANDONED/VULNERABILITY blocks adoption
+        "devil_veto": ["HYPE", "ABANDONED", "VULNERABILITY", "hype", "vulnerability"],
+        # S5_VETO: SEC+STR >= 55% overrides convenience
+        "security_strategy_veto_threshold": 0.55,
+    }
+    
+    # Consensus thresholds
+    CONSENSUS_THRESHOLDS: Dict[str, float] = {
+        "high_confidence": 0.80,    # High confidence approval
+        "medium_confidence": 0.60,  # Medium confidence approval
+        "low_confidence": 0.40,     # Low confidence, needs escalation
+    }
+    
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize the ScoutMatrix.
+        
+        Args:
+            config: Optional configuration dictionary with:
+                - custom_weights: Override default role weights
+                - custom_veto_rules: Override default veto rules
+                - strict_mode: Raise errors on validation failures
+        """
+        self.config = config or {}
+        self._strict_mode = self.config.get("strict_mode", True)
+        
+        # Allow custom weights if provided
+        if "custom_weights" in self.config:
+            self._validate_weights(self.config["custom_weights"])
+            self._role_weights = self.config["custom_weights"]
+        else:
+            self._role_weights = self.ROLE_WEIGHTS.copy()
+        
+        # Allow custom veto rules if provided
+        self._veto_rules = self.config.get("custom_veto_rules", self.VETO_RULES.copy())
+        
+        # Internal state
+        self._findings_cache: Dict[str, ScoutFinding] = {}
+        
+        logger.info(
+            f"[ITEM-AGENT-001] ScoutMatrix initialized with weights: "
+            f"EVAL={self._role_weights[AgentRole.EVAL]:.0%}, "
+            f"DEVIL={self._role_weights[AgentRole.DEVIL]:.0%}, "
+            f"STRAT={self._role_weights[AgentRole.STRAT]:.0%}, "
+            f"RADAR={self._role_weights[AgentRole.RADAR]:.0%}"
+        )
+    
+    def _validate_weights(self, weights: Dict[AgentRole, float]) -> None:
+        """Validate that weights sum to 1.0 and cover all roles."""
+        required_roles = {AgentRole.EVAL, AgentRole.DEVIL, AgentRole.STRAT, AgentRole.RADAR}
+        provided_roles = set(weights.keys())
+        
+        if not required_roles.issubset(provided_roles):
+            missing = required_roles - provided_roles
+            raise ValueError(f"Missing role weights for: {missing}")
+        
+        total = sum(weights.values())
+        if not 0.99 <= total <= 1.01:
+            raise ValueError(f"Weights must sum to 1.0, got {total:.4f}")
+    
+    def collect_findings(
+        self,
+        scout_type: AgentRole,
+        agent_result: AgentResult
+    ) -> List[ScoutFinding]:
+        """
+        Convert agent result to scout findings.
+        
+        Extracts findings from an AgentResult and converts them
+        to ScoutFinding objects for consensus processing.
+        
+        Args:
+            scout_type: The role of the scout agent
+            agent_result: Result from agent execution
+            
+        Returns:
+            List of ScoutFinding objects extracted from the result
+        """
+        findings: List[ScoutFinding] = []
+        
+        if not agent_result.success:
+            # Create a failure finding
+            findings.append(ScoutFinding(
+                finding_id=f"{scout_type.value}_failure_{id(agent_result)}",
+                role=scout_type,
+                finding_type=ScoutFindingType.BLOCKER,
+                severity="SEV-2",
+                title=f"{scout_type.value.upper()} Agent Failed",
+                description=agent_result.error or "Agent execution failed",
+                confidence=0.0,
+                impact="high",
+                recommendation="Review agent execution and retry",
+                metadata={"success": False}
+            ))
+            return findings
+        
+        # Extract findings based on scout type
+        output = agent_result.output or {}
+        
+        if scout_type == AgentRole.RADAR:
+            findings.extend(self._extract_radar_findings(output))
+        elif scout_type == AgentRole.DEVIL:
+            findings.extend(self._extract_devil_findings(output))
+        elif scout_type == AgentRole.EVAL:
+            findings.extend(self._extract_eval_findings(output))
+        elif scout_type == AgentRole.STRAT:
+            findings.extend(self._extract_strat_findings(output))
+        
+        # Cache findings
+        for finding in findings:
+            self._findings_cache[finding.finding_id] = finding
+        
+        logger.debug(
+            f"[ITEM-AGENT-001] Collected {len(findings)} findings from {scout_type.value}"
+        )
+        
+        return findings
+    
+    def _extract_radar_findings(self, output: Dict[str, Any]) -> List[ScoutFinding]:
+        """Extract findings from RADAR agent output."""
+        findings: List[ScoutFinding] = []
+        
+        # Signal strength finding
+        signal_strength = output.get("signal_strength", "MODERATE")
+        domain_analysis = output.get("domain_analysis", {})
+        
+        findings.append(ScoutFinding(
+            finding_id=f"radar_signal_{id(output)}",
+            role=AgentRole.RADAR,
+            finding_type=ScoutFindingType.SIGNAL,
+            severity="SEV-4",
+            title=f"Signal Strength: {signal_strength}",
+            description=f"Domain {output.get('domain', 'unknown')} has {signal_strength} signal",
+            confidence=domain_analysis.get("maturity_score", 0.5),
+            impact="low",
+            recommendation="Consider signal strength in adoption decision",
+            metadata={"signal_strength": signal_strength, "domain": output.get("domain")}
+        ))
+        
+        # Risk factors as findings
+        for idx, risk in enumerate(domain_analysis.get("risk_factors", [])):
+            findings.append(ScoutFinding(
+                finding_id=f"radar_risk_{idx}_{id(output)}",
+                role=AgentRole.RADAR,
+                finding_type=ScoutFindingType.RISK,
+                severity="SEV-3",
+                title=f"Domain Risk: {risk}",
+                description=f"Risk factor detected in domain analysis: {risk}",
+                confidence=0.7,
+                impact="medium",
+                recommendation="Monitor this risk factor",
+                metadata={"risk_factor": risk}
+            ))
+        
+        return findings
+    
+    def _extract_devil_findings(self, output: Dict[str, Any]) -> List[ScoutFinding]:
+        """Extract findings from DEVIL agent output."""
+        findings: List[ScoutFinding] = []
+        
+        hype_score = output.get("hype_score", 0.0)
+        
+        # Hype flags as findings
+        for idx, hype in enumerate(output.get("hype_flags", [])):
+            findings.append(ScoutFinding(
+                finding_id=f"devil_hype_{idx}_{id(output)}",
+                role=AgentRole.DEVIL,
+                finding_type=ScoutFindingType.HYPE,
+                severity="SEV-3",
+                title=f"Hype Detected: {hype}",
+                description=f"Marketing hype indicator found: {hype}",
+                confidence=min(hype_score + 0.3, 1.0),
+                impact="medium",
+                recommendation="Verify claims independently",
+                metadata={"hype_indicator": hype, "hype_score": hype_score}
+            ))
+        
+        # Risk flags as findings
+        for idx, risk in enumerate(output.get("risk_flags", [])):
+            # Determine severity based on risk type
+            severity = "SEV-3"
+            impact = "medium"
+            if "experimental" in risk.lower() or "alpha" in risk.lower():
+                severity = "SEV-2"
+                impact = "high"
+            
+            findings.append(ScoutFinding(
+                finding_id=f"devil_risk_{idx}_{id(output)}",
+                role=AgentRole.DEVIL,
+                finding_type=ScoutFindingType.RISK,
+                severity=severity,
+                title=f"Risk Factor: {risk}",
+                description=f"Risk indicator detected: {risk}",
+                confidence=0.8,
+                impact=impact,
+                recommendation="Address risk before proceeding",
+                metadata={"risk_indicator": risk}
+            ))
+        
+        # Unverified claims as findings
+        for idx, claim in enumerate(output.get("unverified_claims", [])):
+            findings.append(ScoutFinding(
+                finding_id=f"devil_unverified_{idx}_{id(output)}",
+                role=AgentRole.DEVIL,
+                finding_type=ScoutFindingType.RISK,
+                severity="SEV-3",
+                title=f"Unverified Claim: {claim}",
+                description=f"Claim requires verification: {claim}",
+                confidence=0.6,
+                impact="medium",
+                recommendation="Seek additional evidence",
+                metadata={"unverified_claim": claim}
+            ))
+        
+        # Veto from DEVIL
+        if output.get("veto_triggered"):
+            findings.append(ScoutFinding(
+                finding_id=f"devil_veto_{id(output)}",
+                role=AgentRole.DEVIL,
+                finding_type=ScoutFindingType.VETO,
+                severity="SEV-1",
+                title="DEVIL Veto Triggered",
+                description=output.get("veto_reason", "High risk detected"),
+                confidence=0.9,
+                impact="critical",
+                recommendation="Do not proceed without addressing risks",
+                metadata={"veto_reason": output.get("veto_reason")}
+            ))
+        
+        return findings
+    
+    def _extract_eval_findings(self, output: Dict[str, Any]) -> List[ScoutFinding]:
+        """Extract findings from EVAL agent output."""
+        findings: List[ScoutFinding] = []
+        
+        readiness = output.get("readiness", "EXPERIMENTAL")
+        tier_details = output.get("tier_details", {})
+        
+        # Readiness finding
+        severity = "SEV-4"
+        impact = "low"
+        if readiness in ("EXPERIMENTAL", "VAPORWARE"):
+            severity = "SEV-2"
+            impact = "high"
+        elif readiness == "EARLY_ADOPTER":
+            severity = "SEV-3"
+            impact = "medium"
+        
+        findings.append(ScoutFinding(
+            finding_id=f"eval_readiness_{id(output)}",
+            role=AgentRole.EVAL,
+            finding_type=ScoutFindingType.RECOMMENDATION,
+            severity=severity,
+            title=f"Readiness: {readiness}",
+            description=tier_details.get("description", f"Adoption readiness: {readiness}"),
+            confidence=0.85,
+            impact=impact,
+            recommendation=tier_details.get("recommendation", "Proceed with caution"),
+            metadata={"readiness_tier": readiness, "tier_details": tier_details}
+        ))
+        
+        # Veto from EVAL
+        if output.get("veto_active"):
+            findings.append(ScoutFinding(
+                finding_id=f"eval_veto_{id(output)}",
+                role=AgentRole.EVAL,
+                finding_type=ScoutFindingType.VETO,
+                severity="SEV-1",
+                title="EVAL Veto Active",
+                description=f"Strategy blocked due to {readiness} readiness tier",
+                confidence=0.95,
+                impact="critical",
+                recommendation=tier_details.get("recommendation", "Do not proceed"),
+                metadata={"blocking_tier": readiness}
+            ))
+        
+        return findings
+    
+    def _extract_strat_findings(self, output: Dict[str, Any]) -> List[ScoutFinding]:
+        """Extract findings from STRAT agent output."""
+        findings: List[ScoutFinding] = []
+        
+        # Caveats as findings
+        for idx, caveat in enumerate(output.get("caveats", [])):
+            findings.append(ScoutFinding(
+                finding_id=f"strat_caveat_{idx}_{id(output)}",
+                role=AgentRole.STRAT,
+                finding_type=ScoutFindingType.CAVEAT,
+                severity="SEV-3",
+                title=f"Caveat: {caveat}",
+                description=f"Strategy caveat: {caveat}",
+                confidence=0.75,
+                impact="medium",
+                recommendation="Address caveat in implementation",
+                metadata={"caveat": caveat}
+            ))
+        
+        # Strategy recommendation
+        if output.get("strategy") and not output.get("vetoed"):
+            findings.append(ScoutFinding(
+                finding_id=f"strat_strategy_{id(output)}",
+                role=AgentRole.STRAT,
+                finding_type=ScoutFindingType.RECOMMENDATION,
+                severity="SEV-4",
+                title="Strategy Synthesized",
+                description="Strategy has been synthesized and is ready for review",
+                confidence=0.7,
+                impact="low",
+                recommendation="Review strategy and proceed with implementation",
+                metadata={"strategy_generated": True}
+            ))
+        
+        # Vetoed status
+        if output.get("vetoed"):
+            findings.append(ScoutFinding(
+                finding_id=f"strat_blocked_{id(output)}",
+                role=AgentRole.STRAT,
+                finding_type=ScoutFindingType.BLOCKER,
+                severity="SEV-2",
+                title="STRAT Blocked",
+                description=output.get("veto_reason", "Strategy synthesis blocked"),
+                confidence=0.9,
+                impact="high",
+                recommendation="Address blocking issues before strategy synthesis",
+                metadata={"blocked": True, "veto_reason": output.get("veto_reason")}
+            ))
+        
+        return findings
+    
+    def aggregate_findings(
+        self,
+        all_findings: Dict[AgentRole, List[ScoutFinding]]
+    ) -> AggregatedFindings:
+        """
+        Aggregate findings from all scouts.
+        
+        Combines findings from all scout agents and calculates
+        overall metrics for consensus submission.
+        
+        Args:
+            all_findings: Dictionary mapping scout roles to their findings
+            
+        Returns:
+            AggregatedFindings with combined analysis
+        """
+        radar_findings = all_findings.get(AgentRole.RADAR, [])
+        devil_findings = all_findings.get(AgentRole.DEVIL, [])
+        eval_findings = all_findings.get(AgentRole.EVAL, [])
+        strat_findings = all_findings.get(AgentRole.STRAT, [])
+        
+        # Check for veto
+        veto_active, veto_reason = self._check_veto_in_findings(
+            radar_findings + devil_findings + eval_findings + strat_findings
+        )
+        
+        # Calculate consensus score
+        consensus_score = self.calculate_consensus_score(all_findings)
+        
+        # Determine overall readiness
+        overall_readiness = self._determine_readiness(
+            eval_findings, devil_findings, consensus_score
+        )
+        
+        aggregated = AggregatedFindings(
+            radar_findings=radar_findings,
+            devil_findings=devil_findings,
+            eval_findings=eval_findings,
+            strat_findings=strat_findings,
+            veto_active=veto_active,
+            veto_reason=veto_reason,
+            consensus_score=consensus_score,
+            overall_readiness=overall_readiness
+        )
+        
+        logger.info(
+            f"[ITEM-AGENT-001] Aggregated {aggregated.total_findings} findings, "
+            f"consensus={consensus_score:.2f}, veto={veto_active}"
+        )
+        
+        return aggregated
+    
+    def _check_veto_in_findings(
+        self,
+        findings: List[ScoutFinding]
+    ) -> tuple[bool, Optional[str]]:
+        """Check if any findings trigger a veto."""
+        veto_result = self.check_veto_rules(findings)
+        return (veto_result is not None, veto_result)
+    
+    def check_veto_rules(self, findings: List[ScoutFinding]) -> Optional[str]:
+        """
+        Check if any veto rules are triggered.
+        
+        Implements the three veto rules from the protocol:
+        1. SEC_VETO: CRITICAL/SEV-1 findings from EVAL
+        2. DVL_VETO: HYPE/VULNERABILITY findings from DEVIL
+        3. S5_VETO: Security+Strategy combined weight >= 55%
+        
+        Args:
+            findings: List of findings to check
+            
+        Returns:
+            Veto reason if triggered, None otherwise
+        """
+        for finding in findings:
+            # SEC_VETO: CRITICAL finding overrides majority
+            if finding.severity in self._veto_rules["security_veto"]:
+                return f"SEC_VETO: {finding.title}"
+            
+            if finding.impact in self._veto_rules["security_veto"]:
+                return f"SEC_VETO: {finding.title}"
+            
+            # DVL_VETO: HYPE/ABANDONED/VULNERABILITY blocks adoption
+            if finding.finding_type.value in self._veto_rules["devil_veto"]:
+                return f"DVL_VETO: {finding.title}"
+            
+            # Check for veto finding type
+            if finding.finding_type == ScoutFindingType.VETO:
+                return f"SCOUT_VETO: {finding.title}"
+        
+        return None
+    
+    def calculate_consensus_score(
+        self,
+        findings: Dict[AgentRole, List[ScoutFinding]]
+    ) -> float:
+        """
+        Calculate weighted consensus score.
+        
+        Computes a weighted average of confidence scores across
+        all scout roles using the ROLE_WEIGHTS.
+        
+        Args:
+            findings: Dictionary mapping roles to their findings
+            
+        Returns:
+            Weighted consensus score (0.0 - 1.0)
+        """
+        total_score = 0.0
+        total_weight = 0.0
+        
+        for role, role_findings in findings.items():
+            if not role_findings:
+                continue
+            
+            weight = self._role_weights.get(role, 0.0)
+            
+            # Calculate average confidence for this role
+            avg_confidence = sum(f.confidence for f in role_findings) / len(role_findings)
+            
+            # Apply role weight
+            total_score += avg_confidence * weight
+            total_weight += weight
+        
+        # Normalize if not all roles had findings
+        if total_weight > 0 and total_weight < 1.0:
+            total_score = total_score / total_weight
+        
+        logger.debug(
+            f"[ITEM-AGENT-001] Consensus score: {total_score:.3f} "
+            f"(from {sum(len(f) for f in findings.values())} findings)"
+        )
+        
+        return round(total_score, 3)
+    
+    def _determine_readiness(
+        self,
+        eval_findings: List[ScoutFinding],
+        devil_findings: List[ScoutFinding],
+        consensus_score: float
+    ) -> str:
+        """Determine overall readiness from findings."""
+        # Check EVAL findings first
+        for finding in eval_findings:
+            if finding.finding_type == ScoutFindingType.RECOMMENDATION:
+                readiness = finding.metadata.get("readiness_tier", "EXPERIMENTAL")
+                return readiness
+        
+        # Fall back to consensus-based determination
+        if consensus_score >= 0.75:
+            return "PRODUCTION_READY"
+        elif consensus_score >= 0.55:
+            return "EARLY_ADOPTER"
+        elif consensus_score >= 0.35:
+            return "EXPERIMENTAL"
+        else:
+            return "VAPORWARE"
+    
+    def submit_to_consensus(
+        self,
+        aggregated: AggregatedFindings
+    ) -> ConsensusResult:
+        """
+        Submit findings to RoleWeightedConsensus.
+        
+        Processes aggregated findings through the consensus engine
+        to produce a final decision result.
+        
+        Args:
+            aggregated: Aggregated findings from all scouts
+            
+        Returns:
+            ConsensusResult with approval status and details
+        """
+        # Check for veto first
+        if aggregated.veto_active:
+            logger.warning(
+                f"[ITEM-AGENT-001] Consensus blocked by veto: {aggregated.veto_reason}"
+            )
+            return ConsensusResult(
+                approved=False,
+                score=aggregated.consensus_score,
+                confidence=1.0,
+                veto_triggered=True,
+                veto_source=aggregated.veto_reason,
+                rationale=f"Veto triggered: {aggregated.veto_reason}"
+            )
+        
+        # Calculate weighted scores per role
+        weighted_scores: Dict[str, float] = {}
+        
+        for role in [AgentRole.EVAL, AgentRole.DEVIL, AgentRole.STRAT, AgentRole.RADAR]:
+            findings_map = {
+                AgentRole.EVAL: aggregated.eval_findings,
+                AgentRole.DEVIL: aggregated.devil_findings,
+                AgentRole.STRAT: aggregated.strat_findings,
+                AgentRole.RADAR: aggregated.radar_findings,
+            }
+            role_findings = findings_map[role]
+            weight = self._role_weights[role]
+            
+            if role_findings:
+                avg_conf = sum(f.confidence for f in role_findings) / len(role_findings)
+                weighted_scores[role.value] = round(avg_conf * weight, 3)
+            else:
+                weighted_scores[role.value] = 0.0
+        
+        # Check S5_VETO: Security+Strategy >= 55% overrides convenience
+        sec_strat_score = (
+            weighted_scores.get("eval", 0.0) +
+            weighted_scores.get("strat", 0.0)
+        )
+        
+        # Determine approval
+        score = aggregated.consensus_score
+        
+        if score >= self.CONSENSUS_THRESHOLDS["high_confidence"]:
+            approved = True
+            confidence = 0.95
+            rationale = f"High confidence approval (score: {score:.2f})"
+        elif score >= self.CONSENSUS_THRESHOLDS["medium_confidence"]:
+            approved = True
+            confidence = 0.80
+            rationale = f"Medium confidence approval (score: {score:.2f})"
+        elif score >= self.CONSENSUS_THRESHOLDS["low_confidence"]:
+            approved = False
+            confidence = 0.60
+            rationale = f"Low confidence, escalation recommended (score: {score:.2f})"
+        else:
+            approved = False
+            confidence = 0.40
+            rationale = f"Insufficient consensus (score: {score:.2f})"
+        
+        # S5_VETO check - if SEC+STR >= 55% and they disapprove, override
+        if sec_strat_score >= self._veto_rules["security_strategy_veto_threshold"]:
+            # Check if EVAL findings are negative
+            eval_negative = any(
+                f.severity in ("SEV-1", "SEV-2") or f.impact in ("critical", "high")
+                for f in aggregated.eval_findings
+            )
+            if eval_negative:
+                approved = False
+                rationale = f"S5_VETO: Security+Strategy ({sec_strat_score:.0%}) overrides"
+        
+        result = ConsensusResult(
+            approved=approved,
+            score=score,
+            confidence=confidence,
+            veto_triggered=False,
+            weighted_scores=weighted_scores,
+            rationale=rationale
+        )
+        
+        logger.info(
+            f"[ITEM-AGENT-001] Consensus result: approved={approved}, "
+            f"score={score:.2f}, confidence={confidence:.0%}"
+        )
+        
+        return result
+    
+    def get_role_weights(self) -> Dict[AgentRole, float]:
+        """Get current role weights."""
+        return self._role_weights.copy()
+    
+    def get_veto_rules(self) -> Dict[str, Any]:
+        """Get current veto rules."""
+        return self._veto_rules.copy()
 
 
 # =============================================================================

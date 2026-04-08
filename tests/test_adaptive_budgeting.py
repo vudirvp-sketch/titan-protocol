@@ -16,7 +16,7 @@ import pytest
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from src.budget.adaptive_budgeting import (
+from budget.adaptive_budgeting import (
     BudgetAllocation,
     AdaptiveBudgeter,
     ClarityTier,
@@ -482,7 +482,7 @@ class TestModuleFunctions:
     def test_get_budgeter_none_initially(self):
         """Test get_budgeter returns None before initialization."""
         # Reset global budgeter
-        import src.budget.adaptive_budgeting as mod
+        import budget.adaptive_budgeting as mod
         mod._global_budgeter = None
 
         assert get_budgeter() is None

@@ -4,18 +4,23 @@ Guardian Validation Loop for TITAN FUSE Protocol.
 ITEM-VAL-03: Deterministic validation loop integrating scoring engine,
 conflict resolver, and SCOUT pipeline for comprehensive content validation.
 
+ITEM-PROT-001: Hyperparameter Enforcement Gate for deterministic mode validation.
+Enforces temperature=0.0, top_p<=0.1, and seed as strict integer in DETERMINISM=strict mode.
+
 The Guardian serves as the central orchestrator for validation, combining:
 - Adaptive Weight Profiles Engine for four-axis scoring
 - Conflict Resolution Formula for idea-level conflicts
 - SCOUT Pipeline for multi-agent analysis
+- Hyperparameter Validation for deterministic LLM calls
 
 Author: TITAN FUSE Team
-Version: 3.2.3
+Version: 5.0.0
 """
 
 from __future__ import annotations
 
 import logging
+import copy
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -53,6 +58,566 @@ from .validator_dag import ValidationResult
 
 # Configure module logger
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# ITEM-PROT-001: Hyperparameter Enforcement Gate
+# =============================================================================
+
+class EnforcementMode(Enum):
+    """
+    Hyperparameter enforcement mode.
+
+    Attributes:
+        STRICT: Strict enforcement, reject on any violation
+        RELAXED: Relaxed enforcement, warn on violations
+    """
+    STRICT = "strict"
+    RELAXED = "relaxed"
+
+
+class ViolationAction(Enum):
+    """
+    Action to take on hyperparameter violation.
+
+    Attributes:
+        REJECT: Reject the request entirely
+        WARN: Log warning but allow the request
+        AUTO_FIX: Automatically fix parameters and continue
+    """
+    REJECT = "reject"
+    WARN = "warn"
+    AUTO_FIX = "auto_fix"
+
+
+@dataclass
+class HyperparameterConfig:
+    """
+    Configuration for hyperparameter enforcement.
+
+    Attributes:
+        enforcement: Enforcement mode (strict or relaxed)
+        on_violation: Action to take on violation
+        allowed_temperature: Allowed temperature value in strict mode
+        max_top_p: Maximum allowed top_p in strict mode
+        require_seed: Whether seed is required
+    """
+    enforcement: EnforcementMode = EnforcementMode.STRICT
+    on_violation: ViolationAction = ViolationAction.REJECT
+    allowed_temperature: float = 0.0
+    max_top_p: float = 0.1
+    require_seed: bool = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "enforcement": self.enforcement.value,
+            "on_violation": self.on_violation.value,
+            "allowed_temperature": self.allowed_temperature,
+            "max_top_p": self.max_top_p,
+            "require_seed": self.require_seed,
+        }
+
+
+@dataclass
+class HyperparameterViolation:
+    """
+    Represents a hyperparameter violation detected during validation.
+
+    Attributes:
+        param_name: Name of the violated parameter
+        expected: Expected value or range
+        actual: Actual value provided
+        severity: Severity level (1-5)
+        message: Human-readable description
+        auto_fix_value: Value to use if auto-fix is enabled
+    """
+    param_name: str
+    expected: str
+    actual: Any
+    severity: int
+    message: str
+    auto_fix_value: Any = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "param_name": self.param_name,
+            "expected": self.expected,
+            "actual": self.actual,
+            "severity": self.severity,
+            "message": self.message,
+            "auto_fix_value": self.auto_fix_value,
+        }
+
+
+@dataclass
+class HyperparameterValidationResult:
+    """
+    Result of hyperparameter validation.
+
+    Attributes:
+        valid: Whether parameters are valid
+        violations: List of detected violations
+        fixed_params: Auto-fixed parameters if applicable
+        was_auto_fixed: Whether parameters were auto-fixed
+    """
+    valid: bool
+    violations: List[HyperparameterViolation] = field(default_factory=list)
+    fixed_params: Dict[str, Any] = field(default_factory=dict)
+    was_auto_fixed: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "valid": self.valid,
+            "violations": [v.to_dict() for v in self.violations],
+            "fixed_params": self.fixed_params,
+            "was_auto_fixed": self.was_auto_fixed,
+        }
+
+
+class HyperparameterValidator:
+    """
+    ITEM-PROT-001: Hyperparameter Enforcement Gate for TITAN Protocol.
+
+    Validates and enforces hyperparameters for deterministic LLM calls.
+    When DETERMINISM=strict mode is enabled, enforces:
+    - temperature ∈ {0.0}
+    - top_p ≤ 0.1
+    - seed is strict integer
+
+    The validator integrates with the Gate Manager to block requests
+    that don't meet deterministic requirements.
+
+    Usage:
+        >>> config = HyperparameterConfig(
+        ...     enforcement=EnforcementMode.STRICT,
+        ...     on_violation=ViolationAction.AUTO_FIX
+        ... )
+        >>> validator = HyperparameterValidator(config)
+        >>>
+        >>> # Validate parameters
+        >>> params = {"temperature": 0.7, "top_p": 0.9, "seed": 42}
+        >>> result = validator.validate_deterministic(params)
+        >>>
+        >>> if result.was_auto_fixed:
+        ...     params = result.fixed_params
+        >>> elif not result.valid:
+        ...     raise ValueError("Invalid hyperparameters")
+
+    Integration with GateManager:
+        The validator should be registered as a check function for the
+        "Hyperparameter Check" gate in GATE_00.
+    """
+
+    # Default values for strict determinism
+    DEFAULT_STRICT_TEMPERATURE = 0.0
+    DEFAULT_STRICT_TOP_P = 0.1
+
+    def __init__(self, config: Optional[HyperparameterConfig] = None) -> None:
+        """
+        Initialize the HyperparameterValidator.
+
+        Args:
+            config: Configuration for hyperparameter enforcement.
+                   If not provided, uses defaults (strict mode, reject on violation).
+        """
+        self._config = config or HyperparameterConfig()
+        self._logger = logging.getLogger(f"{__name__}.HyperparameterValidator")
+
+        # Track validation statistics
+        self._stats = {
+            "total_validations": 0,
+            "valid_count": 0,
+            "violation_count": 0,
+            "auto_fix_count": 0,
+            "reject_count": 0,
+            "warn_count": 0,
+        }
+
+        self._logger.info(
+            f"[ITEM-PROT-001] HyperparameterValidator initialized: "
+            f"enforcement={self._config.enforcement.value}, "
+            f"on_violation={self._config.on_violation.value}"
+        )
+
+    def validate_deterministic(self, params: Dict[str, Any]) -> HyperparameterValidationResult:
+        """
+        Validate parameters for deterministic mode.
+
+        Checks all hyperparameters against strict mode requirements:
+        - temperature must be exactly 0.0
+        - top_p must be ≤ 0.1
+        - seed must be an integer
+
+        Args:
+            params: LLM call parameters to validate
+
+        Returns:
+            HyperparameterValidationResult with validation outcome
+        """
+        self._stats["total_validations"] += 1
+        violations: List[HyperparameterViolation] = []
+        fixed_params = copy.deepcopy(params) if self._config.on_violation == ViolationAction.AUTO_FIX else {}
+        was_auto_fixed = False
+
+        # Check temperature
+        temp_violation = self._check_temperature(params)
+        if temp_violation:
+            violations.append(temp_violation)
+            if self._config.on_violation == ViolationAction.AUTO_FIX:
+                fixed_params["temperature"] = temp_violation.auto_fix_value
+                was_auto_fixed = True
+
+        # Check top_p
+        top_p_violation = self._check_top_p(params)
+        if top_p_violation:
+            violations.append(top_p_violation)
+            if self._config.on_violation == ViolationAction.AUTO_FIX:
+                fixed_params["top_p"] = top_p_violation.auto_fix_value
+                was_auto_fixed = True
+
+        # Check seed
+        seed_violation = self._check_seed(params)
+        if seed_violation:
+            violations.append(seed_violation)
+            if self._config.on_violation == ViolationAction.AUTO_FIX and seed_violation.auto_fix_value is not None:
+                fixed_params["seed"] = seed_violation.auto_fix_value
+                was_auto_fixed = True
+
+        # Determine validity and handle actions
+        if not violations:
+            self._stats["valid_count"] += 1
+            return HyperparameterValidationResult(valid=True)
+
+        self._stats["violation_count"] += 1
+
+        # Handle violation based on configured action
+        if self._config.on_violation == ViolationAction.AUTO_FIX:
+            # Check if all violations can be fixed
+            unfixable = [v for v in violations if v.auto_fix_value is None]
+            if unfixable:
+                self._stats["reject_count"] += 1
+                self._logger.error(
+                    f"[ITEM-PROT-001] Cannot auto-fix {len(unfixable)} violations: "
+                    f"{[v.param_name for v in unfixable]}"
+                )
+                return HyperparameterValidationResult(
+                    valid=False,
+                    violations=violations,
+                    fixed_params={},
+                    was_auto_fixed=False,
+                )
+
+            self._stats["auto_fix_count"] += 1
+            # Merge fixed params with original
+            result_params = copy.deepcopy(params)
+            result_params.update(fixed_params)
+
+            self._logger.info(
+                f"[ITEM-PROT-001] Auto-fixed {len(violations)} hyperparameter violations: "
+                f"{[v.param_name for v in violations]}"
+            )
+
+            return HyperparameterValidationResult(
+                valid=True,
+                violations=violations,
+                fixed_params=result_params,
+                was_auto_fixed=True,
+            )
+
+        elif self._config.on_violation == ViolationAction.WARN:
+            self._stats["warn_count"] += 1
+            self._logger.warning(
+                f"[ITEM-PROT-001] Hyperparameter violations detected (warn mode): "
+                f"{[v.message for v in violations]}"
+            )
+            return HyperparameterValidationResult(valid=True, violations=violations)
+
+        else:  # REJECT
+            self._stats["reject_count"] += 1
+            self._logger.error(
+                f"[ITEM-PROT-001] Hyperparameter validation rejected: "
+                f"{[v.message for v in violations]}"
+            )
+            return HyperparameterValidationResult(valid=False, violations=violations)
+
+    def check_temperature(self, value: float) -> bool:
+        """
+        Check if temperature value is valid for deterministic mode.
+
+        Args:
+            value: Temperature value to check
+
+        Returns:
+            True if temperature is valid (0.0 in strict mode)
+        """
+        if self._config.enforcement == EnforcementMode.STRICT:
+            return value == self._config.allowed_temperature
+        return True  # Relaxed mode allows any temperature
+
+    def _check_temperature(self, params: Dict[str, Any]) -> Optional[HyperparameterViolation]:
+        """
+        Internal method to check temperature parameter.
+
+        Args:
+            params: Parameters dictionary
+
+        Returns:
+            HyperparameterViolation if invalid, None if valid
+        """
+        if "temperature" not in params:
+            # Missing temperature - not a violation, will be set by seed injector
+            return None
+
+        temp = params["temperature"]
+
+        if self._config.enforcement == EnforcementMode.STRICT:
+            if temp != self._config.allowed_temperature:
+                return HyperparameterViolation(
+                    param_name="temperature",
+                    expected=f"{self._config.allowed_temperature}",
+                    actual=temp,
+                    severity=5,
+                    message=f"Temperature must be {self._config.allowed_temperature} in strict mode, got {temp}",
+                    auto_fix_value=self.DEFAULT_STRICT_TEMPERATURE,
+                )
+
+        return None
+
+    def check_top_p(self, value: float) -> bool:
+        """
+        Check if top_p value is valid for deterministic mode.
+
+        Args:
+            value: top_p value to check
+
+        Returns:
+            True if top_p is valid (≤ 0.1 in strict mode)
+        """
+        if self._config.enforcement == EnforcementMode.STRICT:
+            return value <= self._config.max_top_p
+        return True  # Relaxed mode allows any top_p
+
+    def _check_top_p(self, params: Dict[str, Any]) -> Optional[HyperparameterViolation]:
+        """
+        Internal method to check top_p parameter.
+
+        Args:
+            params: Parameters dictionary
+
+        Returns:
+            HyperparameterViolation if invalid, None if valid
+        """
+        if "top_p" not in params:
+            # Missing top_p - not a violation
+            return None
+
+        top_p = params["top_p"]
+
+        if self._config.enforcement == EnforcementMode.STRICT:
+            if top_p > self._config.max_top_p:
+                return HyperparameterViolation(
+                    param_name="top_p",
+                    expected=f"≤{self._config.max_top_p}",
+                    actual=top_p,
+                    severity=4,
+                    message=f"top_p must be ≤ {self._config.max_top_p} in strict mode, got {top_p}",
+                    auto_fix_value=self.DEFAULT_STRICT_TOP_P,
+                )
+
+        return None
+
+    def check_seed(self, value: Any) -> bool:
+        """
+        Check if seed value is valid for deterministic mode.
+
+        Args:
+            value: Seed value to check
+
+        Returns:
+            True if seed is a valid integer
+        """
+        if not self._config.require_seed:
+            return True
+
+        # Must be an integer (int type, not float or string)
+        if isinstance(value, bool):  # bool is subclass of int, reject it
+            return False
+        if isinstance(value, int):
+            return True
+        return False
+
+    def _check_seed(self, params: Dict[str, Any]) -> Optional[HyperparameterViolation]:
+        """
+        Internal method to check seed parameter.
+
+        Args:
+            params: Parameters dictionary
+
+        Returns:
+            HyperparameterViolation if invalid, None if valid
+        """
+        if not self._config.require_seed:
+            return None
+
+        if "seed" not in params:
+            return HyperparameterViolation(
+                param_name="seed",
+                expected="integer",
+                actual=None,
+                severity=5,
+                message="Seed is required for deterministic mode",
+                auto_fix_value=None,  # Cannot auto-fix missing seed
+            )
+
+        seed = params["seed"]
+
+        # Check if it's a proper integer (not bool, not float, not string)
+        if isinstance(seed, bool):
+            return HyperparameterViolation(
+                param_name="seed",
+                expected="integer",
+                actual=seed,
+                severity=5,
+                message=f"Seed must be an integer, got boolean {seed}",
+                auto_fix_value=int(seed),
+            )
+
+        if not isinstance(seed, int):
+            # Try to convert if auto-fix enabled
+            try:
+                converted = int(seed)
+                return HyperparameterViolation(
+                    param_name="seed",
+                    expected="integer",
+                    actual=seed,
+                    severity=5,
+                    message=f"Seed must be an integer, got {type(seed).__name__}: {seed}",
+                    auto_fix_value=converted,
+                )
+            except (ValueError, TypeError):
+                return HyperparameterViolation(
+                    param_name="seed",
+                    expected="integer",
+                    actual=seed,
+                    severity=5,
+                    message=f"Seed must be an integer, got invalid value: {seed}",
+                    auto_fix_value=None,
+                )
+
+        return None
+
+    def auto_fix(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Auto-correct parameters for deterministic mode.
+
+        Applies fixes for any parameter violations:
+        - Sets temperature to 0.0
+        - Sets top_p to 0.1
+        - Converts seed to integer if possible
+
+        Args:
+            params: Original parameters
+
+        Returns:
+            Corrected parameters dictionary
+        """
+        result = copy.deepcopy(params)
+
+        # Fix temperature
+        if "temperature" in result and result["temperature"] != self.DEFAULT_STRICT_TEMPERATURE:
+            self._logger.debug(
+                f"[ITEM-PROT-001] Auto-fixing temperature: "
+                f"{result['temperature']} -> {self.DEFAULT_STRICT_TEMPERATURE}"
+            )
+            result["temperature"] = self.DEFAULT_STRICT_TEMPERATURE
+
+        # Fix top_p
+        if "top_p" in result and result["top_p"] > self.DEFAULT_STRICT_TOP_P:
+            self._logger.debug(
+                f"[ITEM-PROT-001] Auto-fixing top_p: "
+                f"{result['top_p']} -> {self.DEFAULT_STRICT_TOP_P}"
+            )
+            result["top_p"] = self.DEFAULT_STRICT_TOP_P
+
+        # Fix seed
+        if "seed" in result:
+            seed = result["seed"]
+            if isinstance(seed, bool):
+                result["seed"] = int(seed)
+            elif not isinstance(seed, int):
+                try:
+                    result["seed"] = int(seed)
+                    self._logger.debug(
+                        f"[ITEM-PROT-001] Auto-fixing seed: {seed} -> {result['seed']}"
+                    )
+                except (ValueError, TypeError):
+                    self._logger.warning(
+                        f"[ITEM-PROT-001] Cannot auto-fix seed: {seed}"
+                    )
+
+        return result
+
+    def get_stats(self) -> Dict[str, int]:
+        """
+        Get validation statistics.
+
+        Returns:
+            Dictionary with validation counts
+        """
+        return self._stats.copy()
+
+    def reset_stats(self) -> None:
+        """Reset validation statistics."""
+        self._stats = {
+            "total_validations": 0,
+            "valid_count": 0,
+            "violation_count": 0,
+            "auto_fix_count": 0,
+            "reject_count": 0,
+            "warn_count": 0,
+        }
+
+    @property
+    def config(self) -> HyperparameterConfig:
+        """Get the current configuration."""
+        return self._config
+
+    def update_config(self, config: HyperparameterConfig) -> None:
+        """
+        Update the validator configuration.
+
+        Args:
+            config: New configuration
+        """
+        self._config = config
+        self._logger.info(
+            f"[ITEM-PROT-001] Configuration updated: "
+            f"enforcement={config.enforcement.value}, on_violation={config.on_violation.value}"
+        )
+
+
+def create_hyperparameter_validator(
+    enforcement: str = "strict",
+    on_violation: str = "reject"
+) -> HyperparameterValidator:
+    """
+    Factory function to create a HyperparameterValidator.
+
+    Args:
+        enforcement: Enforcement mode ("strict" or "relaxed")
+        on_violation: Action on violation ("reject", "warn", or "auto_fix")
+
+    Returns:
+        Configured HyperparameterValidator instance
+    """
+    config = HyperparameterConfig(
+        enforcement=EnforcementMode(enforcement),
+        on_violation=ViolationAction(on_violation),
+    )
+    return HyperparameterValidator(config)
 
 
 # =============================================================================

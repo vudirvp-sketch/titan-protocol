@@ -1,0 +1,13 @@
+{
+  "trail": {
+    "trail_id": "trail-38c4d85fd94d",
+    "session_id": "test-session",
+    "events": [],
+    "created_at": "2026-04-08T18:13:26.532220Z",
+    "checksum": ""
+  },
+  "signature": "63gzLuNyyMDt6pxf+d42ACgiXOpz1SlTel0cS4dYMOo=",
+  "signed_at": "2026-04-08T18:13:26.532268Z",
+  "backend_type": "hmac",
+  "public_key_id": null
+}

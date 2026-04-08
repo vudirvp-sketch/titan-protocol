@@ -43,6 +43,38 @@
         "per_query_p95": {"type": "integer"}
       }
     },
+    "token_attribution": {
+      "type": "object",
+      "description": "ITEM-MODEL-002: Token usage per gate for cost attribution",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "prompt_tokens": {"type": "integer", "description": "Total prompt tokens used by this gate"},
+          "completion_tokens": {"type": "integer", "description": "Total completion tokens used by this gate"},
+          "total_tokens": {"type": "integer", "description": "Total tokens (prompt + completion)"},
+          "call_count": {"type": "integer", "description": "Number of times this gate was invoked"},
+          "avg_tokens_per_call": {"type": "number", "description": "Average tokens per call"},
+          "total_duration_ms": {"type": "number", "description": "Total duration in milliseconds"},
+          "avg_duration_ms": {"type": "number", "description": "Average duration per call in milliseconds"},
+          "first_started_at": {"type": ["string", "null"], "description": "ISO timestamp of first gate start"},
+          "last_started_at": {"type": ["string", "null"], "description": "ISO timestamp of most recent gate start"},
+          "last_ended_at": {"type": ["string", "null"], "description": "ISO timestamp of most recent gate end"}
+        },
+        "required": ["prompt_tokens", "completion_tokens", "total_tokens", "call_count"]
+      }
+    },
+    "token_attribution_summary": {
+      "type": "object",
+      "description": "ITEM-MODEL-002: Summary statistics for token attribution",
+      "properties": {
+        "total_tokens": {"type": "integer", "description": "Total tokens across all gates"},
+        "total_prompt_tokens": {"type": "integer", "description": "Total prompt tokens across all gates"},
+        "total_completion_tokens": {"type": "integer", "description": "Total completion tokens across all gates"},
+        "gate_count": {"type": "integer", "description": "Number of unique gates tracked"},
+        "total_calls": {"type": "integer", "description": "Total number of gate invocations"}
+      },
+      "required": ["total_tokens", "gate_count", "total_calls"]
+    },
     "assessment": {
       "type": "object",
       "properties": {

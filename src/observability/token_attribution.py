@@ -633,3 +633,77 @@ def reset_attribution() -> None:
     Convenience function for get_token_attributor().reset().
     """
     get_token_attributor().reset()
+
+
+def get_attribution_for_metrics() -> Dict[str, Any]:
+    """
+    ITEM-MODEL-002: Get token attribution formatted for metrics.json.
+    
+    Returns a dictionary with per-gate token breakdown and summary
+    statistics suitable for inclusion in metrics.json output.
+    
+    Returns:
+        {
+            "token_attribution": {
+                "GATE-00": {"prompt_tokens": 150, "completion_tokens": 50, "total_tokens": 200, ...},
+                "GATE-01": {...},
+                ...
+            },
+            "token_attribution_summary": {
+                "total_tokens": 5000,
+                "total_prompt_tokens": 3500,
+                "total_completion_tokens": 1500,
+                "gate_count": 6,
+                "total_calls": 15
+            }
+        }
+    
+    Example:
+        >>> from src.observability.token_attribution import get_attribution_for_metrics
+        >>> metrics_data = get_attribution_for_metrics()
+        >>> print(metrics_data["token_attribution_summary"]["total_tokens"])
+    """
+    stats = get_token_attributor().get_stats()
+    return {
+        "token_attribution": stats["gates"],
+        "token_attribution_summary": {
+            "total_tokens": stats["total_tokens"],
+            "total_prompt_tokens": stats["total_prompt_tokens"],
+            "total_completion_tokens": stats["total_completion_tokens"],
+            "gate_count": stats["total_gates"],
+            "total_calls": stats["total_calls"]
+        }
+    }
+
+
+def record_gate_usage(
+    gate_id: str,
+    tokens_used: int,
+    prompt_tokens: Optional[int] = None,
+    completion_tokens: Optional[int] = None
+) -> None:
+    """
+    ITEM-MODEL-002: Record token usage for a gate without timing.
+    
+    Convenience function for recording gate usage in contexts where
+    start/end timing is handled separately (e.g., gate_manager integration).
+    
+    This is a wrapper around record_existing_usage on the global attributor.
+    
+    Args:
+        gate_id: Unique identifier for the gate (e.g., "PRE_Policy_Check")
+        tokens_used: Total tokens used in this gate execution
+        prompt_tokens: Optional breakdown of prompt tokens
+        completion_tokens: Optional breakdown of completion tokens
+    
+    Example:
+        >>> from src.observability.token_attribution import record_gate_usage
+        >>> record_gate_usage("PRE_Policy_Check", tokens_used=0)
+        >>> record_gate_usage("GATE-00", tokens_used=150, prompt_tokens=100, completion_tokens=50)
+    """
+    get_token_attributor().record_existing_usage(
+        gate_id,
+        tokens_used=tokens_used,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens
+    )

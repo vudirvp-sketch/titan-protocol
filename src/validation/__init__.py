@@ -6,6 +6,10 @@ ITEM-SEC-01: Multiple sandbox implementations:
 - ValidatorSandbox: Subprocess isolation (default for Python)
 - WASMSandbox: WebAssembly-based isolation for JS validators
 - GVisorSandbox: Container-based isolation for heavy workloads
+
+ITEM-PROT-002: Invariant runtime enforcement:
+- InvariantEnforcer: Runtime enforcement of INVARIANTS_GLOBAL
+- All 10 invariants checked with configurable enforcement levels
 """
 
 from .validator_dag import ValidatorDAG, ValidationResult
@@ -103,6 +107,26 @@ __all__ = [
     'ResolutionStatus',
     'ValidationMode',
     'create_guardian',
+    
+    # Invariant runtime enforcement (ITEM-PROT-002)
+    'InvariantEnforcer',
+    'InvariantViolation',
+    'InvariantCheckResult',
+    'SessionSnapshot',
+    'EnforcementLevel',
+    'InvariantType',
+    'ViolationSeverity',
+    'create_invariant_enforcer',
+    'FORBIDDEN_INFERENCE_MARKERS',
+    
+    # Tiered validation (ITEM-VAL-001, ITEM-VAL-69)
+    'TieredValidator',
+    'SeverityTier',
+    'SamplingConfig',
+    'SamplingDecision',
+    'TieredValidatorStats',
+    'ValidatorProtocol',
+    'create_tiered_validator',
 ]
 
 # ITEM-GATE-01: Gate lint for early exit validation
@@ -125,4 +149,28 @@ from .guardian import (
     ResolutionStatus,
     ValidationMode,
     create_guardian,
+)
+
+# ITEM-PROT-002: Invariant runtime enforcement
+from .invariant_enforcer import (
+    InvariantEnforcer,
+    InvariantViolation,
+    InvariantCheckResult,
+    SessionSnapshot,
+    EnforcementLevel,
+    InvariantType,
+    ViolationSeverity,
+    create_invariant_enforcer,
+    FORBIDDEN_INFERENCE_MARKERS,
+)
+
+# ITEM-VAL-001: TieredValidatorSampling Enhancement
+from .tiered_validator import (
+    TieredValidator,
+    SeverityTier,
+    SamplingConfig,
+    SamplingDecision,
+    TieredValidatorStats,
+    ValidatorProtocol,
+    create_tiered_validator,
 )
