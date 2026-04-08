@@ -1,0 +1,59 @@
+{
+  "version": "4.1.0",
+  "generated": "2026-04-08T11:14:26.054029Z",
+  "overall_score": 92,
+  "breakdown": {
+    "TIER_1_CRITICAL": {
+      "score": 100,
+      "items": 10,
+      "passed": 10,
+      "pending": []
+    },
+    "TIER_2_HIGH": {
+      "score": 100,
+      "items": 10,
+      "passed": 10,
+      "pending": []
+    },
+    "TIER_3_MEDIUM": {
+      "score": 100,
+      "items": 10,
+      "passed": 10,
+      "pending": []
+    },
+    "TIER_4_ARCHITECTURE": {
+      "score": 100,
+      "items": 10,
+      "passed": 10,
+      "pending": []
+    },
+    "TIER_5_COMPLETE": {
+      "score": 100,
+      "items": 10,
+      "passed": 10,
+      "pending": []
+    },
+    "TIER_6_ADVANCED": {
+      "score": 100,
+      "items": 10,
+      "passed": 10,
+      "pending": []
+    },
+    "TIER_7_PRODUCTION": {
+      "score": 50,
+      "items": 6,
+      "passed": 3,
+      "pending": [
+        "ITEM-SYNC-001",
+        "ITEM-SYNC-002",
+        "ITEM-SYNC-004"
+      ]
+    }
+  },
+  "pending_items": [
+    "ITEM-SYNC-001",
+    "ITEM-SYNC-002",
+    "ITEM-SYNC-004"
+  ],
+  "last_failures": []
+}

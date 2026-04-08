@@ -1,6 +1,6 @@
 {
   "version": "4.1.0",
-  "generated": "2026-04-08T00:00:00Z",
+  "generated": "2026-04-08T11:14:04.014490Z",
   "navigation": {
     "entry_points": {
       "agents": "AGENTS.md",
@@ -49,6 +49,48 @@
         "path": "schemas/readme_meta.schema.json",
         "purpose": "JSON Schema for README_META validation",
         "tier": -1
+      },
+      {
+        "path": "src/agents/scout_matrix.py",
+        "purpose": "SCOUT Roles Matrix Agent Framework for technology assessment.",
+        "tier": 4,
+        "id": "scout_matrix",
+        "capabilities": [
+          "adaptive_scoring",
+          "role_assignment",
+          "hype_detection",
+          "risk_flagging",
+          "readiness_assessment",
+          "veto_propagation",
+          "strategy_synthesis"
+        ]
+      },
+      {
+        "path": "src/agents/agent_protocol.py",
+        "purpose": "Defines agent communication protocol and message routing.",
+        "tier": 6,
+        "id": "agent_protocol",
+        "capabilities": [
+          "message_routing",
+          "protocol_negotiation",
+          "broadcast_messaging",
+          "delivery_guarantees",
+          "dlq_integration"
+        ]
+      },
+      {
+        "path": "src/agents/multi_agent_orchestrator.py",
+        "purpose": "Orchestrates multiple agents with task queue and conflict resolution.",
+        "tier": 6,
+        "id": "multi_agent_orchestrator",
+        "capabilities": [
+          "task_queue_management",
+          "agent_registry",
+          "conflict_resolution",
+          "result_aggregation",
+          "heartbeat_monitoring",
+          "priority_dispatch"
+        ]
       }
     ],
     "directories": {
@@ -79,14 +121,27 @@
     }
   },
   "aliases": {
-    "verification_gates": ["GATE-00", "GATE-01", "GATE-02", "GATE-03", "GATE-04", "GATE-05"],
+    "verification_gates": [
+      "GATE-00",
+      "GATE-01",
+      "GATE-02",
+      "GATE-03",
+      "GATE-04",
+      "GATE-05"
+    ],
     "gates": "verification_gates",
     "validation": "verification_gates",
     "checks": "verification_gates",
     "chunking": "PRINCIPLE-04",
     "rollback": "TIER 4",
     "failsafe": "TIER 5",
-    "invariants": ["INVAR-01", "INVAR-02", "INVAR-03", "INVAR-04", "INVAR-05"]
+    "invariants": [
+      "INVAR-01",
+      "INVAR-02",
+      "INVAR-03",
+      "INVAR-04",
+      "INVAR-05"
+    ]
   },
   "shortcuts": {
     "start": {
@@ -108,6 +163,18 @@
     "meta": {
       "action": "read",
       "target": ".github/README_META.yaml"
+    },
+    "scout_matrix": {
+      "action": "read",
+      "target": "src/agents/scout_matrix.py"
+    },
+    "agent_protocol": {
+      "action": "read",
+      "target": "src/agents/agent_protocol.py"
+    },
+    "multi_agent_orchestrator": {
+      "action": "read",
+      "target": "src/agents/multi_agent_orchestrator.py"
     }
   }
 }

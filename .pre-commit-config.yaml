@@ -1,0 +1,87 @@
+# TITAN Protocol Pre-commit Configuration
+# Prevents version drift and ensures code quality
+
+repos:
+  # Version sync check - prevents drift between VERSION, nav_map.json, and README_META.yaml
+  - repo: local
+    hooks:
+      - id: version-sync
+        name: Version Sync Check
+        entry: bash -c 'VERSION=$(head -1 VERSION 2>/dev/null); NAV_VERSION=$(python3 -c "import json; print(json.load(open(\".ai/nav_map.json\"))[\"version\"])" 2>/dev/null || echo ""); META_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open(\".github/README_META.yaml\"))[\"protocol\"][\"version\"])" 2>/dev/null || echo ""); if [ "$VERSION" != "$NAV_VERSION" ] || [ "$VERSION" != "$META_VERSION" ]; then echo "DRIFT DETECTED: VERSION=$VERSION nav_map=$NAV_VERSION meta=$META_VERSION"; exit 1; fi'
+        language: system
+        files: '^(VERSION|\.ai/nav_map\.json|\.github/README_META\.yaml)$'
+        pass_filenames: false
+
+      - id: validate-readme-meta
+        name: Validate README_META.yaml schema
+        entry: bash -c 'python3 -c "import yaml, json, jsonschema; meta=yaml.safe_load(open(\".github/README_META.yaml\")); schema=json.load(open(\"schemas/readme_meta.schema.json\")); jsonschema.validate(instance=meta, schema=schema); print(\"README_META.yaml valid\")" 2>&1'
+        language: system
+        files: '^\.github/README_META\.yaml$'
+        pass_filenames: false
+
+      - id: check-version-format
+        name: Check VERSION format
+        entry: bash -c 'VERSION=$(head -1 VERSION); if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "Invalid VERSION format: $VERSION"; exit 1; fi; echo "VERSION format OK: $VERSION"'
+        language: system
+        files: '^VERSION$'
+        pass_filenames: false
+
+  # Python code quality
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--unsafe']
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: debug-statements
+        language_version: python3
+
+  # Python formatting
+  - repo: https://github.com/psf/black
+    rev: 24.3.0
+    hooks:
+      - id: black
+        language_version: python3
+        args: ['--line-length=100']
+
+  # Python linting
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ['--profile', 'black', '--line-length', '100']
+
+  # Python type checking (optional, may have false positives)
+  # Uncomment if you want strict type checking
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.9.0
+  #   hooks:
+  #     - id: mypy
+  #       additional_dependencies: [types-all]
+  #       args: [--ignore-missing-imports]
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: ['-d', '{extends: relaxed, rules: {line-length: {max: 120}}}']
+
+# CI configuration
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit.com hooks
+
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false

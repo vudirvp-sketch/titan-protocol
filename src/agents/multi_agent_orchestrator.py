@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
 if TYPE_CHECKING:
     from ..events.event_bus import EventBus
     from ..decision.conflict_resolver import ConflictResolver, ConflictMetrics
+    from ..observability.agent_metrics_collector import AgentMetricsCollector
 
 # Configure module logger
 logger = logging.getLogger(__name__)
@@ -734,6 +735,13 @@ class MultiAgentOrchestrator:
         else:
             self._conflict_resolver = conflict_resolver
         
+        # Initialize metrics collector
+        try:
+            from ..observability.agent_metrics_collector import get_metrics_collector
+            self._metrics = get_metrics_collector()
+        except ImportError:
+            self._metrics = None
+        
         logger.info("MultiAgentOrchestrator initialized")
     
     # -------------------------------------------------------------------------
@@ -848,6 +856,10 @@ class MultiAgentOrchestrator:
                 "task_type": task.type,
             })
             
+            # Record navigation success metric
+            if self._metrics:
+                self._metrics.record_nav_success(selected_agent.id)
+            
             logger.info(f"Dispatched task {task.id} to agent {selected_agent.id}")
             return selected_agent.id
     
@@ -880,6 +892,16 @@ class MultiAgentOrchestrator:
                 "agent_id": result.agent_id,
                 "success": result.success,
             })
+            
+            # Record task completion metric
+            if self._metrics:
+                task = self._dispatched_tasks.get(result.task_id)
+                task_type = task.type if task else "unknown"
+                self._metrics.record_task_completion(
+                    result.agent_id,
+                    task_type,
+                    result.success
+                )
             
             logger.info(f"Result submitted for task {result.task_id} by agent {result.agent_id}")
     

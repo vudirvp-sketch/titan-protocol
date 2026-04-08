@@ -16,7 +16,7 @@ from typing import List
 import pytest
 import yaml
 
-from .extract_snippets import ReadmeSnippetExtractor, CodeBlock
+from tests.docs.extract_snippets import ReadmeSnippetExtractor, CodeBlock
 
 
 # Fixture for extracted snippets
