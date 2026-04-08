@@ -37,6 +37,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import Queue, Full
 
+from src.utils.timezone import now_utc, now_utc_iso, timestamp_for_id
+
 if TYPE_CHECKING:
     from ..state.event_journal import EventJournal
     from .dead_letter_queue import DeadLetterQueue, DLQStats, RetryResult
@@ -192,7 +194,7 @@ class HandlerEntry:
     """
     handler: Callable
     priority: int = 10  # Lower = higher priority
-    registered_at: datetime = field(default_factory=datetime.utcnow)
+    registered_at: datetime = field(default_factory=now_utc)
 
     def __lt__(self, other: 'HandlerEntry') -> bool:
         """Compare by priority, then by registration time."""
@@ -223,9 +225,9 @@ class Event:
     event_type: str
     data: Dict[str, Any]
     severity: EventSeverity = None  # Will be auto-determined if None
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    timestamp: str = field(default_factory=now_utc_iso)
     source: Optional[str] = None
-    event_id: str = field(default_factory=lambda: f"evt-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}")
+    event_id: str = field(default_factory=lambda: f"evt-{timestamp_for_id()}")
 
     def __post_init__(self):
         """ITEM-OBS-02: Auto-determine severity from event_type if not set."""
@@ -252,9 +254,9 @@ class Event:
             event_type=data["event_type"],
             data=data["data"],
             severity=severity,
-            timestamp=data.get("timestamp", datetime.utcnow().isoformat() + "Z"),
+            timestamp=data.get("timestamp", now_utc_iso()),
             source=data.get("source"),
-            event_id=data.get("event_id", f"evt-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}")
+            event_id=data.get("event_id", f"evt-{timestamp_for_id()}")
         )
 
     def __str__(self) -> str:

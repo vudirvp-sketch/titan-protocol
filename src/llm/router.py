@@ -24,6 +24,8 @@ from enum import Enum
 import logging
 import hashlib
 
+from src.utils.timezone import now_utc_iso
+
 
 class ExecutionStrictness(Enum):
     """Execution strictness levels."""
@@ -526,7 +528,7 @@ class ModelRouter:
             self.fallback_state.current_index += 1
             self.fallback_state.fallback_count += 1
             self.fallback_state.last_fallback_reason = reason
-            self.fallback_state.last_fallback_time = datetime.utcnow().isoformat() + "Z"
+            self.fallback_state.last_fallback_time = now_utc_iso()
             self.fallback_state.total_fallbacks += 1
             self._usage_stats["fallback_calls"] += 1
 

@@ -21,6 +21,8 @@ from datetime import datetime
 import logging
 import copy
 
+from src.utils.timezone import now_utc, now_utc_iso
+
 
 class GateType(Enum):
     """Type of gate."""
@@ -75,7 +77,7 @@ class GateCheckResult:
     result: GateResult
     message: str = ""
     details: Dict[str, Any] = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    timestamp: str = field(default_factory=now_utc_iso)
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -326,7 +328,7 @@ class GateManager:
         Returns:
             GateManagerResult with evaluation outcome
         """
-        start_time = datetime.utcnow()
+        start_time = now_utc()
         results: List[GateCheckResult] = []
         failed_gates: List[str] = []
         warnings: List[str] = []
@@ -366,7 +368,7 @@ class GateManager:
         else:
             overall_result = GateResult.PASS
         
-        end_time = datetime.utcnow()
+        end_time = now_utc()
         execution_time_ms = (end_time - start_time).total_seconds() * 1000
         
         return GateManagerResult(
@@ -392,7 +394,7 @@ class GateManager:
         Returns:
             GateManagerResult with evaluation outcome
         """
-        start_time = datetime.utcnow()
+        start_time = now_utc()
         results: List[GateCheckResult] = []
         failed_gates: List[str] = []
         warnings: List[str] = []
@@ -431,7 +433,7 @@ class GateManager:
         else:
             overall_result = GateResult.PASS
         
-        end_time = datetime.utcnow()
+        end_time = now_utc()
         execution_time_ms = (end_time - start_time).total_seconds() * 1000
         
         return GateManagerResult(

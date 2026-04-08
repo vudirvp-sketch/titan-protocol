@@ -29,6 +29,8 @@ import os
 import re
 from types import SimpleNamespace
 
+from src.utils.timezone import now_utc, now_utc_iso
+
 from .assessment import AssessmentScore
 from .cursor import CursorTracker, CursorState, DriftResult, compute_state_hash
 
@@ -390,8 +392,8 @@ class SessionState:
     # Session identification
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     protocol_version: str = "3.4.0"
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
-    updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    created_at: str = field(default_factory=now_utc_iso)
+    updated_at: str = field(default_factory=now_utc_iso)
 
     # Processing state
     state: str = "INIT"
@@ -482,7 +484,7 @@ class SessionState:
         if gate_id in self.gates:
             self.gates[gate_id] = {
                 "status": "PASS",
-                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "timestamp": now_utc_iso(),
                 "details": details or {}
             }
         self._update_timestamp()
@@ -493,7 +495,7 @@ class SessionState:
             self.gates[gate_id] = {
                 "status": "FAIL",
                 "reason": reason,
-                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "timestamp": now_utc_iso(),
                 "details": details or {}
             }
         self._update_timestamp()
@@ -504,7 +506,7 @@ class SessionState:
             self.gates[gate_id] = {
                 "status": "WARN",
                 "reason": reason,
-                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "timestamp": now_utc_iso(),
                 "details": details or {}
             }
         self._update_timestamp()
@@ -612,7 +614,7 @@ class SessionState:
 
     def _update_timestamp(self) -> None:
         """Update the updated_at timestamp."""
-        self.updated_at = datetime.utcnow().isoformat() + "Z"
+        self.updated_at = now_utc_iso()
 
 
 class StateManager:
@@ -661,7 +663,7 @@ class StateManager:
             "id": session_id,
             "status": "INITIALIZED",
             "protocol_version": self.PROTOCOL_VERSION,
-            "created_at": datetime.utcnow().isoformat() + "Z",
+            "created_at": now_utc_iso(),
             "source_file": source_file,
             "source_checksum": source_checksum,
             "max_tokens": max_tokens,
@@ -709,7 +711,7 @@ class StateManager:
         ) if self.repo_root else "checkpoint.json"
         
         checkpoint_data = self.current_session.copy()
-        checkpoint_data["saved_at"] = datetime.utcnow().isoformat() + "Z"
+        checkpoint_data["saved_at"] = now_utc_iso()
         
         try:
             import os

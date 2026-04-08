@@ -22,6 +22,8 @@ from pathlib import Path
 from collections import defaultdict
 import threading
 
+from src.utils.timezone import now_utc_iso
+
 
 # ITEM-OBS-03: Current metrics schema version
 METRICS_SCHEMA_VERSION = "3.7.1"
@@ -64,7 +66,7 @@ class MetricType(Enum):
 class MetricValue:
     """A single metric value."""
     value: Union[int, float]
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    timestamp: str = field(default_factory=now_utc_iso)
     labels: Dict[str, str] = field(default_factory=dict)
 
 
@@ -98,7 +100,7 @@ class Counter:
             key = self._labels_key(labels)
             if key in self._values:
                 self._values[key].value += value
-                self._values[key].timestamp = datetime.utcnow().isoformat() + "Z"
+                self._values[key].timestamp = now_utc_iso()
             else:
                 self._values[key] = MetricValue(
                     value=value,
@@ -172,7 +174,7 @@ class Gauge:
             key = self._labels_key(labels)
             if key in self._values:
                 self._values[key].value += value
-                self._values[key].timestamp = datetime.utcnow().isoformat() + "Z"
+                self._values[key].timestamp = now_utc_iso()
             else:
                 self._values[key] = MetricValue(
                     value=value,
@@ -230,9 +232,14 @@ class Histogram:
         )
         histogram.observe(0.42)
         histogram.observe(1.5)
+
+    ITEM-OBS-81: Added percentile calculation methods (p50, p95).
     """
 
     DEFAULT_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+
+    # ITEM-OBS-81: Maximum values to store for percentile calculation
+    MAX_PERCENTILE_VALUES = 10000
 
     def __init__(self, name: str, description: str = "",
                  buckets: Optional[List[float]] = None):
@@ -247,6 +254,8 @@ class Histogram:
         self._sum = 0.0
         self._count = 0
         self._lock = threading.Lock()
+        # ITEM-OBS-81: Store raw values for percentile calculation
+        self._values: List[float] = []
 
     def observe(self, value: float) -> None:
         """Observe a value."""
@@ -257,6 +266,15 @@ class Histogram:
             for bucket in self.buckets:
                 if value <= bucket.upper_bound:
                     bucket.count += 1
+
+            # ITEM-OBS-81: Store value for percentile calculation
+            # Limit stored values to prevent memory issues
+            if len(self._values) < self.MAX_PERCENTILE_VALUES:
+                self._values.append(value)
+            else:
+                # Circular buffer behavior: overwrite oldest
+                idx = self._count % self.MAX_PERCENTILE_VALUES
+                self._values[idx] = value
 
     def get_sum(self) -> float:
         """Get sum of observed values."""
@@ -272,6 +290,105 @@ class Histogram:
         """Get average of observed values."""
         with self._lock:
             return self._sum / self._count if self._count > 0 else 0
+
+    # ========================
+    # ITEM-OBS-81: Percentile Methods
+    # ========================
+
+    def get_values(self) -> List[float]:
+        """
+        Get all stored values for percentile calculation.
+
+        ITEM-OBS-81: Returns a copy of stored values.
+
+        Returns:
+            List of observed values
+        """
+        with self._lock:
+            return list(self._values)
+
+    def get_percentile(self, p: float) -> float:
+        """
+        Calculate the p-th percentile of observed values.
+
+        ITEM-OBS-81: Uses linear interpolation for accurate percentile calculation.
+
+        Args:
+            p: Percentile to calculate (0-100)
+
+        Returns:
+            The p-th percentile value, or 0.0 if no observations
+        """
+        import math
+
+        with self._lock:
+            if not self._values:
+                return 0.0
+
+            values = sorted(self._values)
+            n = len(values)
+
+            if n == 1:
+                return values[0]
+
+            # Use linear interpolation method
+            rank = (p / 100.0) * (n - 1)
+            lower_idx = int(math.floor(rank))
+            upper_idx = int(math.ceil(rank))
+
+            if lower_idx == upper_idx:
+                return values[lower_idx]
+
+            fraction = rank - lower_idx
+            return values[lower_idx] + fraction * (values[upper_idx] - values[lower_idx])
+
+    def get_p50(self) -> float:
+        """
+        Calculate the 50th percentile (median) of observed values.
+
+        ITEM-OBS-81: Convenience method for median calculation.
+
+        Returns:
+            The median value
+        """
+        return self.get_percentile(50)
+
+    def get_p95(self) -> float:
+        """
+        Calculate the 95th percentile of observed values.
+
+        ITEM-OBS-81: Convenience method for p95 calculation.
+
+        Returns:
+            The p95 value
+        """
+        return self.get_percentile(95)
+
+    def get_p99(self) -> float:
+        """
+        Calculate the 99th percentile of observed values.
+
+        ITEM-OBS-81: Convenience method for p99 calculation.
+
+        Returns:
+            The p99 value
+        """
+        return self.get_percentile(99)
+
+    def get_percentiles(self) -> Dict[str, float]:
+        """
+        Get common percentiles (p50, p95, p99).
+
+        ITEM-OBS-81: Returns a dictionary of percentile values.
+
+        Returns:
+            Dictionary with p50, p95, p99 values
+        """
+        return {
+            "p50": self.get_p50(),
+            "p95": self.get_p95(),
+            "p99": self.get_p99()
+        }
 
     def to_prometheus(self) -> str:
         """Export to Prometheus format."""
@@ -394,10 +511,11 @@ class MetricsCollector:
         Export all metrics as JSON.
 
         ITEM-OBS-03: Includes schema_version for format detection and migration.
+        ITEM-OBS-81: Includes percentiles (p50, p95, p99) for histograms.
         """
         return {
             "schema_version": METRICS_SCHEMA_VERSION,  # ITEM-OBS-03
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": now_utc_iso(),
             "namespace": self.namespace,
             "uptime_seconds": time.time() - self._start_time,
             "counters": {
@@ -412,7 +530,8 @@ class MetricsCollector:
                 name: {
                     "sum": h.get_sum(),
                     "count": h.get_count(),
-                    "average": h.get_average()
+                    "average": h.get_average(),
+                    "percentiles": h.get_percentiles()  # ITEM-OBS-81
                 }
                 for name, h in self._histograms.items()
             }

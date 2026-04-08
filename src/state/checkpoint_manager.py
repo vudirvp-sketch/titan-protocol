@@ -26,9 +26,11 @@ import shutil
 import hashlib
 import logging
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
+
+from src.utils.timezone import now_utc, now_utc_iso
 
 # Import from sibling modules
 from .checkpoint_serialization import (
@@ -69,7 +71,7 @@ class CheckpointMetadata:
     
     def __post_init__(self):
         if not self.created_at:
-            self.created_at = datetime.utcnow().isoformat() + "Z"
+            self.created_at = now_utc_iso()
         if not self.updated_at:
             self.updated_at = self.created_at
     
@@ -265,7 +267,7 @@ class CheckpointManager:
         checkpoint_data['_checkpoint_manager'] = {
             'session_id': session_id,
             'namespace': self.namespace,
-            'saved_at': datetime.utcnow().isoformat() + "Z",
+            'saved_at': now_utc_iso(),
             'version': '3.3.0'
         }
         
@@ -683,7 +685,7 @@ class CheckpointManager:
         from datetime import timedelta
         
         deleted_count = 0
-        cutoff = datetime.utcnow() - timedelta(days=max_age_days)
+        cutoff = now_utc() - timedelta(days=max_age_days)
         cutoff_str = cutoff.isoformat() + "Z"
         
         sessions = self.list_sessions()
