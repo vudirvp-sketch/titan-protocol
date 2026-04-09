@@ -1079,3 +1079,216 @@ context_adaptation:
           deterministic:
             fail_on_any_gap: false
       remove: [multi_agent]
+
+# ========================================
+# v1.2.0 Configuration Additions (PHASE_1)
+# ========================================
+
+# ITEM-005: Profile Detection (Self-Awareness Engine)
+self_awareness:
+  enabled: true
+  profile_detection:
+    # Detection method weights
+    weights:
+      lexical_analysis: 0.4
+      pattern_matching: 0.3
+      history_analysis: 0.2
+      explicit_signal: 0.1
+    # Cache settings
+    cache:
+      enabled: true
+      max_size: 1000
+      ttl_seconds: 3600
+      strategy: "lru"
+    # Localization support (currently disabled)
+    localization:
+      enabled: false
+      supported_languages: ["en"]
+    # Fallback profile when detection fails
+    fallback_profile: "developer"
+    # Minimum confidence to accept detection
+    min_confidence: 0.5
+  # User role profiles (different from execution profiles)
+  user_roles:
+    - designer
+    - developer
+    - analyst
+    - devops
+    - researcher
+
+# ITEM-008: Universal Router Configuration
+universal_router:
+  enabled: true
+  # Main entry point configuration
+  routing:
+    # Profile detection timeout
+    profile_detection_timeout_ms: 500
+    # Intent enrichment timeout
+    intent_enrichment_timeout_ms: 1000
+    # End-to-end routing timeout
+    total_timeout_ms: 2000
+    # Fallback behavior
+    fallback:
+      enabled: true
+      max_fallback_depth: 3
+      default_skill: "general_assistant"
+  # Chain composition settings
+  chain_composition:
+    max_chain_length: 10
+    parallel_execution: true
+    max_parallel_skills: 5
+    gate_validation: true
+  # Performance targets
+  performance:
+    p50_latency_ms: 300
+    p99_latency_ms: 500
+    timeout_ms: 2000
+
+# ITEM-010: Skill Graph Configuration
+skill_graph:
+  enabled: true
+  # Graph building settings
+  graph:
+    max_depth: 5
+    max_nodes: 100
+    cycle_detection: true
+  # Synergy tracking
+  synergy:
+    enabled: true
+    min_co_occurrence: 3
+    min_success_rate: 0.7
+  # Skill selection
+  selection:
+    max_candidates: 5
+    min_relevance_score: 0.5
+    diversity_factor: 0.3
+
+# ITEM-007: Session Memory Configuration
+session_memory:
+  enabled: true
+  # Storage settings
+  storage:
+    backend: "local"  # local | redis | s3
+    max_size_mb: 100
+    encryption: "aes-256-gcm"
+    compression: true
+  # Session settings
+  session:
+    default_ttl_seconds: 86400  # 24 hours
+    max_sessions_per_user: 10
+    cleanup_interval_seconds: 3600
+  # Migration support
+  migration:
+    enabled: true
+    backup_before_migrate: true
+    supported_versions: ["1.0.0", "1.1.0", "1.2.0"]
+  # History tracking
+  history:
+    max_entries: 1000
+    pattern_detection: true
+    pattern_min_occurrences: 3
+
+# ITEM-009: Tool Activation Matrix (already exists in config/tool_activation.yaml)
+# This section provides override capabilities
+tool_activation:
+  config_path: "config/tool_activation.yaml"
+  hot_reload: true
+  reload_interval_seconds: 60
+
+# Performance Monitoring Targets
+performance_targets:
+  # Profile detection SLA
+  profile_detection:
+    p50_latency_ms: 50
+    p99_latency_ms: 100
+    timeout_ms: 500
+  # Intent enrichment SLA
+  intent_enrichment:
+    p50_latency_ms: 100
+    p99_latency_ms: 200
+    timeout_ms: 1000
+  # Session memory operations SLA
+  session_memory:
+    read_latency_ms: 25
+    write_latency_ms: 50
+    timeout_ms: 200
+  # End-to-end routing SLA
+  routing:
+    p50_latency_ms: 300
+    p99_latency_ms: 500
+    timeout_ms: 2000
+
+# Monitoring Endpoints
+monitoring:
+  # Health check endpoint
+  health:
+    enabled: true
+    path: "/health"
+    port: 8080
+  # Readiness probe
+  readiness:
+    enabled: true
+    path: "/ready"
+    port: 8080
+  # Metrics endpoint
+  metrics:
+    enabled: true
+    path: "/metrics"
+    port: 9090
+    format: "prometheus"
+  # Debug endpoint (disabled by default)
+  debug:
+    enabled: false
+    path: "/debug"
+    port: 8080
+
+# Resilience Configuration (PHASE_3)
+resilience:
+  # Circuit breaker settings
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    success_threshold: 3
+    timeout_seconds: 60
+    half_open_max_calls: 3
+  # Retry settings
+  retry:
+    default_max_retries: 3
+    default_backoff: "exponential"
+    initial_delay_ms: 100
+    max_delay_ms: 30000
+    jitter: true
+  # Degradation settings
+  degradation:
+    enabled: true
+    levels:
+      - name: "full"
+        features: ["all"]
+      - name: "reduced"
+        features: ["core_routing", "basic_skills"]
+        disabled: ["advanced_skills", "caching", "synergy_tracking"]
+      - name: "minimal"
+        features: ["core_routing"]
+        disabled: ["advanced_skills", "caching", "synergy_tracking", "profile_detection", "intent_enrichment"]
+
+# Security Configuration (PHASE_3)
+security:
+  # Input sanitization
+  input_sanitization:
+    enabled: true
+    max_request_length: 10000
+    prompt_injection_detection: true
+    html_injection_detection: true
+    control_character_removal: true
+  # Session security
+  session_security:
+    enabled: true
+    max_session_age_seconds: 86400
+    session_id_rotation: true
+    secure_cookies: true
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+    requests_per_hour: 1000
+    burst_size: 10

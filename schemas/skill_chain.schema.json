@@ -1,0 +1,241 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "titan://schemas/skill_chain.schema.json",
+  "title": "TITAN Skill Chain Schema",
+  "description": "Single canonical schema for SkillChain used by UniversalRouter and ChainComposer in TITAN Protocol v5.0.0",
+  "version": "1.2.0",
+  "type": "object",
+  "properties": {
+    "chain_id": {
+      "type": "string",
+      "pattern": "^chain_[a-z0-9_]+$",
+      "description": "Unique identifier for the skill chain"
+    },
+    "skills": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/skill_execution" },
+      "minItems": 1,
+      "description": "Ordered list of skills in the chain"
+    },
+    "execution_order": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 0 },
+      "description": "Ordered list of skill indices defining execution sequence",
+      "default": []
+    },
+    "parallel_groups": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": { "type": "integer", "minimum": 0 }
+      },
+      "description": "Groups of skill indices that can execute in parallel",
+      "default": []
+    },
+    "context_mapping": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Maps input context keys to skill input keys",
+      "default": {}
+    },
+    "gates": {
+      "type": "array",
+      "items": { 
+        "type": "string",
+        "pattern": "^GATE-[0-9]{2}$"
+      },
+      "description": "Validation gates to execute during chain execution",
+      "default": []
+    },
+    "fallback_chain": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Alternative skill IDs to use if primary skills fail",
+      "default": []
+    },
+    "estimated_duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Estimated total execution duration in milliseconds",
+      "default": 0
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata about the chain",
+      "properties": {
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the chain was created"
+        },
+        "profile": {
+          "type": "string",
+          "description": "User profile that triggered chain creation"
+        },
+        "intent": {
+          "type": "string",
+          "description": "Intent that triggered chain creation"
+        },
+        "session_id": {
+          "type": "string",
+          "description": "Session identifier"
+        },
+        "request_id": {
+          "type": "string",
+          "description": "Original request identifier"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Chain schema version",
+          "default": "1.2.0"
+        }
+      },
+      "default": {}
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "running", "completed", "failed", "cancelled"],
+      "description": "Current status of the chain execution",
+      "default": "pending"
+    },
+    "error_handling": {
+      "type": "object",
+      "description": "Error handling configuration for the chain",
+      "properties": {
+        "stop_on_failure": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to stop chain on first failure"
+        },
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 3,
+          "description": "Maximum retries per skill"
+        },
+        "retry_delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1000,
+          "description": "Delay between retries in milliseconds"
+        },
+        "on_error": {
+          "type": "string",
+          "enum": ["stop", "skip", "fallback", "continue"],
+          "default": "stop",
+          "description": "Action to take on skill error"
+        }
+      },
+      "default": {}
+    }
+  },
+  "required": ["chain_id", "skills"],
+  "additionalProperties": false,
+  "definitions": {
+    "skill_execution": {
+      "type": "object",
+      "description": "Definition of a single skill execution within a chain",
+      "properties": {
+        "skill_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Unique identifier of the skill to execute"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Execution order index"
+        },
+        "input_mapping": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Maps chain context keys to skill input parameters",
+          "default": {}
+        },
+        "output_mapping": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Maps skill output to chain context keys",
+          "default": {}
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 30000,
+          "description": "Timeout for this skill execution in milliseconds"
+        },
+        "retry_policy": { "$ref": "#/definitions/retry_policy" },
+        "condition": {
+          "type": "string",
+          "description": "Optional condition expression to determine if this skill should run"
+        },
+        "required_gates": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Gates that must pass before this skill executes",
+          "default": []
+        },
+        "fallback_skill_id": {
+          "type": "string",
+          "description": "Alternative skill to use if this one fails"
+        },
+        "on_success": {
+          "type": "string",
+          "enum": ["continue", "stop", "skip_next"],
+          "default": "continue",
+          "description": "Action to take after successful execution"
+        },
+        "on_failure": {
+          "type": "string",
+          "enum": ["stop", "skip", "fallback", "continue"],
+          "default": "stop",
+          "description": "Action to take after failed execution"
+        }
+      },
+      "required": ["skill_id", "order"]
+    },
+    "retry_policy": {
+      "type": "object",
+      "description": "Retry configuration for a skill execution",
+      "properties": {
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 3,
+          "description": "Maximum number of retry attempts"
+        },
+        "backoff_strategy": {
+          "type": "string",
+          "enum": ["fixed", "exponential", "linear", "jittered"],
+          "default": "exponential",
+          "description": "Backoff strategy for retries"
+        },
+        "initial_delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 100,
+          "description": "Initial delay before first retry"
+        },
+        "max_delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 30000,
+          "description": "Maximum delay between retries"
+        },
+        "jitter": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to add jitter to delays"
+        },
+        "retry_on_errors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Error types that should trigger retry",
+          "default": ["timeout", "connection_error", "rate_limit"]
+        }
+      },
+      "default": {}
+    }
+  }
+}

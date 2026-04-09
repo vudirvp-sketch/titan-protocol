@@ -3,7 +3,7 @@
   "$id": "titan://schemas/context_bridge.schema.json",
   "title": "Context Bridge Event Payload",
   "description": "Schema for EVENT_CONTEXT_READY payload validation in TITAN Protocol v5.0.0",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "object",
   "properties": {
     "event_type": {

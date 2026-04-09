@@ -3,7 +3,7 @@
   "$id": "titan://schemas/skill.schema.json",
   "title": "TITAN Skill Definition Schema",
   "description": "Machine-readable I/O contract for skill definitions in TITAN Protocol v5.0.0",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "object",
   "properties": {
     "skill_id": {

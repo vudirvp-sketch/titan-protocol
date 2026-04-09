@@ -3,7 +3,7 @@
   "$id": "titan://schemas/event_types.schema.json",
   "title": "TITAN Event Types Registry",
   "description": "Complete registry of all event types for EventBus registration in TITAN Protocol v5.0.0",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "definitions": {
     "SkillCompositionRequest": {
       "type": "object",

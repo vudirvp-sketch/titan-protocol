@@ -122,6 +122,7 @@ class ExecutionResult:
         next_action: Suggested next action
         error: Error message if execution failed
         execution_time_ms: Time taken for execution
+        fallback_used: Whether a fallback skill was used for this execution
     """
     success: bool = True
     outputs: Dict[str, Any] = field(default_factory=dict)
@@ -130,6 +131,7 @@ class ExecutionResult:
     next_action: Optional[RoutingAction] = None
     error: Optional[str] = None
     execution_time_ms: int = 0
+    fallback_used: bool = False
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -140,7 +142,8 @@ class ExecutionResult:
             "metrics": self.metrics,
             "next_action": self.next_action.value if self.next_action else None,
             "error": self.error,
-            "execution_time_ms": self.execution_time_ms
+            "execution_time_ms": self.execution_time_ms,
+            "fallback_used": self.fallback_used
         }
     
     @classmethod
