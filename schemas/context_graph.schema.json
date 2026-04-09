@@ -1,158 +1,157 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://titan-fuse.io/schemas/context_graph.schema.json",
+  "$id": "https://github.com/vudirvp-sketch/titan-protocol/schemas/context_graph.schema.json",
   "title": "TITAN Context Graph Schema",
-  "description": "Schema for TITAN FUSE Protocol Context Graph - manages trust scores, version vectors, and context node relationships",
+  "description": "Schema for TITAN Protocol Context Graph - a trust-aware graph of context nodes and their relationships",
   "type": "object",
   "required": ["version", "nodes", "edges", "metadata"],
   "properties": {
     "version": {
       "type": "string",
-      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
-      "description": "Schema version in semantic versioning format"
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Schema version",
+      "default": "1.0.0"
+    },
+    "session_id": {
+      "type": "string",
+      "description": "Optional session identifier"
     },
     "nodes": {
       "type": "array",
-      "description": "Array of context nodes representing files, symbols, modules, or configurations",
       "items": {
-        "type": "object",
-        "required": ["id", "type", "location", "trust_score"],
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Unique identifier for the node (e.g., file path, symbol name)"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["file", "symbol", "module", "config", "checkpoint", "artifact"],
-            "description": "Type of the context node"
-          },
-          "location": {
-            "type": "string",
-            "description": "File path or location reference"
-          },
-          "trust_score": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
-            "description": "Trust score from 0.0 (untrusted) to 1.0 (fully trusted)"
-          },
-          "trust_tier": {
-            "type": "string",
-            "enum": ["TIER_1_TRUSTED", "TIER_2_RELIABLE", "TIER_3_UNCERTAIN", "TIER_4_UNTRUSTED"],
-            "description": "Trust tier classification"
-          },
-          "last_modified": {
-            "type": "string",
-            "format": "date-time",
-            "description": "ISO 8601 timestamp of last modification"
-          },
-          "last_accessed": {
-            "type": "string",
-            "format": "date-time",
-            "description": "ISO 8601 timestamp of last access"
-          },
-          "content_hash": {
-            "type": "string",
-            "description": "SHA-256 hash of node content"
-          },
-          "semantic_hash": {
-            "type": "string",
-            "description": "AST-based semantic hash for change detection"
-          },
-          "version_vector": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "description": "Version vector for causal ordering (node_id -> counter)"
-          },
-          "usage_count": {
-            "type": "integer",
-            "minimum": 0,
-            "default": 0,
-            "description": "Number of times this node has been accessed"
-          },
-          "success_rate": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
-            "description": "Success rate of operations involving this node"
-          },
-          "metadata": {
-            "type": "object",
-            "description": "Additional node metadata",
-            "properties": {
-              "size_bytes": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "line_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "language": {
-                "type": "string"
-              },
-              "tags": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
+        "$ref": "#/definitions/ContextNode"
+      },
+      "description": "List of context nodes"
     },
     "edges": {
       "type": "array",
-      "description": "Array of edges representing relationships between nodes",
       "items": {
-        "type": "object",
-        "required": ["from", "to", "relation"],
-        "properties": {
-          "from": {
-            "type": "string",
-            "description": "Source node ID"
-          },
-          "to": {
-            "type": "string",
-            "description": "Target node ID"
-          },
-          "relation": {
-            "type": "string",
-            "enum": ["imports", "calls", "depends_on", "extends", "implements", "references", "contains", "produces"],
-            "description": "Type of relationship between nodes"
-          },
-          "weight": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
-            "default": 1,
-            "description": "Edge weight for routing decisions"
-          },
-          "metadata": {
-            "type": "object",
-            "description": "Additional edge metadata",
-            "properties": {
-              "line_number": {
-                "type": "integer"
-              },
-              "is_static": {
-                "type": "boolean"
-              },
-              "created_at": {
-                "type": "string",
-                "format": "date-time"
-              }
-            }
-          }
+        "$ref": "#/definitions/ContextEdge"
+      },
+      "description": "List of relationships between nodes"
+    },
+    "metadata": {
+      "$ref": "#/definitions/GraphMetadata",
+      "description": "Graph metadata and statistics"
+    }
+  },
+  "definitions": {
+    "NodeType": {
+      "type": "string",
+      "enum": ["file", "symbol", "module", "config", "checkpoint", "artifact"],
+      "description": "Type of context node"
+    },
+    "EdgeRelation": {
+      "type": "string",
+      "enum": ["imports", "calls", "depends_on", "extends", "implements", "references", "contains", "produces"],
+      "description": "Type of relationship between nodes"
+    },
+    "TrustTier": {
+      "type": "string",
+      "enum": ["TIER_1_TRUSTED", "TIER_2_RELIABLE", "TIER_3_UNCERTAIN", "TIER_4_UNTRUSTED"],
+      "description": "Trust tier classification"
+    },
+    "VersionVector": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "description": "Vector clock for change tracking"
+    },
+    "ContextNode": {
+      "type": "object",
+      "required": ["id", "type", "location", "trust_score"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique node identifier (usually file path)"
+        },
+        "type": {
+          "$ref": "#/definitions/NodeType"
+        },
+        "location": {
+          "type": "string",
+          "description": "File path or location of the node"
+        },
+        "trust_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5,
+          "description": "Trust score from 0.0 to 1.0"
+        },
+        "last_modified": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of last modification"
+        },
+        "content_hash": {
+          "type": "string",
+          "description": "SHA-256 hash of file content"
+        },
+        "semantic_hash": {
+          "type": "string",
+          "description": "Semantic hash ignoring comments/whitespace"
+        },
+        "version_vector": {
+          "$ref": "#/definitions/VersionVector",
+          "description": "Version vector for change tracking"
+        },
+        "usage_count": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Number of times node was accessed"
+        },
+        "success_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1.0,
+          "description": "Success rate of operations on this node"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Additional node metadata"
         }
       }
     },
-    "metadata": {
+    "ContextEdge": {
+      "type": "object",
+      "required": ["from", "to", "relation"],
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "Source node ID"
+        },
+        "to": {
+          "type": "string",
+          "description": "Target node ID"
+        },
+        "relation": {
+          "$ref": "#/definitions/EdgeRelation"
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1.0,
+          "description": "Edge weight/strength"
+        },
+        "line_number": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Line number where relationship is defined"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Additional edge metadata"
+        }
+      }
+    },
+    "GraphMetadata": {
       "type": "object",
       "required": ["generated_at", "total_nodes", "total_edges"],
       "properties": {
@@ -164,12 +163,12 @@
         "total_nodes": {
           "type": "integer",
           "minimum": 0,
-          "description": "Total number of nodes in the graph"
+          "description": "Total number of nodes"
         },
         "total_edges": {
           "type": "integer",
           "minimum": 0,
-          "description": "Total number of edges in the graph"
+          "description": "Total number of edges"
         },
         "avg_trust_score": {
           "type": "number",
@@ -182,7 +181,7 @@
           "items": {
             "type": "string"
           },
-          "description": "List of node IDs that are considered stale"
+          "description": "List of stale node IDs"
         },
         "trust_distribution": {
           "type": "object",
@@ -207,11 +206,12 @@
         },
         "protocol_version": {
           "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
           "description": "TITAN Protocol version"
         },
-        "session_id": {
+        "root_path": {
           "type": "string",
-          "description": "Session ID for this graph"
+          "description": "Root path used for graph generation"
         }
       }
     }

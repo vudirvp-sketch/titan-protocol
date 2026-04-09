@@ -1,345 +1,83 @@
 {
   "version": "1.0.0",
+  "session_id": "example-session",
   "nodes": [
     {
       "id": "src/context/context_graph.py",
       "type": "file",
       "location": "src/context/context_graph.py",
       "trust_score": 0.85,
-      "trust_tier": "TIER_1_TRUSTED",
-      "content_hash": "a1b2c3d4e5f67890",
-      "semantic_hash": "s1h2a3m4i5n6g7",
-      "version_vector": {
-        "src/context/context_graph.py": 5
-      },
-      "last_modified": "2026-04-09T10:00:00Z",
-      "last_accessed": "2026-04-09T12:00:00Z",
-      "usage_count": 42,
-      "success_rate": 0.95,
+      "content_hash": "abc123def456",
+      "semantic_hash": "sem789ghi012",
+      "last_modified": "2026-04-09T12:00:00Z",
+      "usage_count": 15,
+      "success_rate": 1.0,
       "metadata": {
         "extension": ".py",
-        "size_bytes": 26152,
-        "language": "python",
-        "line_count": 650,
-        "tags": ["core", "sae", "context"]
+        "size_bytes": 8500,
+        "language": "python"
       }
     },
     {
       "id": "src/context/trust_engine.py",
       "type": "file",
       "location": "src/context/trust_engine.py",
-      "trust_score": 0.82,
-      "trust_tier": "TIER_1_TRUSTED",
-      "content_hash": "b2c3d4e5f6g78901",
-      "semantic_hash": "t2r3u4s5t6e7n8",
-      "version_vector": {
-        "src/context/trust_engine.py": 3
-      },
-      "last_modified": "2026-04-09T09:30:00Z",
-      "last_accessed": "2026-04-09T12:05:00Z",
-      "usage_count": 28,
-      "success_rate": 0.92,
+      "trust_score": 0.80,
+      "content_hash": "def789abc123",
+      "semantic_hash": "jkl345mno678",
+      "last_modified": "2026-04-09T11:30:00Z",
+      "usage_count": 12,
+      "success_rate": 0.95,
       "metadata": {
         "extension": ".py",
-        "size_bytes": 19587,
-        "language": "python",
-        "line_count": 480,
-        "tags": ["core", "sae", "trust"]
+        "size_bytes": 6200,
+        "language": "python"
       }
     },
     {
       "id": "src/context/version_vectors.py",
       "type": "file",
       "location": "src/context/version_vectors.py",
-      "trust_score": 0.78,
-      "trust_tier": "TIER_2_RELIABLE",
-      "content_hash": "c3d4e5f6g7h89012",
-      "semantic_hash": "v3e4r5s6i7o8n9",
-      "version_vector": {
-        "src/context/version_vectors.py": 4
-      },
-      "last_modified": "2026-04-09T08:15:00Z",
-      "last_accessed": "2026-04-09T11:30:00Z",
-      "usage_count": 15,
-      "success_rate": 0.88,
-      "metadata": {
-        "extension": ".py",
-        "size_bytes": 26327,
-        "language": "python",
-        "line_count": 620,
-        "tags": ["core", "sae", "versioning"]
-      }
-    },
-    {
-      "id": "src/context/drift_detector.py",
-      "type": "file",
-      "location": "src/context/drift_detector.py",
       "trust_score": 0.75,
-      "trust_tier": "TIER_2_RELIABLE",
-      "content_hash": "d4e5f6g7h8i90123",
-      "semantic_hash": "d4r5i6f7t8d9e0",
-      "version_vector": {
-        "src/context/drift_detector.py": 2
-      },
-      "last_modified": "2026-04-08T16:00:00Z",
-      "last_accessed": "2026-04-09T10:00:00Z",
+      "content_hash": "ghi012jkl345",
+      "semantic_hash": "pqr901stu234",
+      "last_modified": "2026-04-09T10:45:00Z",
       "usage_count": 8,
-      "success_rate": 0.85,
-      "metadata": {
-        "extension": ".py",
-        "size_bytes": 16461,
-        "language": "python",
-        "line_count": 380,
-        "tags": ["core", "sae", "drift"]
-      }
-    },
-    {
-      "id": "src/context/summarization.py",
-      "type": "file",
-      "location": "src/context/summarization.py",
-      "trust_score": 0.72,
-      "trust_tier": "TIER_2_RELIABLE",
-      "content_hash": "e5f6g7h8i9j01234",
-      "semantic_hash": "s5u6m7m8a9r0y1",
-      "version_vector": {
-        "src/context/summarization.py": 2
-      },
-      "last_modified": "2026-04-08T14:00:00Z",
-      "last_accessed": "2026-04-09T09:00:00Z",
-      "usage_count": 5,
-      "success_rate": 0.90,
-      "metadata": {
-        "extension": ".py",
-        "size_bytes": 15974,
-        "language": "python",
-        "line_count": 350,
-        "tags": ["core", "sae", "summarization"]
-      }
-    },
-    {
-      "id": "src/context/profile_router.py",
-      "type": "file",
-      "location": "src/context/profile_router.py",
-      "trust_score": 0.88,
-      "trust_tier": "TIER_1_TRUSTED",
-      "content_hash": "f6g7h8i9j0k12345",
-      "semantic_hash": "p6r7o8f9i0l1e2",
-      "version_vector": {
-        "src/context/profile_router.py": 7
-      },
-      "last_modified": "2026-04-09T11:00:00Z",
-      "last_accessed": "2026-04-09T12:10:00Z",
-      "usage_count": 65,
-      "success_rate": 0.97,
-      "metadata": {
-        "extension": ".py",
-        "size_bytes": 29593,
-        "language": "python",
-        "line_count": 720,
-        "tags": ["core", "routing", "profile"]
-      }
-    },
-    {
-      "id": "src/events/event_bus.py",
-      "type": "file",
-      "location": "src/events/event_bus.py",
-      "trust_score": 0.90,
-      "trust_tier": "TIER_1_TRUSTED",
-      "content_hash": "g7h8i9j0k1l23456",
-      "semantic_hash": "e7v8e9n0t1b2u3",
-      "version_vector": {
-        "src/events/event_bus.py": 10
-      },
-      "last_modified": "2026-04-09T07:00:00Z",
-      "last_accessed": "2026-04-09T12:15:00Z",
-      "usage_count": 120,
-      "success_rate": 0.99,
-      "metadata": {
-        "extension": ".py",
-        "size_bytes": 40425,
-        "language": "python",
-        "line_count": 980,
-        "tags": ["core", "events", "messaging"]
-      }
-    },
-    {
-      "id": "src/events/context_events.py",
-      "type": "file",
-      "location": "src/events/context_events.py",
-      "trust_score": 0.83,
-      "trust_tier": "TIER_1_TRUSTED",
-      "content_hash": "h8i9j0k1l2m34567",
-      "semantic_hash": "c8o9n0t1e2x3t4",
-      "version_vector": {
-        "src/events/context_events.py": 4
-      },
-      "last_modified": "2026-04-09T08:00:00Z",
-      "last_accessed": "2026-04-09T12:00:00Z",
-      "usage_count": 45,
-      "success_rate": 0.95,
-      "metadata": {
-        "extension": ".py",
-        "size_bytes": 13642,
-        "language": "python",
-        "line_count": 320,
-        "tags": ["events", "context", "sae"]
-      }
-    },
-    {
-      "id": "tests/test_context_graph.py",
-      "type": "file",
-      "location": "tests/test_context_graph.py",
-      "trust_score": 0.65,
-      "trust_tier": "TIER_2_RELIABLE",
-      "content_hash": "i9j0k1l2m3n45678",
-      "semantic_hash": "t9e0s1t2c3o4n5",
-      "version_vector": {
-        "tests/test_context_graph.py": 3
-      },
-      "last_modified": "2026-04-08T20:00:00Z",
-      "last_accessed": "2026-04-09T10:30:00Z",
-      "usage_count": 25,
-      "success_rate": 0.92,
-      "metadata": {
-        "extension": ".py",
-        "size_bytes": 18500,
-        "language": "python",
-        "line_count": 450,
-        "tags": ["test", "context", "sae"]
-      }
-    },
-    {
-      "id": "schemas/context_graph.schema.json",
-      "type": "config",
-      "location": "schemas/context_graph.schema.json",
-      "trust_score": 0.95,
-      "trust_tier": "TIER_1_TRUSTED",
-      "content_hash": "j0k1l2m3n4o56789",
-      "semantic_hash": "s0c1h2e3m4a5j6",
-      "version_vector": {
-        "schemas/context_graph.schema.json": 2
-      },
-      "last_modified": "2026-04-07T12:00:00Z",
-      "last_accessed": "2026-04-09T11:00:00Z",
-      "usage_count": 30,
       "success_rate": 1.0,
       "metadata": {
-        "extension": ".json",
-        "size_bytes": 6810,
-        "language": "json",
-        "line_count": 180,
-        "tags": ["schema", "validation", "config"]
+        "extension": ".py",
+        "size_bytes": 4800,
+        "language": "python"
       }
     }
   ],
   "edges": [
     {
-      "from": "src/context/trust_engine.py",
-      "to": "src/context/context_graph.py",
-      "relation": "imports",
-      "weight": 0.9,
-      "metadata": {
-        "import_count": 4,
-        "is_static": true
-      }
-    },
-    {
-      "from": "src/context/version_vectors.py",
-      "to": "src/context/context_graph.py",
-      "relation": "imports",
-      "weight": 0.85,
-      "metadata": {
-        "import_count": 3,
-        "is_static": true
-      }
-    },
-    {
-      "from": "src/context/drift_detector.py",
-      "to": "src/context/context_graph.py",
-      "relation": "imports",
-      "weight": 0.8,
-      "metadata": {
-        "import_count": 2,
-        "is_static": true
-      }
-    },
-    {
-      "from": "src/context/drift_detector.py",
-      "to": "src/context/semantic_checksum.py",
-      "relation": "imports",
-      "weight": 0.75,
-      "metadata": {
-        "import_count": 2,
-        "is_static": true
-      }
-    },
-    {
-      "from": "src/context/profile_router.py",
-      "to": "src/context/context_graph.py",
-      "relation": "imports",
-      "weight": 0.7,
-      "metadata": {
-        "import_count": 1,
-        "is_static": true,
-        "type_checking_only": true
-      }
-    },
-    {
-      "from": "src/context/profile_router.py",
-      "to": "src/context/drift_detector.py",
-      "relation": "imports",
-      "weight": 0.7,
-      "metadata": {
-        "import_count": 1,
-        "is_static": true,
-        "type_checking_only": true
-      }
-    },
-    {
-      "from": "src/events/context_events.py",
-      "to": "src/events/event_bus.py",
-      "relation": "imports",
-      "weight": 0.95,
-      "metadata": {
-        "import_count": 3,
-        "is_static": true
-      }
-    },
-    {
-      "from": "tests/test_context_graph.py",
-      "to": "src/context/context_graph.py",
-      "relation": "imports",
-      "weight": 0.6,
-      "metadata": {
-        "import_count": 5,
-        "is_static": true
-      }
-    },
-    {
-      "from": "tests/test_context_graph.py",
+      "from": "src/context/context_graph.py",
       "to": "src/context/trust_engine.py",
       "relation": "imports",
-      "weight": 0.6,
-      "metadata": {
-        "import_count": 2,
-        "is_static": true
-      }
+      "weight": 1.0
+    },
+    {
+      "from": "src/context/trust_engine.py",
+      "to": "src/context/version_vectors.py",
+      "relation": "imports",
+      "weight": 0.8
     }
   ],
   "metadata": {
-    "generated_at": "2026-04-09T12:30:00Z",
-    "total_nodes": 10,
-    "total_edges": 9,
-    "avg_trust_score": 0.813,
+    "generated_at": "2026-04-09T12:00:00Z",
+    "total_nodes": 3,
+    "total_edges": 2,
+    "avg_trust_score": 0.80,
     "stale_nodes": [],
     "trust_distribution": {
-      "TIER_1_TRUSTED": 6,
-      "TIER_2_RELIABLE": 4,
+      "TIER_1_TRUSTED": 2,
+      "TIER_2_RELIABLE": 1,
       "TIER_3_UNCERTAIN": 0,
       "TIER_4_UNTRUSTED": 0
     },
     "protocol_version": "5.1.0",
-    "session_id": "sae-phase2-implementation",
-    "root_path": "/titan-protocol"
+    "root_path": "/path/to/titan-protocol"
   }
 }

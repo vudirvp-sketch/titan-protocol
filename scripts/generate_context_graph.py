@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """
-TITAN Protocol - Generate Context Graph Script
+TITAN Protocol - Context Graph Generator CLI
 
-CLI tool to generate context_graph.json for a repository.
+Command-line interface for generating context_graph.json.
 
 Usage:
-    python scripts/generate_context_graph.py [ROOT_PATH] [OUTPUT_PATH]
-    
-    ROOT_PATH: Repository root (default: current directory)
-    OUTPUT_PATH: Output file path (default: .ai/context_graph.json)
+    python scripts/generate_context_graph.py [ROOT_PATH] [OUTPUT_PATH] [--exclude DIR1 DIR2 ...]
+
+Examples:
+    # Generate for current directory
+    python scripts/generate_context_graph.py . .ai/context_graph.json
+
+    # Generate with exclusions
+    python scripts/generate_context_graph.py . .ai/context_graph.json --exclude node_modules venv build
 
 Author: TITAN FUSE Team
 Version: 1.0.0
@@ -19,9 +23,10 @@ import logging
 import sys
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / "src"))
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.navigation.context_graph_builder import build_context_graph
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
+    """Main entry point for context graph generator."""
     parser = argparse.ArgumentParser(
         description="Generate context_graph.json for TITAN Protocol"
     )
@@ -38,58 +44,62 @@ def main():
         "root_path",
         nargs="?",
         default=".",
-        help="Repository root path (default: current directory)"
+        help="Root directory to analyze (default: current directory)"
     )
     parser.add_argument(
         "output_path",
         nargs="?",
         default=".ai/context_graph.json",
-        help="Output file path (default: .ai/context_graph.json)"
+        help="Output path for context_graph.json (default: .ai/context_graph.json)"
     )
     parser.add_argument(
         "--exclude",
         nargs="+",
-        default=[],
-        help="Directories to exclude"
+        default=None,
+        help="Directories to exclude from analysis"
     )
     parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Enable verbose logging"
     )
-    
+
     args = parser.parse_args()
-    
+
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
-    
+
+    logger.info(f"Generating context graph for: {args.root_path}")
+    logger.info(f"Output path: {args.output_path}")
+
+    if args.exclude:
+        logger.info(f"Excluding directories: {args.exclude}")
+
     try:
-        from src.navigation.context_graph_builder import build_context_graph
-        
-        logger.info(f"Building context graph for: {args.root_path}")
-        
         graph = build_context_graph(
             root_path=args.root_path,
             output_path=args.output_path,
-            exclude_dirs=args.exclude or None
+            exclude_dirs=args.exclude
         )
-        
-        logger.info(f"Generated context graph:")
-        logger.info(f"  Nodes: {graph['metadata']['total_nodes']}")
-        logger.info(f"  Edges: {graph['metadata']['total_edges']}")
-        logger.info(f"  Avg Trust: {graph['metadata']['avg_trust_score']:.3f}")
-        logger.info(f"  Trust Distribution: {graph['metadata']['trust_distribution']}")
-        
-        print(f"\n✓ Context graph saved to: {args.output_path}")
-        
-    except ImportError as e:
-        logger.error(f"Failed to import required modules: {e}")
-        logger.error("Make sure you're running from the project root")
-        sys.exit(1)
+
+        print(f"\n{'='*60}")
+        print("Context Graph Generation Complete")
+        print(f"{'='*60}")
+        print(f"Total nodes: {graph['metadata']['total_nodes']}")
+        print(f"Total edges: {graph['metadata']['total_edges']}")
+        print(f"Average trust score: {graph['metadata']['avg_trust_score']:.3f}")
+        print(f"\nTrust Distribution:")
+        for tier, count in graph['metadata']['trust_distribution'].items():
+            print(f"  {tier}: {count}")
+        print(f"\nOutput saved to: {args.output_path}")
+        print(f"{'='*60}")
+
+        return 0
+
     except Exception as e:
         logger.error(f"Failed to generate context graph: {e}")
-        sys.exit(1)
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
