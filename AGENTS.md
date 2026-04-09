@@ -61,7 +61,7 @@ cp your-large-file.md inputs/
 ## Protocol Architecture
 
 ```mermaid
-graph TD
+flowchart TD
     A[Agent Entry] -->|Read| B(AGENTS.md)
     B --> C{Intent Router}
     C -->|Process file| D[inputs/]
