@@ -1,0 +1,150 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "titan://schemas/context_bridge.schema.json",
+  "title": "Context Bridge Event Payload",
+  "description": "Schema for EVENT_CONTEXT_READY payload validation in TITAN Protocol v5.0.0",
+  "version": "1.1.0",
+  "type": "object",
+  "properties": {
+    "event_type": {
+      "const": "EVENT_CONTEXT_READY",
+      "description": "Event type identifier"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when the event was created"
+    },
+    "source": {
+      "type": "string",
+      "description": "Component that emitted this event"
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^evt-[a-zA-Z0-9]+$",
+      "description": "Unique event identifier"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Main payload containing enriched context",
+      "properties": {
+        "enriched_intent": {
+          "type": "object",
+          "description": "Enriched intent information",
+          "properties": {
+            "original_intent": {
+              "type": "string",
+              "description": "Original user request or intent"
+            },
+            "enhanced_intent": {
+              "type": "string",
+              "description": "Enhanced or clarified intent"
+            },
+            "intent_type": {
+              "type": "string",
+              "description": "Classified intent type (e.g., refactor, debug, analyze)"
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Confidence score for intent classification"
+            },
+            "keywords": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Extracted keywords from the intent"
+            }
+          },
+          "required": ["original_intent"]
+        },
+        "skill_hints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Suggested skills that might be relevant",
+          "default": []
+        },
+        "critical_gates": {
+          "type": "array",
+          "items": { 
+            "type": "string",
+            "pattern": "^GATE-[0-9]{2}$"
+          },
+          "description": "Critical gates that should be checked",
+          "default": []
+        },
+        "abstraction_contracts": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Contracts for abstraction layers",
+          "default": {}
+        },
+        "user_profile": {
+          "type": "object",
+          "description": "Detected user profile information",
+          "properties": {
+            "detected_role": {
+              "type": "string",
+              "enum": ["designer", "developer", "analyst", "devops", "researcher", "unknown"],
+              "description": "Detected user role"
+            },
+            "role_confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Confidence in role detection"
+            },
+            "session_type": {
+              "type": "string",
+              "enum": ["interactive", "batch", "ci_cd", "api"],
+              "description": "Type of session"
+            },
+            "preferred_tools": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Tools preferred by the user based on history",
+              "default": []
+            },
+            "history_patterns": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Patterns detected from user history",
+              "default": []
+            },
+            "expertise_level": {
+              "type": "string",
+              "enum": ["beginner", "intermediate", "advanced", "expert"],
+              "description": "Estimated expertise level"
+            }
+          },
+          "default": {}
+        },
+        "context_metadata": {
+          "type": "object",
+          "description": "Additional context metadata",
+          "properties": {
+            "request_id": { "type": "string" },
+            "session_id": { "type": "string" },
+            "parent_event_id": { "type": "string" },
+            "correlation_id": { "type": "string" },
+            "timeout_ms": { "type": "integer", "minimum": 0 }
+          },
+          "default": {}
+        },
+        "routing_decision": {
+          "type": "object",
+          "description": "Routing decision made by the intent enricher",
+          "properties": {
+            "target_pipeline": { "type": "string" },
+            "fallback_pipeline": { "type": "string" },
+            "routing_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "routing_reason": { "type": "string" }
+          },
+          "default": {}
+        }
+      },
+      "required": ["enriched_intent", "skill_hints"]
+    }
+  },
+  "required": ["event_type", "timestamp", "payload"]
+}

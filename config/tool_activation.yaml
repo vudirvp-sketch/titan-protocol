@@ -1,0 +1,393 @@
+# ========================================
+# TITAN PROTOCOL v5.0.0 - TOOL ACTIVATION MATRIX
+# ========================================
+# ITEM-009: Profile + Intent → Tool Activation Mapping
+# Version: 1.1.0
+# Generated: 2026-04-09
+# ========================================
+
+version: "1.1.0"
+
+# ========================================
+# DEFAULT TOOLS (Available to all profiles)
+# ========================================
+default_tools:
+  - read_file
+  - write_file
+  - list_directory
+  - memory_get
+  - memory_set
+  - llm_query
+
+# ========================================
+# PROFILE-SPECIFIC TOOL ACTIVATION
+# ========================================
+profiles:
+  
+  # ----------------------------------------
+  # DESIGNER PROFILE
+  # Focus: UI/UX, visualization, documentation
+  # ----------------------------------------
+  designer:
+    default:
+      - web_search
+      - web_fetch
+      - llm_query
+      - image_generate
+    intents:
+      research:
+        - web_search
+        - web_fetch
+        - llm_query
+        - doc_generator
+      visualize:
+        - ast_parse
+        - llm_query
+        - graph_renderer
+        - image_generate
+        - export_tool
+      document:
+        - llm_query
+        - write_file
+        - template_engine
+        - doc_generator
+      export:
+        - write_file
+        - export_tool
+        - format_converter
+
+  # ----------------------------------------
+  # DEVELOPER PROFILE
+  # Focus: Code, debugging, implementation
+  # ----------------------------------------
+  developer:
+    default:
+      - grep_search
+      - ast_parse
+      - llm_query
+      - read_file
+    intents:
+      refactor:
+        - ast_parse
+        - grep_search
+        - llm_query
+        - exec_command
+        - diff_applier
+        - cycle_detector
+        - dependency_resolver
+      debug:
+        - grep_search
+        - read_file
+        - llm_query
+        - error_analyzer
+        - trace_collector
+        - fix_generator
+      implement:
+        - ast_parse
+        - write_file
+        - llm_query
+        - exec_command
+        - test_runner
+        - diff_applier
+      audit:
+        - grep_search
+        - ast_parse
+        - llm_query
+        - security_scanner
+        - crossref_validator
+        - gap_detector
+      test:
+        - ast_parse
+        - exec_command
+        - llm_query
+        - test_runner
+        - coverage_analyzer
+
+  # ----------------------------------------
+  # ANALYST PROFILE
+  # Focus: Data, validation, reporting
+  # ----------------------------------------
+  analyst:
+    default:
+      - llm_query
+      - read_file
+      - web_search
+    intents:
+      validate:
+        - grep_search
+        - ast_parse
+        - llm_query
+        - schema_validator
+        - crossref_validator
+      synthesize:
+        - read_file
+        - llm_query
+        - data_merger
+        - format_converter
+      report:
+        - llm_query
+        - write_file
+        - metrics_collector
+        - dashboard_builder
+        - export_tool
+      metrics:
+        - read_file
+        - llm_query
+        - metrics_collector
+        - statistics_analyzer
+
+  # ----------------------------------------
+  # DEVOPS PROFILE
+  # Focus: Deployment, monitoring, configuration
+  # ----------------------------------------
+  devops:
+    default:
+      - exec_command
+      - llm_query
+      - read_file
+    intents:
+      deploy:
+        - exec_command
+        - llm_query
+        - helm_renderer
+        - kubectl_runner
+        - health_checker
+      monitor:
+        - exec_command
+        - read_file
+        - llm_query
+        - metrics_scraper
+        - alert_manager
+      configure:
+        - read_file
+        - write_file
+        - llm_query
+        - config_renderer
+        - secret_manager
+      scale:
+        - exec_command
+        - llm_query
+        - resource_manager
+        - load_balancer
+
+  # ----------------------------------------
+  # RESEARCHER PROFILE
+  # Focus: Research, analysis, documentation
+  # ----------------------------------------
+  researcher:
+    default:
+      - web_search
+      - web_fetch
+      - llm_query
+      - read_file
+    intents:
+      explore:
+        - web_search
+        - web_fetch
+        - llm_query
+        - paper_fetcher
+        - citation_extractor
+      analyze:
+        - llm_query
+        - read_file
+        - data_processor
+        - statistical_analyzer
+      document:
+        - llm_query
+        - write_file
+        - latex_renderer
+        - bibliography_manager
+      hypothesis:
+        - llm_query
+        - data_processor
+        - statistical_analyzer
+        - experiment_runner
+
+# ========================================
+# TOOL PERMISSION LEVELS
+# ========================================
+permission_levels:
+  safe:
+    description: "Read-only and query operations - no side effects"
+    tools:
+      - read_file
+      - list_directory
+      - memory_get
+      - web_search
+      - web_fetch
+      - llm_query
+      - ast_parse
+      - grep_search
+    
+  moderate:
+    description: "Write operations with limited scope"
+    tools:
+      - write_file
+      - memory_set
+      - diff_applier
+      - template_engine
+      - doc_generator
+      - export_tool
+      - format_converter
+      - config_renderer
+    
+  elevated:
+    description: "System-level operations - requires approval"
+    tools:
+      - exec_command
+      - helm_renderer
+      - kubectl_runner
+      - secret_manager
+      - resource_manager
+      - load_balancer
+
+# ========================================
+# TOOL METADATA
+# ========================================
+tool_metadata:
+  read_file:
+    category: io
+    description: "Read file contents"
+    permission: safe
+    cacheable: true
+    
+  write_file:
+    category: io
+    description: "Write content to file"
+    permission: moderate
+    creates_artifacts: true
+    
+  list_directory:
+    category: io
+    description: "List directory contents"
+    permission: safe
+    cacheable: true
+    
+  memory_get:
+    category: state
+    description: "Retrieve from session memory"
+    permission: safe
+    
+  memory_set:
+    category: state
+    description: "Store in session memory"
+    permission: moderate
+    
+  llm_query:
+    category: ai
+    description: "Query LLM for assistance"
+    permission: safe
+    rate_limited: true
+    
+  web_search:
+    category: network
+    description: "Search the web"
+    permission: safe
+    rate_limited: true
+    
+  web_fetch:
+    category: network
+    description: "Fetch web page content"
+    permission: safe
+    rate_limited: true
+    
+  grep_search:
+    category: code
+    description: "Search code patterns"
+    permission: safe
+    
+  ast_parse:
+    category: code
+    description: "Parse and analyze code AST"
+    permission: safe
+    
+  exec_command:
+    category: system
+    description: "Execute shell command"
+    permission: elevated
+    requires_approval: true
+    audit_logged: true
+    
+  image_generate:
+    category: ai
+    description: "Generate images using AI"
+    permission: moderate
+    rate_limited: true
+
+# ========================================
+# HOT RELOAD CONFIGURATION
+# ========================================
+hot_reload:
+  enabled: true
+  watch_interval_seconds: 5
+  validate_before_apply: true
+  notify_on_change: true
+
+# ========================================
+# INTENT-TO-SKILL HINTS
+# ========================================
+intent_skill_mapping:
+  refactor:
+    skill_hints:
+      - cycle_detector
+      - dependency_resolver
+      - patch_engine
+    critical_gates:
+      - GATE-02
+      - GATE-04
+  
+  debug:
+    skill_hints:
+      - error_analyzer
+      - trace_collector
+      - fix_generator
+    critical_gates:
+      - GATE-02
+  
+  implement:
+    skill_hints:
+      - ast_parse
+      - diff_applier
+      - test_runner
+    critical_gates:
+      - GATE-02
+      - GATE-03
+      - GATE-04
+  
+  deploy:
+    skill_hints:
+      - helm_renderer
+      - kubectl_runner
+      - health_checker
+    critical_gates:
+      - GATE-01
+      - GATE-02
+      - GATE-05
+  
+  analyze:
+    skill_hints:
+      - data_processor
+      - statistical_analyzer
+    critical_gates:
+      - GATE-02
+      - GATE-04
+
+# ========================================
+# FALLBACK CONFIGURATION
+# ========================================
+fallback:
+  on_tool_unavailable:
+    action: use_alternative
+    alternatives:
+      exec_command: llm_query
+      image_generate: llm_query
+      web_search: llm_query
+  
+  on_permission_denied:
+    action: request_approval
+    notify_user: true
+  
+  on_rate_limit:
+    action: queue
+    max_queue_size: 100
+    timeout_seconds: 60

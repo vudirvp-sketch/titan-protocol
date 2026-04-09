@@ -1,0 +1,157 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "titan://schemas/skill.schema.json",
+  "title": "TITAN Skill Definition Schema",
+  "description": "Machine-readable I/O contract for skill definitions in TITAN Protocol v5.0.0",
+  "version": "1.1.0",
+  "type": "object",
+  "properties": {
+    "skill_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Unique identifier for the skill (must start with lowercase letter)"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of the skill definition"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Human-readable description of what the skill does"
+    },
+    "applicable_to": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "List of task types this skill can be applied to"
+    },
+    "role_hints": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Suggested user roles that would benefit from this skill",
+      "default": []
+    },
+    "required_tools": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Tools required for this skill to function",
+      "default": []
+    },
+    "consumes": {
+      "type": "object",
+      "description": "Input schema defining what this skill consumes",
+      "additionalProperties": {
+        "$ref": "validator.schema.json"
+      },
+      "default": {}
+    },
+    "produces": {
+      "type": "object",
+      "description": "Output schema defining what this skill produces",
+      "additionalProperties": {
+        "$ref": "validator.schema.json"
+      },
+      "default": {}
+    },
+    "data_flow_mapping": {
+      "type": "object",
+      "description": "Context transformation rules",
+      "properties": {
+        "input_sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": { "type": "string", "description": "Source path in context" },
+              "to": { "type": "string", "description": "Target path in skill input" },
+              "transform": { "type": "string", "description": "Optional transformation to apply" }
+            },
+            "required": ["from", "to"]
+          },
+          "default": []
+        },
+        "output_targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": { "type": "string", "description": "Source path in skill output" },
+              "to": { "type": "string", "description": "Target path in context" }
+            },
+            "required": ["from", "to"]
+          },
+          "default": []
+        }
+      },
+      "default": {}
+    },
+    "reusable_patterns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern_name": { "type": "string" },
+          "implementation": { "type": "string" },
+          "validation_chain": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["pattern_name", "implementation"]
+      },
+      "description": "Reusable patterns that can be referenced by other skills",
+      "default": []
+    },
+    "validation_chain": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of validators to run on skill output",
+      "default": []
+    },
+    "prompt_template": {
+      "type": "string",
+      "description": "Template for generating prompts when using this skill"
+    },
+    "ui_component": {
+      "type": ["string", "null"],
+      "description": "Optional UI component identifier for visualization"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata about the skill",
+      "properties": {
+        "author": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "deprecated": { "type": "boolean", "default": false },
+        "replacement": { "type": "string", "description": "Skill ID to use if deprecated" }
+      },
+      "default": {}
+    },
+    "security": {
+      "type": "object",
+      "description": "Security constraints for this skill",
+      "properties": {
+        "requires_approval": { "type": "boolean", "default": false },
+        "allowed_operations": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "blocked_operations": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "max_execution_time_ms": { "type": "integer", "minimum": 0 }
+      },
+      "default": {}
+    }
+  },
+  "required": ["skill_id", "description", "applicable_to"],
+  "additionalProperties": false
+}

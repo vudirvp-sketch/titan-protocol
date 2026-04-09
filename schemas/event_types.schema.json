@@ -1,0 +1,359 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "titan://schemas/event_types.schema.json",
+  "title": "TITAN Event Types Registry",
+  "description": "Complete registry of all event types for EventBus registration in TITAN Protocol v5.0.0",
+  "version": "1.1.0",
+  "definitions": {
+    "SkillCompositionRequest": {
+      "type": "object",
+      "description": "Event emitted when skill composition is requested",
+      "properties": {
+        "composition_plan": {
+          "type": "object",
+          "description": "The composition plan to execute"
+        },
+        "skills": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of skill IDs to compose"
+        },
+        "context": {
+          "type": "object",
+          "description": "Execution context"
+        },
+        "request_id": {
+          "type": "string",
+          "description": "Unique request identifier"
+        }
+      },
+      "required": ["skills"]
+    },
+    "SkillValidationComplete": {
+      "type": "object",
+      "description": "Event emitted when skill validation completes",
+      "properties": {
+        "skill_id": {
+          "type": "string",
+          "description": "ID of the validated skill"
+        },
+        "result": {
+          "type": "string",
+          "enum": ["PASS", "FAIL", "WARN"],
+          "description": "Validation result"
+        },
+        "gaps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "gap_id": { "type": "string" },
+              "severity": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          },
+          "description": "List of gaps found during validation"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "description": "Validation duration in milliseconds"
+        }
+      },
+      "required": ["skill_id", "result"]
+    },
+    "EventContextReady": {
+      "$ref": "context_bridge.schema.json#/properties/payload",
+      "description": "Event emitted when context is ready for processing"
+    },
+    "EventContextReadyAck": {
+      "type": "object",
+      "description": "Acknowledgment for EVENT_CONTEXT_READY",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["received", "merged", "fallback_triggered", "rejected"],
+          "description": "Status of the acknowledgment"
+        },
+        "latency_ms": {
+          "type": "integer",
+          "description": "Processing latency in milliseconds"
+        },
+        "original_event_id": {
+          "type": "string",
+          "description": "ID of the original EVENT_CONTEXT_READY"
+        },
+        "handler_id": {
+          "type": "string",
+          "description": "ID of the handler sending the ack"
+        }
+      },
+      "required": ["status"]
+    },
+    "ProfileDetected": {
+      "type": "object",
+      "description": "Event emitted when user profile is detected",
+      "properties": {
+        "profile_type": {
+          "type": "string",
+          "description": "Detected profile type"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Detection confidence score"
+        },
+        "detection_source": {
+          "type": "string",
+          "enum": ["lexical", "pattern", "history", "explicit", "fallback"],
+          "description": "Method used for detection"
+        },
+        "indicators_matched": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Indicators that contributed to detection"
+        },
+        "session_id": {
+          "type": "string",
+          "description": "Session identifier"
+        }
+      },
+      "required": ["profile_type", "confidence", "detection_source"]
+    },
+    "ToolActivated": {
+      "type": "object",
+      "description": "Event emitted when a tool is activated",
+      "properties": {
+        "tool_id": {
+          "type": "string",
+          "description": "ID of the activated tool"
+        },
+        "profile": {
+          "type": "string",
+          "description": "Profile that triggered activation"
+        },
+        "intent": {
+          "type": "string",
+          "description": "Intent associated with activation"
+        },
+        "activation_reason": {
+          "type": "string",
+          "description": "Reason for tool activation"
+        },
+        "permission_level": {
+          "type": "string",
+          "enum": ["safe", "moderate", "elevated"],
+          "description": "Permission level required"
+        }
+      },
+      "required": ["tool_id"]
+    },
+    "SessionMemoryUpdated": {
+      "type": "object",
+      "description": "Event emitted when session memory is updated",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "description": "Session identifier"
+        },
+        "updates": {
+          "type": "object",
+          "description": "Fields that were updated"
+        },
+        "update_type": {
+          "type": "string",
+          "enum": ["profile", "tools", "history", "preferences", "metadata"],
+          "description": "Type of update"
+        },
+        "version": {
+          "type": "integer",
+          "description": "New version number of session data"
+        }
+      },
+      "required": ["session_id", "updates"]
+    },
+    "CircuitStateEvent": {
+      "type": "object",
+      "description": "Event emitted when circuit breaker state changes",
+      "properties": {
+        "circuit_id": {
+          "type": "string",
+          "description": "Identifier for the circuit"
+        },
+        "previous_state": {
+          "type": "string",
+          "enum": ["CLOSED", "OPEN", "HALF_OPEN"],
+          "description": "Previous circuit state"
+        },
+        "new_state": {
+          "type": "string",
+          "enum": ["CLOSED", "OPEN", "HALF_OPEN"],
+          "description": "New circuit state"
+        },
+        "failure_count": {
+          "type": "integer",
+          "description": "Current failure count"
+        },
+        "success_count": {
+          "type": "integer",
+          "description": "Current success count"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the state change occurred"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Reason for state change"
+        }
+      },
+      "required": ["circuit_id", "previous_state", "new_state", "timestamp"]
+    },
+    "CircuitOpened": {
+      "$ref": "#/definitions/CircuitStateEvent",
+      "description": "Event emitted when circuit breaker opens"
+    },
+    "CircuitClosed": {
+      "$ref": "#/definitions/CircuitStateEvent",
+      "description": "Event emitted when circuit breaker closes"
+    },
+    "CircuitHalfOpen": {
+      "$ref": "#/definitions/CircuitStateEvent",
+      "description": "Event emitted when circuit breaker enters half-open state"
+    },
+    "CircuitFailureRecorded": {
+      "type": "object",
+      "description": "Event emitted when a failure is recorded in circuit breaker",
+      "properties": {
+        "circuit_id": { "type": "string" },
+        "error_type": { "type": "string" },
+        "error_message": { "type": "string" },
+        "failure_count": { "type": "integer" },
+        "threshold": { "type": "integer" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["circuit_id", "failure_count"]
+    },
+    "SecurityAlert": {
+      "type": "object",
+      "description": "Event emitted for security-related alerts",
+      "properties": {
+        "alert_type": {
+          "type": "string",
+          "enum": [
+            "prompt_injection_detected",
+            "input_sanitization",
+            "session_hijack_attempt",
+            "unauthorized_access",
+            "rate_limit_exceeded",
+            "suspicious_pattern",
+            "policy_violation"
+          ],
+          "description": "Type of security alert"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+          "description": "Severity level of the alert"
+        },
+        "source": {
+          "type": "string",
+          "description": "Source component that raised the alert"
+        },
+        "details": {
+          "type": "object",
+          "description": "Additional details about the alert"
+        },
+        "session_id": {
+          "type": "string",
+          "description": "Associated session ID"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "action_taken": {
+          "type": "string",
+          "description": "Action taken in response"
+        }
+      },
+      "required": ["alert_type", "severity"]
+    },
+    "RoutingDecision": {
+      "type": "object",
+      "description": "Event emitted when a routing decision is made",
+      "properties": {
+        "request_id": { "type": "string" },
+        "profile_type": { "type": "string" },
+        "intent": { "type": "string" },
+        "selected_skills": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "execution_chain": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "confidence": { "type": "number" },
+        "latency_ms": { "type": "integer" },
+        "fallback_used": { "type": "boolean" }
+      },
+      "required": ["request_id"]
+    },
+    "DegradationEvent": {
+      "type": "object",
+      "description": "Event emitted when graceful degradation occurs",
+      "properties": {
+        "degradation_level": {
+          "type": "string",
+          "enum": ["full", "reduced", "minimal"],
+          "description": "Current degradation level"
+        },
+        "previous_level": {
+          "type": "string",
+          "enum": ["full", "reduced", "minimal"]
+        },
+        "affected_features": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "reason": { "type": "string" },
+        "recovery_estimate_ms": { "type": "integer" }
+      },
+      "required": ["degradation_level"]
+    }
+  },
+  "event_types": [
+    "SKILL_COMPOSITION_REQUEST",
+    "SKILL_VALIDATION_COMPLETE",
+    "EVENT_CONTEXT_READY",
+    "EVENT_CONTEXT_READY_ACK",
+    "PROFILE_DETECTED",
+    "TOOL_ACTIVATED",
+    "SESSION_MEMORY_UPDATED",
+    "CIRCUIT_OPENED",
+    "CIRCUIT_CLOSED",
+    "CIRCUIT_HALF_OPEN",
+    "CIRCUIT_FAILURE_RECORDED",
+    "SECURITY_ALERT",
+    "ROUTING_DECISION",
+    "DEGRADATION_EVENT"
+  ],
+  "severity_mapping": {
+    "SKILL_COMPOSITION_REQUEST": "INFO",
+    "SKILL_VALIDATION_COMPLETE": "WARN",
+    "EVENT_CONTEXT_READY": "INFO",
+    "EVENT_CONTEXT_READY_ACK": "DEBUG",
+    "PROFILE_DETECTED": "INFO",
+    "TOOL_ACTIVATED": "INFO",
+    "SESSION_MEMORY_UPDATED": "DEBUG",
+    "CIRCUIT_OPENED": "WARN",
+    "CIRCUIT_CLOSED": "INFO",
+    "CIRCUIT_HALF_OPEN": "WARN",
+    "CIRCUIT_FAILURE_RECORDED": "WARN",
+    "SECURITY_ALERT": "CRITICAL",
+    "ROUTING_DECISION": "INFO",
+    "DEGRADATION_EVENT": "WARN"
+  }
+}
