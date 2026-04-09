@@ -50,6 +50,11 @@ cp your-large-file.md inputs/
 | Resume interrupted session | `checkpoints/` | Load `checkpoint.json` |
 | Check protocol version | `VERSION` | Read file |
 | View changelog | `CHANGELOG.md` | Full file |
+| Multi-agent orchestration | `src/agents/multi_agent_orchestrator.py` | Full file |
+| SCOUT roles matrix | `src/agents/scout_matrix.py` | Full file |
+| Agent communication | `src/agents/agent_protocol.py` | Full file |
+| Observability metrics | `src/observability/` | Module directory |
+| Planning & DAG | `src/planning/` | Module directory |
 
 ---
 

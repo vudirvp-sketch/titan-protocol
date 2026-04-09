@@ -1,0 +1,145 @@
+# TITAN Protocol Prometheus Alert Rules
+# ITEM-OBS-02: Alerting Configuration
+
+groups:
+  - name: titan_latency_alerts
+    interval: 30s
+    rules:
+      - alert: HighLatencyP99
+        expr: titan_latency_p99_seconds > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          component: processing
+        annotations:
+          summary: "High P99 latency detected"
+          description: "P99 latency {{ $value }}s exceeds 1.0s threshold"
+          runbook_url: "docs/runbooks/README.md#high-latency-alert"
+
+      - alert: CriticalLatencyP99
+        expr: titan_latency_p99_seconds > 2.0
+        for: 2m
+        labels:
+          severity: critical
+          component: processing
+        annotations:
+          summary: "Critical P99 latency"
+          description: "P99 latency {{ $value }}s critically exceeds threshold"
+          runbook_url: "docs/runbooks/README.md#high-latency-alert"
+
+      - alert: HighLatencyP95
+        expr: titan_latency_p95_seconds > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: processing
+        annotations:
+          summary: "High P95 latency detected"
+          description: "P95 latency {{ $value }}s exceeds 500ms threshold"
+
+  - name: titan_gate_alerts
+    interval: 30s
+    rules:
+      - alert: GateFailureRate
+        expr: rate(titan_gates_failed_total[5m]) / rate(titan_gates_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: validation
+        annotations:
+          summary: "High gate failure rate"
+          description: "Gate failure rate {{ $value | humanizePercentage }}"
+          runbook_url: "docs/runbooks/README.md#gate-failure"
+
+      - alert: Gate04Blocked
+        expr: increase(titan_gates_failed_total{gate_id="GATE-04"}[1h]) > 3
+        for: 1m
+        labels:
+          severity: critical
+          component: validation
+        annotations:
+          summary: "GATE-04 blocking frequently"
+          description: "GATE-04 has blocked {{ $value }} times in the last hour"
+          runbook_url: "docs/runbooks/README.md#gate-04-blocked"
+
+  - name: titan_session_alerts
+    interval: 30s
+    rules:
+      - alert: SessionTimeout
+        expr: titan_session_duration_seconds > 3600
+        for: 1m
+        labels:
+          severity: warning
+          component: session
+        annotations:
+          summary: "Long-running session detected"
+          description: "Session has been running for {{ $value | humanizeDuration }}"
+
+      - alert: TokenBudgetApproaching
+        expr: titan_tokens_used / titan_tokens_budget > 0.9
+        for: 1m
+        labels:
+          severity: warning
+          component: budget
+        annotations:
+          summary: "Token budget nearly exhausted"
+          description: "Token usage at {{ $value | humanizePercentage }} of budget"
+          runbook_url: "docs/runbooks/README.md#budget-exceeded"
+
+      - alert: TokenBudgetExceeded
+        expr: titan_tokens_used / titan_tokens_budget > 1.0
+        for: 1m
+        labels:
+          severity: critical
+          component: budget
+        annotations:
+          summary: "Token budget exceeded"
+          description: "Session has exceeded token budget"
+          runbook_url: "docs/runbooks/README.md#budget-exceeded"
+
+  - name: titan_security_alerts
+    interval: 30s
+    rules:
+      - alert: SecretsDetected
+        expr: increase(titan_secrets_detected_total[1h]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Secrets detected in input"
+          description: "{{ $value }} secrets detected in the last hour"
+          runbook_url: "docs/runbooks/README.md#security-alert"
+
+      - alert: SandboxViolation
+        expr: increase(titan_sandbox_violations_total[1h]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Sandbox violation detected"
+          description: "{{ $value }} sandbox violations in the last hour"
+
+  - name: titan_agent_alerts
+    interval: 30s
+    rules:
+      - alert: AgentHeartbeatMissing
+        expr: time() - titan_agent_last_heartbeat_timestamp > 120
+        for: 1m
+        labels:
+          severity: warning
+          component: multi_agent
+        annotations:
+          summary: "Agent heartbeat missing"
+          description: "No heartbeat from agent for {{ $value }}s"
+
+      - alert: TaskQueueBacklog
+        expr: titan_task_queue_size > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: multi_agent
+        annotations:
+          summary: "Task queue backlog growing"
+          description: "Task queue size: {{ $value }}"

@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.1.0] - 2026-04-10
+
+### TIER_7 Exit Criteria Progress
+
+#### Documentation
+- **README.md v5.1.0 Sync**: Full documentation synchronization
+  - Added AGENT_METADATA block for LLM navigation
+  - Updated version badges (4.1.0 → 5.1.0)
+  - Updated test count (1100+ → 2796+)
+- **SKILL.md**: Updated protocol_version to 5.1.0
+- **nav_map.json**: Version synchronized to 5.1.0
+
+#### Gap Resolution
+- **GAP-VERSION-01**: Fixed version mismatch between VERSION and README.md
+- **GAP-META-01**: Added AGENT_METADATA block to README.md
+
+### Status
+- TIER_7_IN_PROGRESS: 6/20 exit criteria met (30%)
+- 2796+ tests passing
+- Security hardening: INVAR-05, secret scanning, workspace isolation
+- Multi-agent orchestration: SCOUT roles (RADAR/DEVIL/EVAL/STRAT)
+- Observability: OpenTelemetry, structured logging, token attribution
+
+### Files Modified
+```
+README.md (v5.1.0 sync, AGENT_METADATA block)
+SKILL.md (protocol version update)
+CHANGELOG.md (this entry)
+outputs/preflight_report.md (new)
+```
+
 ## [4.1.0] - 2026-04-08
 
 ### TIER_7 Production Features

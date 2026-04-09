@@ -543,7 +543,7 @@ logging_rotation:
 
 # ITEM-OBS-01: Prometheus Metrics Endpoint (extended)
 prometheus:
-  enabled: false
+  enabled: true
   port: 9090
   path: /metrics
 

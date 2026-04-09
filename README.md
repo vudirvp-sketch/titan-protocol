@@ -11,14 +11,27 @@ ideal_reader_state: "learning about the protocol"
 <!-- version-header -->
 # TITAN FUSE Protocol
 
-**Production-Grade Large-File Agent Protocol v4.1.0**
+**Production-Grade Large-File Agent Protocol v5.1.0**
 
 A deterministic LLM agent protocol for processing large files (5k–50k+ lines) with verification gates, rollback safety, and session persistence.
 
+<!-- AGENT_METADATA:start -->
+```yaml
+entry_point: AGENTS.md
+nav_graph: .ai/nav_map.json
+config: config.yaml
+version_file: ./VERSION
+validation_gates: [GATE-00, GATE-01, GATE-02, GATE-03, GATE-04, GATE-05]
+tier_status: TIER_7_IN_PROGRESS
+test_count: 2796+
+python_version: ">=3.10"
+```
+<!-- AGENT_METADATA:end -->
+
 <!-- badges -->
-![Version](https://img.shields.io/badge/version-4.1.0-blue)
+![Version](https://img.shields.io/badge/version-5.1.0-blue)
 ![Tier](https://img.shields.io/badge/tier-TIER_7_IN_PROGRESS-orange)
-![Tests](https://img.shields.io/badge/tests-1100+-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2796+-brightgreen)
 ![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)
 ![Contributing](https://img.shields.io/badge/contributing-welcome-brightgreen)
 
@@ -30,7 +43,7 @@ A deterministic LLM agent protocol for processing large files (5k–50k+ lines) 
 |--------|-------|
 | Python Modules | 175 files |
 | Lines of Code | 73,800+ |
-| Test Coverage | 1,100+ tests |
+| Test Coverage | 2,796+ tests |
 | Architecture Tiers | 8 (TIER -1..7) |
 | Production Status | TIER_7_IN_PROGRESS |
 

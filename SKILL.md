@@ -1,8 +1,8 @@
 ---
 title: TITAN FUSE Agent Skill Configuration
 skill_version: 2.1.0
-protocol_version: 4.1.0
-extends: Large-File Agent Protocol v4.1.0
+protocol_version: 5.1.0
+extends: Large-File Agent Protocol v5.1.0
 domain: large_file_processing; repo_bootstrap; agent_orchestration
 constraints:
   max_files_per_session: 3
@@ -277,6 +277,7 @@ diagnostics_module:
 
 | SKILL Version | Protocol Version | Compatible |
 |---------------|------------------|------------|
+| 2.1.0 | 5.1.0 | ✅ Full |
 | 2.1.0 | 4.1.0 | ✅ Full |
 | 2.1.0 | 3.2.2 | ✅ Full |
 | 2.0.0 | 3.2.0 | ✅ Full |
