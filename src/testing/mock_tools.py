@@ -53,7 +53,7 @@ class MockToolRegistry:
     def _mock_grep(self, pattern: str, path: str = ".", **kwargs) -> Dict:
         """Mock grep results."""
         # Deterministic results based on pattern hash
-        pattern_hash = int(hashlib.md5(pattern.encode()).hexdigest()[:8], 16)
+        pattern_hash = int(hashlib.md5(pattern.encode(), usedforsecurity=False).hexdigest()[:8], 16)
 
         # Generate deterministic line numbers
         lines = []
@@ -133,7 +133,7 @@ class MockGrep:
 
     def search(self, pattern: str, path: str = ".", **kwargs) -> List[Dict]:
         """Search for pattern in files."""
-        pattern_hash = int(hashlib.md5(pattern.encode()).hexdigest()[:8], 16)
+        pattern_hash = int(hashlib.md5(pattern.encode(), usedforsecurity=False).hexdigest()[:8], 16)
         base_line = (pattern_hash % 100) + 1
 
         return [{

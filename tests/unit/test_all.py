@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 import unittest
 from datetime import datetime
+from pathlib import Path
 
 
 class TestAssessment(unittest.TestCase):
@@ -227,9 +228,15 @@ class TestIntentRouter(unittest.TestCase):
 
         router = IntentRouter()
 
+        # security_audit has higher priority (10) than code_review (7)
+        # when query contains "security", it should classify as security_audit
         result = router.classify_intent("Please review this code for security issues")
-        self.assertEqual(result.intent, "code_review")
+        self.assertEqual(result.intent, "security_audit")
         self.assertGreater(result.confidence, 0)
+
+        # Test pure code review without security keywords
+        result = router.classify_intent("Please review this code for style compliance")
+        self.assertEqual(result.intent, "code_review")
 
         result = router.classify_intent("Fix this bug in the authentication")
         self.assertEqual(result.intent, "debugging")

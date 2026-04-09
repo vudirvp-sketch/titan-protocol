@@ -374,7 +374,7 @@ class SecretScanner:
     def _compute_match_fingerprint(self, file_path: Path, match: str, line: int) -> str:
         """Compute fingerprint for a match."""
         # Use hash of match + file + line for stable fingerprint
-        content = f"{file_path}:{line}:{hashlib.md5(match.encode()).hexdigest()[:8]}"
+        content = f"{file_path}:{line}:{hashlib.md5(match.encode(), usedforsecurity=False).hexdigest()[:8]}"
         return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 

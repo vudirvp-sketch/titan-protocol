@@ -48,7 +48,7 @@ class ToolCall:
     timeout: int = 30
     metadata: Dict[str, Any] = field(default_factory=dict)
     call_id: str = field(default_factory=lambda: hashlib.md5(
-        f"{time.time()}".encode()
+        f"{time.time()}".encode(), usedforsecurity=False
     ).hexdigest()[:12])
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
 

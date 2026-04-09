@@ -163,7 +163,7 @@ class Gap:
     def _generate_id(self) -> str:
         """Generate unique gap ID."""
         content = f"{self.reason}{self.source_file}{self.source_line_start}"
-        return f"GAP-{hashlib.md5(content.encode()).hexdigest()[:8].upper()}"
+        return f"GAP-{hashlib.md5(content.encode(), usedforsecurity=False).hexdigest()[:8].upper()}"
     
     def _infer_gap_type(self) -> Optional[GapType]:
         """Infer gap type from reason string."""

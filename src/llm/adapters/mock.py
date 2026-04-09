@@ -241,7 +241,7 @@ class MockAdapter(ProviderAdapter):
         else:
             hash_input = input_text
 
-        content_hash = hashlib.md5(hash_input.encode()).hexdigest()[:8]
+        content_hash = hashlib.md5(hash_input.encode(), usedforsecurity=False).hexdigest()[:8]
         response_content += f"\n[Hash: {content_hash}]"
 
         completion_tokens = self.count_tokens(response_content)
