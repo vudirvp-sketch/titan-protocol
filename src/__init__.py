@@ -7,7 +7,7 @@ A deterministic LLM agent protocol for processing large files (5k–50k+ lines)
 with verification gates, rollback safety, and session persistence.
 """
 
-__version__ = "3.2.3"
+__version__ = "5.1.0"
 
 from .state import (
     AssessmentScore,
