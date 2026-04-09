@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "TITAN FUSE Metrics Output",
-  "description": "Structured metrics for monitoring and dashboards",
+  "description": "Structured metrics for monitoring and dashboards - v3.4.0",
   "type": "object",
   "properties": {
     "session": {
@@ -28,7 +28,8 @@
           "type": "string",
           "enum": ["COMPLETE", "PARTIAL", "FAILED", "IN_PROGRESS"]
         }
-      }
+      },
+      "required": ["id", "start_time", "end_time", "duration_seconds", "status"]
     },
     "source": {
       "type": "object",
@@ -53,7 +54,8 @@
         "checksum": {
           "type": "string"
         }
-      }
+      },
+      "required": ["file", "lines", "chunks"]
     },
     "processing": {
       "type": "object",
@@ -100,7 +102,8 @@
           "type": "integer",
           "minimum": 0
         }
-      }
+      },
+      "required": ["issues_found", "issues_fixed", "gaps", "chunks_processed"]
     },
     "budget": {
       "type": "object",
@@ -127,6 +130,58 @@
           "type": "number",
           "minimum": 0
         }
+      },
+      "required": ["tokens_used", "tokens_max", "utilization_pct"]
+    },
+    "llm_telemetry": {
+      "type": "object",
+      "description": "v3.4.0 LLM query telemetry metrics",
+      "properties": {
+        "per_query_p50": {
+          "type": "number",
+          "description": "P50 latency per query in milliseconds",
+          "minimum": 0
+        },
+        "per_query_p95": {
+          "type": "number",
+          "description": "P95 latency per query in milliseconds",
+          "minimum": 0
+        },
+        "per_query_p99": {
+          "type": "number",
+          "description": "P99 latency per query in milliseconds",
+          "minimum": 0
+        },
+        "total_latency_ms": {
+          "type": "integer",
+          "description": "Total cumulative latency in milliseconds",
+          "minimum": 0
+        },
+        "model_used": {
+          "type": "string",
+          "description": "Primary LLM model identifier used for queries"
+        },
+        "model_breakdown": {
+          "type": "object",
+          "description": "Token usage by model",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "calls": { "type": "integer" },
+              "tokens": { "type": "integer" },
+              "avg_latency_ms": { "type": "number" }
+            }
+          }
+        },
+        "fallback_used": {
+          "type": "boolean",
+          "description": "Whether fallback model was used"
+        },
+        "fallback_count": {
+          "type": "integer",
+          "description": "Number of fallback invocations",
+          "minimum": 0
+        }
       }
     },
     "gates": {
@@ -137,6 +192,8 @@
         "GATE-01": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
         "GATE-02": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
         "GATE-03": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
+        "GATE-PLAN": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
+        "GATE-AMENDMENT": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
         "GATE-04": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
         "GATE-05": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
         "GATE-REPO-00": { "type": "string", "enum": ["PASS", "FAIL", "WARN", "SKIP"] },
@@ -163,7 +220,8 @@
         "idempotency_verified": {
           "type": "boolean"
         }
-      }
+      },
+      "required": ["confidence_score", "zero_drift_violations", "keep_preserved"]
     },
     "artifacts": {
       "type": "object",
@@ -174,6 +232,28 @@
         "change_log": { "type": "string" },
         "decision_record": { "type": "string" },
         "merged_output": { "type": "string" }
+      }
+    },
+    "multi_agent": {
+      "type": "object",
+      "description": "TIER_7 multi-agent metrics",
+      "properties": {
+        "agents_dispatched": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "agents_completed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sync_latency_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "conflict_resolutions": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "errors": {
@@ -190,5 +270,6 @@
         }
       }
     }
-  }
+  },
+  "required": ["session", "source", "processing", "budget", "gates", "quality"]
 }

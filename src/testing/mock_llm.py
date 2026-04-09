@@ -2,11 +2,44 @@
 TITAN FUSE Protocol - Mock LLM for Testing
 
 Deterministic mock LLM responses for CI/CD and development.
+Version: 5.1.0 - Aligned with QueryResult dataclass from enhanced_llm_query.py
 """
 
 from typing import Dict, Any, Optional, List
+from dataclasses import dataclass, asdict
 import hashlib
 import json
+
+
+@dataclass
+class MockQueryResult:
+    """
+    Mock query result aligned with QueryResult from enhanced_llm_query.py.
+    
+    This dataclass provides all fields expected by the actual QueryResult:
+    - content: The response content
+    - confidence: LOW | MED | HIGH
+    - chunk_ref: Reference to the chunk processed
+    - raw_tokens: Number of tokens in response
+    - model_used: LLM model identifier
+    - latency_ms: Query latency in milliseconds
+    - attempt: Which attempt this was (for fallback)
+    - fallback_used: Whether fallback was needed
+    - error: Optional error message
+    """
+    content: str
+    confidence: str  # LOW | MED | HIGH
+    chunk_ref: str
+    raw_tokens: int
+    model_used: str = "mock-model"
+    latency_ms: int = 150
+    attempt: int = 1
+    fallback_used: bool = False
+    error: Optional[str] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for backward compatibility."""
+        return asdict(self)
 
 
 class MockLLMResponse:
@@ -15,13 +48,16 @@ class MockLLMResponse:
 
     Usage:
         mock = MockLLMResponse(seed=42)
-        response = mock.query("Analyze this code", context="...")
+        result = mock.query("Analyze this code", context="...")
+        print(result.content)  # Access as dataclass
+        print(result.to_dict())  # For backward compatibility
     """
 
     def __init__(self, seed: int = 42, mode: str = "deterministic"):
         self.seed = seed
         self.mode = mode
         self.response_templates = self._load_templates()
+        self.default_model = "mock-model"
 
     def _load_templates(self) -> Dict:
         """Load response templates for different query types."""
@@ -40,7 +76,7 @@ class MockLLMResponse:
             }
         }
 
-    def query(self, task: str, context: str = "", max_tokens: int = 2048) -> Dict:
+    def query(self, task: str, context: str = "", max_tokens: int = 2048) -> MockQueryResult:
         """
         Generate deterministic mock response.
 
@@ -48,7 +84,13 @@ class MockLLMResponse:
         - Seed value
         - Task hash
         - Context hash
+
+        Returns:
+            MockQueryResult with all fields aligned with QueryResult
         """
+        import time
+        start_time = time.time()
+        
         # Generate deterministic hash
         combined = f"{self.seed}:{task}:{context}"
         input_hash = hashlib.sha256(combined.encode()).hexdigest()[:8]
@@ -63,15 +105,24 @@ class MockLLMResponse:
             input_hash=input_hash,
             seed=self.seed
         )
+        
+        # Calculate simulated latency (deterministic based on input)
+        latency = 100 + (len(response) % 100)
+        
+        # Determine confidence based on content length
+        confidence = "HIGH" if len(response) < 500 else "MED" if len(response) < 1500 else "LOW"
 
-        return {
-            "content": response,
-            "confidence": "HIGH",
-            "chunk_ref": input_hash,
-            "raw_tokens": min(len(response) // 4, max_tokens),
-            "_mock": True,
-            "_seed": self.seed
-        }
+        return MockQueryResult(
+            content=response,
+            confidence=confidence,
+            chunk_ref=f"[{input_hash}]",
+            raw_tokens=min(len(response) // 4, max_tokens),
+            model_used=self.default_model,
+            latency_ms=latency,
+            attempt=1,
+            fallback_used=False,
+            error=None
+        )
 
     def _classify_task(self, task: str) -> str:
         """Classify task type from natural language."""
@@ -137,22 +188,25 @@ class MockLLMProvider:
             elif msg.get("role") == "system":
                 context = msg.get("content", "")
 
-        response = self.mock.query(task, context)
+        result = self.mock.query(task, context)
 
         self.call_log.append({
             "call_id": self.call_count,
             "task": task[:100],  # Truncate for logging
-            "response_tokens": response["raw_tokens"]
+            "response_tokens": result.raw_tokens,
+            "latency_ms": result.latency_ms
         })
 
         return {
             "choices": [{
                 "message": {
-                    "content": response["content"],
+                    "content": result.content,
                     "role": "assistant"
                 }
             }],
-            "_mock": True
+            "_mock": True,
+            "_model_used": result.model_used,
+            "_latency_ms": result.latency_ms
         }
 
 

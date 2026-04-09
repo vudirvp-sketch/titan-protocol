@@ -1,5 +1,5 @@
 {
-  "version": "3.2.1",
+  "version": "5.1.0",
   "description": "TITAN FUSE Protocol State Machine",
   "initial_state": "INIT",
   "states": {
@@ -83,13 +83,33 @@
       "transitions": [
         {
           "event": "GATE_03_PASS",
-          "target": "PHASE_4",
+          "target": "EXECUTION_GATE_CHECK",
           "condition": "plan validated, no KEEP_VETO violations"
         },
         {
           "event": "KEEP_VETO",
           "target": "ABORTED",
           "condition": "attempt to modify protected content"
+        },
+        {
+          "event": "CYCLE_DETECTED",
+          "target": "ROLLBACK",
+          "condition": "CycleDetector found circular dependency"
+        }
+      ]
+    },
+    "EXECUTION_GATE_CHECK": {
+      "description": "INVAR-05 execution gate validation - code execution safety check",
+      "transitions": [
+        {
+          "event": "GATE_PASS",
+          "target": "PHASE_4",
+          "condition": "execution gate validation passed"
+        },
+        {
+          "event": "GATE_FAIL",
+          "target": "ABORTED",
+          "condition": "execution gate validation failed"
         }
       ]
     },
@@ -98,12 +118,12 @@
       "transitions": [
         {
           "event": "GATE_04_PASS",
-          "target": "PHASE_5",
+          "target": "MULTI_AGENT_DISPATCH",
           "condition": "validation pass, gaps within threshold"
         },
         {
           "event": "GATE_04_WARN",
-          "target": "PHASE_5",
+          "target": "MULTI_AGENT_DISPATCH",
           "condition": "gaps within warning threshold, human ack"
         },
         {
@@ -115,6 +135,36 @@
           "event": "VALIDATION_FAIL",
           "target": "PHASE_4",
           "condition": "retry after patch"
+        }
+      ]
+    },
+    "MULTI_AGENT_DISPATCH": {
+      "description": "TIER_7 multi-agent task distribution",
+      "transitions": [
+        {
+          "event": "DISPATCH_SUCCESS",
+          "target": "AGENT_SYNC",
+          "condition": "tasks dispatched to all agents"
+        },
+        {
+          "event": "DISPATCH_FAIL",
+          "target": "ROLLBACK",
+          "condition": "agent dispatch failed"
+        }
+      ]
+    },
+    "AGENT_SYNC": {
+      "description": "TIER_7 agent synchronization checkpoint",
+      "transitions": [
+        {
+          "event": "SYNC_COMPLETE",
+          "target": "PHASE_5",
+          "condition": "all agents synchronized"
+        },
+        {
+          "event": "SYNC_TIMEOUT",
+          "target": "MULTI_AGENT_DISPATCH",
+          "condition": "agent sync timeout, retry dispatch"
         }
       ]
     },
@@ -165,7 +215,21 @@
     "GATE-01",
     "GATE-02",
     "GATE-03",
+    "GATE-PLAN",
+    "GATE-AMENDMENT",
     "GATE-04",
     "GATE-05"
+  ],
+  "version_history": [
+    {
+      "version": "3.2.1",
+      "date": "2026-04-07",
+      "notes": "Previous stable version"
+    },
+    {
+      "version": "5.1.0",
+      "date": "2026-04-10",
+      "notes": "TIER_7 integration: MULTI_AGENT_DISPATCH, AGENT_SYNC, EXECUTION_GATE_CHECK states; CycleDetector integration; GATE-PLAN, GATE-AMENDMENT gates"
+    }
   ]
 }
