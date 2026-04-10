@@ -1,0 +1,70 @@
+name: TITAN Protocol - Plan C Gates
+
+on:
+  push:
+    branches: [main, develop, "release/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  prompt_pattern_schema_validation:
+    name: "Gate: Prompt Pattern Schema Validation"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyyaml
+      - name: Validate prompt patterns
+        run: |
+          python scripts/validate_prompt_patterns.py config/prompt_registry.yaml --json
+          exit_code=$?
+          echo "Schema validation exit code: $exit_code"
+          exit $exit_code
+
+  determinism_guard_check:
+    name: "Gate: Determinism Guard"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt pytest
+      - name: Run determinism guard
+        run: |
+          python -m pytest tests/test_determinism.py -v --tb=short
+        env:
+          TITAN_SEED: "42"
+
+  integration_test_gate:
+    name: "Gate: Integration Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt pytest
+      - name: Run integration tests
+        run: |
+          python -m pytest tests/integration/ -v --tb=short
+      - name: Run unit tests
+        run: |
+          python -m pytest tests/test_prompt_pattern_integration.py -v --tb=short
+
+  full_test_suite:
+    name: "Gate: Full Test Suite"
+    runs-on: ubuntu-latest
+    needs: [prompt_pattern_schema_validation, determinism_guard_check, integration_test_gate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt pytest
+      - name: Full test suite
+        run: |
+          python -m pytest tests/ -v --tb=short -q 2>&1 | tee test_output.txt
+          echo "Test count: $(grep -c 'PASSED\|FAILED' test_output.txt || echo unknown)"

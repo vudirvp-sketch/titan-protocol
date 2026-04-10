@@ -1,0 +1,138 @@
+# TITAN Protocol Prompt Registry
+# Version: 5.2.0-canonical-patterns
+# Generated: 2026-03-04
+
+version: "1.0.0"
+generated: "2026-03-04T00:00:00Z"
+
+patterns:
+  TITAN_FUSE_v3.1:
+    version: "3.1"
+    description: "Deep content fusion and synthesis for merging multiple content sources"
+    activation_triggers:
+      - "fuse"
+      - "synthesize"
+      - "merge"
+      - "combine"
+      - "integrate"
+    titan_mapping:
+      pipeline.init: "snapshot_state"
+      pipeline.discover: "discover_sources"
+      pipeline.analyze: "analyze_content"
+      pipeline.plan: "plan_fusion"
+      pipeline.exec: "execute_fusion"
+      pipeline.deliver: "deliver_merged"
+    gates:
+      - GATE-00
+      - GATE-01
+      - GATE-02
+      - GATE-03
+      - GATE-04
+      - GATE-05
+    gap_events:
+      - source: "ContentPipeline.INIT"
+        gate: "GATE-00"
+        reason: "State snapshot failed"
+        severity: "CRITICAL"
+      - source: "ContentPipeline.DISCOVER"
+        gate: "GATE-01"
+        reason: "No content discovered"
+        severity: "WARN"
+
+  GUARDIAN_v1.1:
+    version: "1.1"
+    description: "Quality validation and gate enforcement for code and content quality"
+    activation_triggers:
+      - "validate"
+      - "check"
+      - "guard"
+      - "verify"
+      - "ensure"
+    titan_mapping:
+      pipeline.init: "load_validation_rules"
+      pipeline.discover: "discover_targets"
+      pipeline.analyze: "analyze_quality"
+      pipeline.plan: "plan_validations"
+      pipeline.exec: "execute_validations"
+      pipeline.deliver: "deliver_report"
+    gates:
+      - GATE-00
+      - GATE-01
+      - GATE-02
+      - GATE-03
+      - GATE-04
+      - GATE-05
+    gap_events:
+      - source: "ContentPipeline.ANALYZE"
+        gate: "GATE-02"
+        reason: "Validation threshold exceeded"
+        severity: "CRITICAL"
+
+  AGENT_GEN_SPEC_v4.1:
+    version: "4.1"
+    description: "Agent specification generation for creating agent definitions"
+    activation_triggers:
+      - "generate"
+      - "spec"
+      - "define"
+      - "create agent"
+      - "agent specification"
+    titan_mapping:
+      pipeline.init: "load_templates"
+      pipeline.discover: "discover_requirements"
+      pipeline.analyze: "analyze_constraints"
+      pipeline.plan: "plan_spec"
+      pipeline.exec: "generate_spec"
+      pipeline.deliver: "deliver_spec"
+    gates:
+      - GATE-00
+      - GATE-01
+      - GATE-02
+      - GATE-03
+      - GATE-04
+      - GATE-05
+    gap_events:
+      - source: "ContentPipeline.EXEC"
+        gate: "GATE-04"
+        reason: "Specification generation failed"
+        severity: "CRITICAL"
+
+  DEP_AUDIT:
+    version: "1.0"
+    description: "Dependency structure analysis and audit"
+    activation_triggers:
+      - "audit"
+      - "analyze deps"
+      - "dependency"
+      - "dependencies"
+      - "dep audit"
+    titan_mapping:
+      pipeline.init: "load_dep_config"
+      pipeline.discover: "discover_deps"
+      pipeline.analyze: "analyze_deps"
+      pipeline.plan: "plan_audit"
+      pipeline.exec: "execute_audit"
+      pipeline.deliver: "deliver_audit_report"
+    gates:
+      - GATE-00
+      - GATE-01
+      - GATE-02
+      - GATE-03
+      - GATE-04
+      - GATE-05
+    gap_events:
+      - source: "ContentPipeline.ANALYZE"
+        gate: "GATE-02"
+        reason: "Vulnerability threshold exceeded"
+        severity: "CRITICAL"
+
+# Metadata
+metadata:
+  total_patterns: 4
+  canonical_patterns:
+    - TITAN_FUSE_v3.1
+    - GUARDIAN_v1.1
+    - AGENT_GEN_SPEC_v4.1
+    - DEP_AUDIT
+  deferred_patterns: 11
+  deferred_document: "docs/deferred_patterns_v5.3.0.md"

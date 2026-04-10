@@ -9,6 +9,19 @@ Total tests: **2796+ tests** (241 key module tests verified passing)
 
 ---
 
+### v5.2.0-canonical-patterns (2026-03-04)
+- [COMPLETE] ContentPipeline 6-phase execution (INIT→DELIVER)
+- [COMPLETE] 4 canonical patterns registered and activatable
+- [COMPLETE] Intent classifier pattern routing
+- [COMPLETE] GapEvent PAT-06 compliance
+- [COMPLETE] Determinism guard
+- [COMPLETE] SLA benchmarking
+- [COMPLETE] Rollback procedure
+- [COMPLETE] CI/CD gates
+- [DEFERRED] 11 additional patterns → v5.3.0
+
+---
+
 ## Implementation Completion Matrix
 
 ### PHASE_01: Protocol Layer (PROTECTION)

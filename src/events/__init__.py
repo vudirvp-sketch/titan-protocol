@@ -6,6 +6,7 @@ ITEM-RESILIENCE-01: Dead Letter Queue for failed event handling.
 """
 
 from .event_bus import EventBus, Event, EventSeverity, EventTypes, SyncResult
+from .gap_event import GapEvent
 from .dead_letter_queue import (
     DeadLetterQueue,
     FailedEvent,
@@ -22,6 +23,8 @@ __all__ = [
     'EventTypes',
     # ITEM-RESILIENCE-02: Sync operations
     'SyncResult',
+    # GapEvent (PAT-06)
+    'GapEvent',
     # Dead Letter Queue (ITEM-RESILIENCE-01)
     'DeadLetterQueue',
     'FailedEvent',

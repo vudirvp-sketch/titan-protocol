@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.2.0-canonical-patterns] - 2026-03-04
+
+### Added
+- ContentPipeline: 6-phase execution flow (INIT→DISCOVER→ANALYZE→PLAN→EXEC→DELIVER)
+- 4 canonical patterns registered: TITAN_FUSE_v3.1, GUARDIAN_v1.1, AGENT_GEN_SPEC_v4.1, DEP_AUDIT
+- Intent classifier pattern-aware routing
+- GapEvent PAT-06 compliant serialization
+- Inter-phase checkpointing with SHA-256 integrity
+- Delivery hygiene and 7 standard artifacts
+- Determinism guard test
+- SLA benchmarking validation
+- Complete rollback procedure
+- CI/CD gates for pattern schema, determinism, integration tests
+- Migration scripts: convert_prompt_analysis.py, patch_template.py, update_docs.py, validate_prompt_patterns.py
+
+### Deferred
+- 11 additional patterns → v5.3.0 (see docs/deferred_patterns_v5.3.0.md)
+
 ## [5.1.0] - 2026-04-10
 
 ### TIER_7 Exit Criteria Progress
