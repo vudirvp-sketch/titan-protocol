@@ -1,5 +1,5 @@
-schema_version: "1.0.0"
-description: "Canonical pattern definitions for TITAN Protocol v5.1.0"
+schema_version: "1.1.0"
+description: "Canonical pattern definitions for TITAN Protocol v5.2.0"
 
 pattern_fields:
   pat_id:
@@ -122,4 +122,285 @@ patterns:
         required: false
     gap_tags: ["GAP-VAL-001", "GAP-VAL-002"]
     depends_on: ["PAT-01"]
+    version: "1.0.0"
+
+  # ============================================================================
+  # v5.3.0 DEFERRED PATTERNS - Implementation Ready
+  # ============================================================================
+
+  - pat_id: "PAT-CR-002"
+    name: "CODE_REVIEW_v2.0"
+    category: structural
+    source_prompt: "TITAN_FUSE_v3.1"
+    implementation_file: "src/patterns/code_review.py"
+    fields:
+      - name: "target_files"
+        type: "list[str]"
+        required: true
+        description: "Files to review"
+      - name: "review_depth"
+        type: "enum[quick, standard, deep]"
+        required: false
+        default: "standard"
+      - name: "focus_areas"
+        type: "list[str]"
+        required: false
+        default: ["quality", "security", "performance"]
+      - name: "output_format"
+        type: "enum[markdown, json, sarif]"
+        required: false
+        default: "markdown"
+    gap_tags: ["GAP-STRUCT-001", "GAP-BEHAV-001", "GAP-VAL-001"]
+    depends_on: ["PAT-01"]
+    version: "2.0.0"
+
+  - pat_id: "PAT-SS-001"
+    name: "SECURITY_SCAN_v1.0"
+    category: validation
+    source_prompt: "GUARDIAN_v1.1"
+    implementation_file: "src/patterns/security_scan.py"
+    fields:
+      - name: "scan_targets"
+        type: "list[str]"
+        required: true
+      - name: "scan_types"
+        type: "list[enum[secrets, vulnerabilities, misconfig, deps]]"
+        required: false
+        default: ["secrets", "vulnerabilities"]
+      - name: "severity_threshold"
+        type: "enum[critical, high, medium, low]"
+        required: false
+        default: "medium"
+      - name: "exclude_patterns"
+        type: "list[str]"
+        required: false
+        default: []
+    gap_tags: ["GAP-VAL-002", "GAP-INTEG-001"]
+    depends_on: ["PAT-CR-002"]
+    version: "1.0.0"
+
+  - pat_id: "PAT-PO-001"
+    name: "PERF_OPTIMIZE_v1.0"
+    category: adaptation
+    source_prompt: "TITAN_FUSE_v3.1"
+    implementation_file: "src/patterns/perf_optimize.py"
+    fields:
+      - name: "analysis_targets"
+        type: "list[str]"
+        required: true
+      - name: "metrics"
+        type: "list[enum[latency, memory, cpu, io]]"
+        required: false
+        default: ["latency", "memory"]
+      - name: "profiling_depth"
+        type: "enum[static, runtime, deep]"
+        required: false
+        default: "static"
+      - name: "baseline_comparison"
+        type: "boolean"
+        required: false
+        default: false
+    gap_tags: ["GAP-BEHAV-003", "GAP-ADAPT-002"]
+    depends_on: []
+    version: "1.0.0"
+
+  - pat_id: "PAT-MA-001"
+    name: "MIGRATION_ASSIST_v1.0"
+    category: orchestration
+    source_prompt: "TITAN_FUSE_v3.1"
+    implementation_file: "src/patterns/migration_assist.py"
+    fields:
+      - name: "source_framework"
+        type: "string"
+        required: true
+      - name: "target_framework"
+        type: "string"
+        required: true
+      - name: "migration_scope"
+        type: "list[str]"
+        required: true
+      - name: "preserve_behavior"
+        type: "boolean"
+        required: false
+        default: true
+      - name: "verification_level"
+        type: "enum[syntax, semantic, behavioral]"
+        required: false
+        default: "semantic"
+    gap_tags: ["GAP-STRUCT-004", "GAP-INTEG-003"]
+    depends_on: ["PAT-01"]
+    version: "1.0.0"
+
+  - pat_id: "PAT-DG-002"
+    name: "DOC_GEN_v2.0"
+    category: behavioral
+    source_prompt: "TITAN_FUSE_v3.1"
+    implementation_file: "src/patterns/doc_gen.py"
+    fields:
+      - name: "source_paths"
+        type: "list[str]"
+        required: true
+      - name: "output_format"
+        type: "enum[markdown, rst, html, sphinx]"
+        required: false
+        default: "markdown"
+      - name: "include_private"
+        type: "boolean"
+        required: false
+        default: false
+      - name: "template_override"
+        type: "string"
+        required: false
+        default: null
+    gap_tags: ["GAP-STRUCT-005", "GAP-BEHAV-004"]
+    depends_on: []
+    version: "2.0.0"
+
+  - pat_id: "PAT-TC-001"
+    name: "TEST_COVER_v1.0"
+    category: validation
+    source_prompt: "GUARDIAN_v1.1"
+    implementation_file: "src/patterns/test_cover.py"
+    fields:
+      - name: "target_paths"
+        type: "list[str]"
+        required: true
+      - name: "coverage_threshold"
+        type: "float"
+        required: false
+        default: 0.85
+      - name: "report_format"
+        type: "enum[terminal, html, xml, json]"
+        required: false
+        default: "terminal"
+      - name: "generate_suggestions"
+        type: "boolean"
+        required: false
+        default: true
+    gap_tags: ["GAP-VAL-003", "GAP-STRUCT-002"]
+    depends_on: []
+    version: "1.0.0"
+
+  - pat_id: "PAT-RS-001"
+    name: "REFACTOR_SUGGEST_v1.0"
+    category: adaptation
+    source_prompt: "TITAN_FUSE_v3.1"
+    implementation_file: "src/patterns/refactor_suggest.py"
+    fields:
+      - name: "analysis_scope"
+        type: "list[str]"
+        required: true
+      - name: "refactoring_types"
+        type: "list[enum[extract, inline, rename, move, restructure]]"
+        required: false
+        default: ["extract", "rename"]
+      - name: "safety_level"
+        type: "enum[conservative, moderate, aggressive]"
+        required: false
+        default: "conservative"
+      - name: "preserve_tests"
+        type: "boolean"
+        required: false
+        default: true
+    gap_tags: ["GAP-ADAPT-003", "GAP-BEHAV-002"]
+    depends_on: ["PAT-CR-002"]
+    version: "1.0.0"
+
+  - pat_id: "PAT-CV-001"
+    name: "CONFIG_VALIDATE_v1.0"
+    category: validation
+    source_prompt: "GUARDIAN_v1.1"
+    implementation_file: "src/patterns/config_validate.py"
+    fields:
+      - name: "config_paths"
+        type: "list[str]"
+        required: true
+      - name: "schema_paths"
+        type: "list[str]"
+        required: false
+        default: []
+      - name: "validation_level"
+        type: "enum[syntax, schema, semantic, security]"
+        required: false
+        default: "schema"
+      - name: "auto_fix"
+        type: "boolean"
+        required: false
+        default: false
+    gap_tags: ["GAP-VAL-001", "GAP-STRUCT-001"]
+    depends_on: []
+    version: "1.0.0"
+
+  - pat_id: "PAT-LA-001"
+    name: "LOG_ANALYZE_v1.0"
+    category: behavioral
+    source_prompt: "TITAN_FUSE_v3.1"
+    implementation_file: "src/patterns/log_analyze.py"
+    fields:
+      - name: "log_paths"
+        type: "list[str]"
+        required: true
+      - name: "analysis_types"
+        type: "list[enum[errors, warnings, performance, patterns]]"
+        required: false
+        default: ["errors", "warnings"]
+      - name: "time_range"
+        type: "string"
+        required: false
+        default: null
+      - name: "output_format"
+        type: "enum[summary, detailed, json]"
+        required: false
+        default: "summary"
+    gap_tags: ["GAP-BEHAV-001", "GAP-VAL-004"]
+    depends_on: []
+    version: "1.0.0"
+
+  - pat_id: "PAT-AC-001"
+    name: "API_CONTRACT_v1.0"
+    category: validation
+    source_prompt: "GUARDIAN_v1.1"
+    implementation_file: "src/patterns/api_contract.py"
+    fields:
+      - name: "api_endpoints"
+        type: "list[str]"
+        required: true
+      - name: "spec_path"
+        type: "string"
+        required: true
+      - name: "spec_type"
+        type: "enum[openapi, graphql, grpc, asyncapi]"
+        required: false
+        default: "openapi"
+      - name: "validate_responses"
+        type: "boolean"
+        required: false
+        default: true
+    gap_tags: ["GAP-INTEG-001", "GAP-VAL-002"]
+    depends_on: ["PAT-CR-002"]
+    version: "1.0.0"
+
+  - pat_id: "PAT-ML-001"
+    name: "MULTI_LANG_v1.0"
+    category: adaptation
+    source_prompt: "TITAN_FUSE_v3.1"
+    implementation_file: "src/patterns/multi_lang.py"
+    fields:
+      - name: "source_content"
+        type: "string"
+        required: true
+      - name: "detected_language"
+        type: "string"
+        required: false
+        default: "auto"
+      - name: "target_languages"
+        type: "list[str]"
+        required: false
+        default: []
+      - name: "translation_mode"
+        type: "enum[none, suggest, apply]"
+        required: false
+        default: "suggest"
+    gap_tags: ["GAP-ADAPT-001", "GAP-INTEG-002"]
+    depends_on: []
     version: "1.0.0"

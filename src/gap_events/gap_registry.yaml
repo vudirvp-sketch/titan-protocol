@@ -1,5 +1,5 @@
-schema_version: "1.0.0"
-description: "Registry of all recognized gap types in TITAN Protocol"
+schema_version: "1.1.0"
+description: "Registry of all recognized gap types in TITAN Protocol v5.3.0"
 
 categories:
   - id: STRUCT
@@ -17,6 +17,12 @@ categories:
   - id: INTEG
     name: "Integration Gap"
     description: "Missing integration between components"
+  - id: PAT
+    name: "Pattern Gap"
+    description: "Pattern-specific gaps (v5.3.0)"
+  - id: DOCS
+    name: "Documentation Gap"
+    description: "Documentation synchronization issues (v5.3.0)"
 
 gap_types:
   - gap_id: "GAP-STRUCT-001"
@@ -118,4 +124,88 @@ gap_types:
     category: INTEG
     description: "Session memory persistence failed"
     severity: BLOCK
+    related_patterns: []
+
+  # ============================================================================
+  # v5.3.0 EXPANDED GAP TYPES
+  # ============================================================================
+
+  # Expanded STRUCT gaps
+  - gap_id: "GAP-STRUCT-006"
+    category: STRUCT
+    description: "Multi-file coordination failure"
+    severity: BLOCK
+    related_patterns: ["PAT-CR-002", "PAT-MA-001"]
+  - gap_id: "GAP-STRUCT-007"
+    category: STRUCT
+    description: "Pattern schema mismatch"
+    severity: BLOCK
+    related_patterns: []
+
+  # Expanded BEHAV gaps
+  - gap_id: "GAP-BEHAV-005"
+    category: BEHAV
+    description: "Pattern execution timeout"
+    severity: WARN
+    related_patterns: []
+  - gap_id: "GAP-BEHAV-006"
+    category: BEHAV
+    description: "Unsupported pattern type"
+    severity: BLOCK
+    related_patterns: []
+
+  # Expanded INTEG gaps
+  - gap_id: "GAP-INTEG-005"
+    category: INTEG
+    description: "Pattern registry unavailable"
+    severity: BLOCK
+    related_patterns: []
+  - gap_id: "GAP-INTEG-006"
+    category: INTEG
+    description: "Skill pattern mismatch"
+    severity: WARN
+    related_patterns: ["PAT-01"]
+
+  # New PAT category gaps (v5.3.0)
+  - gap_id: "GAP-PAT-001"
+    category: PAT
+    description: "Pattern not found in registry"
+    severity: BLOCK
+    related_patterns: []
+  - gap_id: "GAP-PAT-002"
+    category: PAT
+    description: "Pattern validation failed"
+    severity: BLOCK
+    related_patterns: []
+  - gap_id: "GAP-PAT-003"
+    category: PAT
+    description: "Pattern composition error"
+    severity: WARN
+    related_patterns: []
+  - gap_id: "GAP-PAT-004"
+    category: PAT
+    description: "Pattern dependency missing"
+    severity: BLOCK
+    related_patterns: []
+
+  # New DOCS category gaps (v5.3.0)
+  - gap_id: "GAP-DOCS-001"
+    category: DOCS
+    description: "Version mismatch between files"
+    severity: WARN
+    related_patterns: []
+  - gap_id: "GAP-DOCS-002"
+    category: DOCS
+    description: "Path inconsistency in documentation"
+    severity: WARN
+    related_patterns: []
+  - gap_id: "GAP-DOCS-003"
+    category: DOCS
+    description: "Missing documentation"
+    severity: WARN
+    related_patterns: []
+  - gap_id: "GAP-DOCS-004"
+    category: DOCS
+    description: "Outdated reference"
+    severity: WARN
     related_patterns: []
