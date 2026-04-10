@@ -1,180 +1,232 @@
 {
   "version": "5.1.0",
-  "generated": "2026-04-08T11:14:04.014490Z",
-  "navigation": {
-    "entry_points": {
-      "agents": "AGENTS.md",
-      "human": "README.md",
-      "system": "AI_MISSION.md",
-      "config": "SKILL.md",
-      "meta": ".github/README_META.yaml"
+  "generated": "2026-04-11T00:00:00Z",
+  "root_packages": {
+    "src/orchestrator": {
+      "description": "Chain composition and universal routing",
+      "key_files": ["chain_composer.py", "universal_router.py", "intent_handler.py"]
     },
-    "protocol_files": [
-      {
-        "path": "AGENTS.md",
-        "purpose": "Agent entry point with navigation matrix",
-        "tier": -1
-      },
-      {
-        "path": "README.md",
-        "purpose": "Human-friendly overview",
-        "tier": -1
-      },
-      {
-        "path": "SKILL.md",
-        "purpose": "Agent configuration and constraints",
-        "tier": -1
-      },
-      {
-        "path": "PROTOCOL.md",
-        "purpose": "Full protocol specification",
-        "tier": "0-6"
-      },
-      {
-        "path": "AI_MISSION.md",
-        "purpose": "System prompt bridge",
-        "tier": -1
-      },
-      {
-        "path": "config.yaml",
-        "purpose": "Runtime defaults",
-        "tier": -1
-      },
-      {
-        "path": ".github/README_META.yaml",
-        "purpose": "Single source of truth for protocol metadata",
-        "tier": -1
-      },
-      {
-        "path": "schemas/readme_meta.schema.json",
-        "purpose": "JSON Schema for README_META validation",
-        "tier": -1
-      },
-      {
-        "path": "src/agents/scout_matrix.py",
-        "purpose": "SCOUT Roles Matrix Agent Framework for technology assessment.",
-        "tier": 4,
-        "id": "scout_matrix",
-        "capabilities": [
-          "adaptive_scoring",
-          "role_assignment",
-          "hype_detection",
-          "risk_flagging",
-          "readiness_assessment",
-          "veto_propagation",
-          "strategy_synthesis"
-        ]
-      },
-      {
-        "path": "src/agents/agent_protocol.py",
-        "purpose": "Defines agent communication protocol and message routing.",
-        "tier": 6,
-        "id": "agent_protocol",
-        "capabilities": [
-          "message_routing",
-          "protocol_negotiation",
-          "broadcast_messaging",
-          "delivery_guarantees",
-          "dlq_integration"
-        ]
-      },
-      {
-        "path": "src/agents/multi_agent_orchestrator.py",
-        "purpose": "Orchestrates multiple agents with task queue and conflict resolution.",
-        "tier": 6,
-        "id": "multi_agent_orchestrator",
-        "capabilities": [
-          "task_queue_management",
-          "agent_registry",
-          "conflict_resolution",
-          "result_aggregation",
-          "heartbeat_monitoring",
-          "priority_dispatch"
-        ]
-      }
-    ],
-    "directories": {
-      "inputs": {
-        "purpose": "Files to process",
-        "type": "input"
-      },
-      "outputs": {
-        "purpose": "Generated artifacts",
-        "type": "output"
-      },
-      "checkpoints": {
-        "purpose": "Session persistence",
-        "type": "state"
-      },
-      "skills/validators": {
-        "purpose": "Custom validators",
-        "type": "extension"
-      },
-      "docs/tiers": {
-        "purpose": "Tier exit criteria documentation",
-        "type": "documentation"
-      },
-      "observability": {
-        "purpose": "Agent metrics and monitoring configuration",
-        "type": "observability"
-      }
+    "src/security": {
+      "description": "Execution gates and trust enforcement",
+      "key_files": ["execution_gate.py", "sandbox_verifier.py", "secret_scanner.py", "workspace_isolation.py", "input_sanitizer.py", "session_security.py"]
+    },
+    "src/state": {
+      "description": "Context graph and event sourcing",
+      "key_files": ["context_graph.py", "event_sourcing.py", "checkpoint_manager.py", "state_manager.py", "gap.py", "cursor.py", "recovery.py", "assessment.py", "drift_policy.py", "checkpoint_compression.py", "checkpoint_serialization.py", "event_journal.py"]
+    },
+    "src/context": {
+      "description": "Context management, profiles, and trust engine",
+      "key_files": ["context_graph.py", "trust_engine.py", "profile_router.py", "profile_mixin.py", "drift_detector.py", "context_zones.py", "auto_split.py", "summarization.py", "symbol_map.py", "change_tracker.py", "session_memory.py", "version_vectors.py", "semantic_checksum.py", "intent_enricher.py", "chunk_optimizer.py", "pruning_policy.py", "checksum_cache.py", "chunk_dependency_graph.py"]
+    },
+    "src/trust": {
+      "description": "Trust engine and reputation",
+      "key_files": []
+    },
+    "src/observability": {
+      "description": "Scout matrix and Prometheus export",
+      "key_files": ["scout_matrix.py", "prometheus_exporter.py", "distributed_tracing.py", "token_attribution.py", "tracer.py", "span_tracker.py", "structured_logging.py", "budget_forecast.py", "debug_controller.py", "realtime_metrics.py", "metrics.py", "agent_metrics_collector.py", "state_validator.py"]
+    },
+    "src/intent": {
+      "description": "Intent classification and routing",
+      "key_files": ["classifier.py"]
+    },
+    "src/adapters": {
+      "description": "Protocol adapters and gap event mapping - NOTE: Does not exist, use root adapters/",
+      "key_files": []
+    },
+    "src/events": {
+      "description": "Event bus and event definitions",
+      "key_files": ["event_bus.py", "gap_event.py", "audit_signer.py", "audit_trail.py", "dead_letter_queue.py", "causal_ordering.py", "context_events.py"]
+    },
+    "src/models": {
+      "description": "Shared data models",
+      "key_files": ["adaptation.py", "pattern.py"]
+    },
+    "src/utils": {
+      "description": "Shared utilities",
+      "key_files": ["timezone.py"]
+    },
+    "src/agents": {
+      "description": "Multi-agent orchestration and scout matrix",
+      "key_files": ["scout_matrix.py", "multi_agent_orchestrator.py", "agent_protocol.py"]
+    },
+    "src/llm": {
+      "description": "LLM client and routing",
+      "key_files": ["router.py", "llm_client.py", "provider_registry.py", "streaming.py", "fallback_policy.py", "seed_injection.py", "surgical_patch.py"]
+    },
+    "src/validation": {
+      "description": "Validation and sandbox execution",
+      "key_files": ["tiered_validator.py", "invariant_enforcer.py", "sandbox.py", "guardian.py", "crossref_validator.py", "tainting.py", "sandbox_health.py", "validator_dag.py", "gate_lint.py", "wasm_sandbox.py", "js_validator_wrapper.py", "gvisor_sandbox.py"]
+    },
+    "src/policy": {
+      "description": "Policy engine and gate management",
+      "key_files": ["policy_engine.py", "gate_manager.py", "gate_evaluation.py", "gate_behavior.py", "intent_router.py", "staging_zone.py", "plan_amendment_gate.py", "recovery_manager.py", "retry_logic.py", "policy_resolver.py"]
+    },
+    "src/storage": {
+      "description": "Storage backends",
+      "key_files": ["backend.py", "factory.py", "local_backend.py", "s3_backend.py", "gcs_backend.py", "encryption.py", "log_rotation.py"]
+    },
+    "src/skills": {
+      "description": "Skill library and management",
+      "key_files": ["skill_library.py", "skill.py", "catalog_validator.py", "policy_adapter.py", "skill_graph_adapter.py", "context_adapter.py"]
+    },
+    "src/planning": {
+      "description": "Planning engine and cycle detection",
+      "key_files": ["planning_engine.py", "cycle_detector.py", "amendment_control.py", "dag_checkpoint.py", "state_snapshot.py"]
+    },
+    "src/secrets": {
+      "description": "Secret management backends",
+      "key_files": ["store.py", "factory.py", "vault_backend.py", "env_backend.py", "keyring_backend.py"]
+    },
+    "src/schema": {
+      "description": "Schema definitions and migrations",
+      "key_files": ["migrations.py", "canonical_patterns.yaml", "item_atomic.yaml", "item_atomic_model.py"]
+    },
+    "src/evolution": {
+      "description": "Self-evolution and pattern extraction",
+      "key_files": ["self_evolution.py", "pattern_extractor.py"]
+    },
+    "src/generation": {
+      "description": "Skill generation",
+      "key_files": ["skill_generator.py"]
+    },
+    "src/tools": {
+      "description": "Tool routing and capabilities",
+      "key_files": ["tool_router.py", "schema_validator.py", "graph_export.py", "capability_registry.py", "sae_inspector.py"]
+    },
+    "src/visualization": {
+      "description": "Graph rendering",
+      "key_files": ["graph_renderer.py"]
+    },
+    "src/interactive": {
+      "description": "Interactive REPL and session",
+      "key_files": ["repl.py", "session.py"]
+    },
+    "src/harness": {
+      "description": "Orchestrator harness",
+      "key_files": ["orchestrator.py"]
+    },
+    "src/navigation": {
+      "description": "Navigation map building",
+      "key_files": ["nav_map_builder.py", "context_graph_builder.py"]
+    },
+    "src/config": {
+      "description": "Configuration management",
+      "key_files": ["schema_validator.py", "cache_invalidation.py", "precedence.py", "runtime_overlay.py"]
+    },
+    "src/interfaces": {
+      "description": "Plugin interfaces",
+      "key_files": ["plugin_interface.py"]
+    },
+    "src/cli": {
+      "description": "Command-line interface",
+      "key_files": ["titan_cli.py", "deprecation.py", "migrate.py"]
+    },
+    "src/approval": {
+      "description": "Approval and escalation",
+      "key_files": ["escalation.py", "loop.py"]
+    },
+    "src/diagnostics": {
+      "description": "Diagnostics and doctor rules",
+      "key_files": ["doctor_rules.py", "event_listener.py"]
+    },
+    "src/hygiene": {
+      "description": "Hygiene protocol",
+      "key_files": ["hygiene_protocol.py"]
+    },
+    "src/fusion": {
+      "description": "Type-aware fusion engine",
+      "key_files": ["type_aware_merger.py"]
+    },
+    "src/coordination": {
+      "description": "Coordination and ABI locking",
+      "key_files": ["abi_locked.py", "dependency_resolver.py"]
+    },
+    "src/locks": {
+      "description": "Distributed locking",
+      "key_files": ["backend.py", "factory.py", "file_lock.py", "redis_lock.py", "etcd_lock.py", "deadlock_detector.py"]
+    },
+    "src/feedback": {
+      "description": "Feedback loop and threshold adapter",
+      "key_files": ["feedback_loop.py", "threshold_adapter.py", "catalog_versioning.py"]
+    },
+    "src/scoring": {
+      "description": "Adaptive weights for scoring",
+      "key_files": ["adaptive_weights.py"]
+    },
+    "src/resilience": {
+      "description": "Circuit breaker and degradation",
+      "key_files": ["circuit_breaker.py", "degradation.py", "retry_executor_facade.py"]
+    },
+    "src/testing": {
+      "description": "Testing utilities",
+      "key_files": ["mock_llm.py", "mock_tools.py", "parity_audit.py"]
+    },
+    "src/templates": {
+      "description": "Skill templates",
+      "key_files": ["skill_template.j2"]
+    },
+    "src/decision": {
+      "description": "Decision records and conflict resolution",
+      "key_files": ["decision_record.py", "conflict_resolver.py"]
+    },
+    "src/pipeline": {
+      "description": "Content pipeline",
+      "key_files": ["config.py", "checkpoint.py", "errors.py", "phases.py", "content_pipeline.py"]
+    },
+    "src/output": {
+      "description": "Output formatters",
+      "key_files": ["sarif_exporter.py"]
+    },
+    "src/checksum": {
+      "description": "Checksum utilities",
+      "key_files": ["prefix_handler.py"]
+    },
+    "src/gap_events": {
+      "description": "Gap event handling",
+      "key_files": ["serializer.py", "gap_registry.yaml"]
+    },
+    "src/classification": {
+      "description": "Intent classification (IntentClassifierV1)",
+      "key_files": ["__init__.py"]
+    },
+    "src/mode": {
+      "description": "Mode selection (ModeSelector)",
+      "key_files": ["__init__.py"]
     }
   },
-  "aliases": {
-    "verification_gates": [
-      "GATE-00",
-      "GATE-01",
-      "GATE-02",
-      "GATE-03",
-      "GATE-04",
-      "GATE-05"
-    ],
-    "gates": "verification_gates",
-    "validation": "verification_gates",
-    "checks": "verification_gates",
-    "chunking": "PRINCIPLE-04",
-    "rollback": "TIER 4",
-    "failsafe": "TIER 5",
-    "invariants": [
-      "INVAR-01",
-      "INVAR-02",
-      "INVAR-03",
-      "INVAR-04",
-      "INVAR-05"
-    ]
-  },
-  "shortcuts": {
-    "start": {
-      "action": "read",
-      "target": "AGENTS.md"
+  "non_src_packages": {
+    "budget": {
+      "description": "Budget management (root level, NOT under src/)",
+      "location": "budget/"
     },
-    "process": {
-      "action": "process",
-      "target": "inputs/"
-    },
-    "resume": {
-      "action": "read",
-      "target": "checkpoints/checkpoint.json"
+    "adapters": {
+      "description": "LLM provider adapters (root level, NOT under src/)",
+      "location": "adapters/"
     },
     "config": {
-      "action": "read",
-      "target": "config.yaml"
+      "description": "Configuration files",
+      "location": "config/"
     },
-    "meta": {
-      "action": "read",
-      "target": ".github/README_META.yaml"
+    "scripts": {
+      "description": "Utility scripts",
+      "location": "scripts/"
     },
-    "scout_matrix": {
-      "action": "read",
-      "target": "src/agents/scout_matrix.py"
+    "skills": {
+      "description": "Skill definitions",
+      "location": "skills/"
     },
-    "agent_protocol": {
-      "action": "read",
-      "target": "src/agents/agent_protocol.py"
+    "schemas": {
+      "description": "JSON schemas",
+      "location": "schemas/"
     },
-    "multi_agent_orchestrator": {
-      "action": "read",
-      "target": "src/agents/multi_agent_orchestrator.py"
+    "presets": {
+      "description": "Workflow presets",
+      "location": "presets/"
+    },
+    "tests": {
+      "description": "Test suite",
+      "location": "tests/"
     }
   }
 }

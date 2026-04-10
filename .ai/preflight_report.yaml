@@ -1,0 +1,125 @@
+# TITAN Protocol - Pre-flight Dependency Analysis Report
+# Generated: 2026-04-11T00:00:00Z
+# Plan: TITAN_PROTOCOL_PLAN_A_FOUNDATION.md
+
+timestamp: "2026-04-11T00:00:00Z"
+repo_version: "5.1.0"
+repo_commit: "current"
+
+# Test Analysis
+test_analysis:
+  count_collected: 3117
+  count_claimed_implemented_status: 2796
+  count_claimed_changelog: 3030
+  delta_implemented: +321
+  delta_changelog: +87
+  status: WARN
+  note: "Actual test count (3117) exceeds both claimed counts - documentation needs update"
+
+# Stub Directories Analysis
+stub_directories:
+  src/classification:
+    status: NOT_EMPTY
+    has_implementation: true
+    files:
+      - __init__.py (IntentClassifierV1 - 14KB)
+    note: "Contains IntentClassifierV1 implementation - NOT a stub"
+  src/mode:
+    status: NOT_EMPTY
+    has_implementation: true
+    files:
+      - __init__.py (ModeSelector - 9KB)
+    note: "Contains ModeSelector implementation - NOT a stub"
+
+# Duplicate Modules Analysis
+duplicate_modules:
+  root_adapters:
+    exists: true
+    src_adapters_exists: false
+    status: NO_DUPLICATE
+    note: "adapters/ is root-level package, no src/adapters/ exists"
+  root_utils:
+    exists: true
+    src_utils_exists: true
+    status: DUPLICATE
+    files_identical: true
+    note: "utils/ and src/utils/ are identical - src/utils/ is canonical"
+
+# Config Analysis
+config_analysis:
+  config_yaml_location: "config.yaml (root)"
+  config_subdir_exists: false
+  intent_classifier:
+    enabled: false
+    module: "src.classification"
+    class: null
+    import_test: OK
+    note: "Module exists and is importable"
+  execution_mode:
+    current: "trusted"
+    note: "config.yaml has 'trusted' mode, but execution_gate.py supports human_gate, sandbox, disabled"
+
+# Path Verification
+path_check_results:
+  src/orchestrator/chain_composer.py: OK
+  src/orchestrator/universal_router.py: OK
+  src/security/execution_gate.py: OK
+  src/context/context_graph.py: OK  # Note: NOT src/state/context_graph.py
+  src/context/trust_engine.py: OK
+  src/agents/scout_matrix.py: OK
+  src/observability/prometheus_exporter.py: OK
+
+# Prompt Registry Analysis
+prompt_registry:
+  patterns_count: 4
+  patterns:
+    - TITAN_FUSE_v3.1
+    - GUARDIAN_v1.1
+    - AGENT_GEN_SPEC_v4.1
+    - DEP_AUDIT
+  status: COMPLETE
+  note: "DEP_AUDIT is already registered - no action needed for ITEM_A008"
+
+# Tool Activation Analysis
+tool_activation:
+  has_prompt_patterns: false
+  status: NEEDS_UPDATE
+  note: "Missing prompt_patterns section for ITEM_A009"
+
+# Version Sync Analysis
+version_sync:
+  version_file: "5.1.0"
+  sync_script_exists: true
+  check_script_exists: true
+  status: OK
+
+# Issues Found
+issues:
+  - id: GAP-TEST-COUNT
+    severity: WARN
+    description: "Test count mismatch: collected 3117 vs claimed 2796/3030"
+    recommendation: "Update IMPLEMENTATION_STATUS.md and CHANGELOG.md with actual count"
+  
+  - id: GAP-UTILS-DUPLICATE
+    severity: INFO
+    description: "utils/ and src/utils/ are duplicates"
+    recommendation: "Remove root utils/ in favor of src/utils/"
+  
+  - id: GAP-EXECUTION-MODE
+    severity: INFO
+    description: "config.yaml execution_mode is 'trusted' but execution_gate.py expects human_gate/sandbox/disabled"
+    recommendation: "Update config.yaml to use valid mode"
+
+# Overall Recommendation
+recommendation: GO
+recommendation_details: |
+  Repository is in good state for Plan A execution.
+  - All critical paths verified
+  - No blocking issues found
+  - Minor discrepancies noted for informational purposes
+  - Some plan items already completed in repository
+  
+notes:
+  - "src/classification/ and src/mode/ are NOT empty stubs - they contain implementations"
+  - "DEP_AUDIT already in prompt_registry - ITEM_A008 may be skipped"
+  - "context_graph.py is in src/context/ not src/state/ - path already corrected"

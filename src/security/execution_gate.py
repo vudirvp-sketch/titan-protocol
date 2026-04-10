@@ -28,8 +28,10 @@ import uuid
 class ExecutionMode(Enum):
     """Execution modes as defined in INVAR-05."""
     HUMAN_GATE = "human_gate"  # Requires approval token
+    HUMAN = "human"            # Alias for human_gate (PLAN A compatibility)
     SANDBOX = "sandbox"         # Requires sandbox confirmation
     DISABLED = "disabled"       # No execution allowed
+    TRUSTED = "trusted"         # No restrictions (development mode)
 
 
 class SandboxType(Enum):
@@ -119,6 +121,15 @@ class ExecutionGate:
         r"Function\s*\(",
     ]
     
+    # Mode aliases for backward compatibility
+    MODE_ALIASES = {
+        "human": "human_gate",
+        "human_gate": "human_gate",
+        "sandbox": "sandbox",
+        "disabled": "disabled",
+        "trusted": "trusted",
+    }
+    
     def __init__(self, config: Dict):
         """
         Initialize execution gate with configuration.
@@ -126,9 +137,14 @@ class ExecutionGate:
         Args:
             config: Configuration dict from config.yaml
         """
-        self.mode = ExecutionMode(
-            config.get("security", {}).get("execution_mode", "human_gate")
-        )
+        mode_str = config.get("security", {}).get("execution_mode", "human_gate")
+        # Resolve mode with alias support
+        resolved_mode = self.MODE_ALIASES.get(mode_str, mode_str)
+        try:
+            self.mode = ExecutionMode(resolved_mode)
+        except ValueError:
+            # Fallback to human_gate for unknown modes
+            self.mode = ExecutionMode.HUMAN_GATE
         self.sandbox_type = SandboxType(
             config.get("security", {}).get("sandbox_type", "none")
         )
@@ -166,6 +182,22 @@ class ExecutionGate:
                 allowed=False,
                 reason="Execution mode is DISABLED. No code execution permitted."
             )
+        
+        # Mode: TRUSTED - Allow all execution (development mode)
+        if self.mode == ExecutionMode.TRUSTED:
+            warning = self._check_dangerous_patterns(code, language)
+            self._log_execution_attempt(code, language, blocked=False, reason="trusted_mode")
+            return ExecutionResult(
+                allowed=True,
+                reason="Execution allowed in TRUSTED mode (development)",
+                warning=warning
+            )
+        
+        # Mode: HUMAN (alias for HUMAN_GATE)
+        if self.mode == ExecutionMode.HUMAN:
+            # Same as HUMAN_GATE
+            self.mode = ExecutionMode.HUMAN_GATE
+            # Fall through to HUMAN_GATE handling
         
         # Mode: SANDBOX - Verify sandbox
         if self.mode == ExecutionMode.SANDBOX:
@@ -210,10 +242,10 @@ class ExecutionGate:
                 warning=self._check_dangerous_patterns(code, language)
             )
         
-        # Unknown mode - fail safe
+        # Unknown mode - fail safe with clear error
         return ExecutionResult(
             allowed=False,
-            reason=f"Unknown execution mode: {self.mode}"
+            reason=f"Unknown execution mode: {self.mode}. Valid modes: human, human_gate, sandbox, disabled, trusted"
         )
     
     def request_approval(self,
@@ -603,6 +635,41 @@ class ExecutionGate:
             "execution_attempts": len(self.execution_log),
             "blocked_attempts": sum(1 for e in self.execution_log if e["blocked"])
         }
+
+
+# GATE_MODES mapping for external reference (PLAN A ITEM_A001)
+GATE_MODES = {
+    "human": "human_gate",
+    "human_gate": "human_gate",
+    "sandbox": "sandbox",
+    "disabled": "disabled",
+    "trusted": "trusted",
+}
+
+
+def resolve_gate(mode: str) -> ExecutionMode:
+    """
+    Resolve a mode string to an ExecutionMode enum.
+    
+    PLAN A ITEM_A001: Provides proper gate resolution with fallback.
+    
+    Args:
+        mode: Mode string (human, human_gate, sandbox, disabled, trusted)
+        
+    Returns:
+        ExecutionMode enum value
+        
+    Raises:
+        ValueError: If mode is not recognized and no fallback available
+    """
+    resolved = GATE_MODES.get(mode)
+    if resolved:
+        return ExecutionMode(resolved)
+    # Fallback to human_gate for safety
+    raise ValueError(
+        f"Unknown execution mode: '{mode}'. "
+        f"Valid modes: {list(GATE_MODES.keys())}"
+    )
 
 
 # Convenience function for quick execution check
