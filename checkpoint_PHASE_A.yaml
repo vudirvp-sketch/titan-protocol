@@ -1,0 +1,117 @@
+# TITAN Protocol - Plan A Checkpoint
+# Phase: FOUNDATION (PHASE_0 + PHASE_1)
+# Repository: https://github.com/vudirvp-sketch/titan-protocol
+# Target Version: v5.1.0
+
+checkpoint_id: PHASE_A
+status: COMPLETED
+started_at: "2026-04-09T00:00:00Z"
+completed_at: "2026-04-10T12:00:00Z"
+
+phases_completed:
+  - PHASE_0: COMPLETED
+  - PHASE_1: COMPLETED
+
+items:
+  A000:
+    title: "Pre-flight Dependency Analysis"
+    status: PASS
+    artifacts:
+      - .ai/preflight_report.yaml
+    notes: "Test count verified: 3117 tests. All critical paths exist."
+
+  A001:
+    title: "Fix Security Execution Mode"
+    status: PASS
+    notes: "human_gate mode supported in execution_gate.py"
+
+  A002:
+    title: "Designate VERSION as SSOT and Sync"
+    status: PASS
+    artifacts:
+      - scripts/sync_versions.py
+      - scripts/check_version_sync.py
+    notes: "Paths corrected: src/orchestrator/chain_composer.py, src/orchestrator/universal_router.py"
+
+  A003:
+    title: "Remove Duplicate Modules"
+    status: PARTIAL
+    notes: |
+      - src/classification/ NOT removed - contains IntentClassifierV1 (14KB)
+      - src/mode/ NOT removed - contains ModeSelector (9KB)
+      - adapters/ at root is NOT duplicate - src/adapters/ doesn't exist
+      - utils/ at root IS duplicate of src/utils/ - marked for removal
+
+  A004:
+    title: "Extract Shared Models"
+    status: PASS
+    artifacts:
+      - src/models/__init__.py
+      - src/models/adaptation.py
+      - src/models/pattern.py
+
+  A005:
+    title: "Create .ai/ Navigation Layer"
+    status: PASS
+    artifacts:
+      - .ai/nav_map.json
+      - .ai/shortcuts.yaml
+      - .ai/path_corrections.yaml
+
+  A006:
+    title: "Populate Model Routing Config"
+    status: PASS
+    notes: "Model routing placeholders populated with fallback chain"
+
+  A007:
+    title: "Cleanup Empty Stub Modules"
+    status: SKIPPED
+    notes: "No empty stubs found - src/classification/ and src/mode/ contain implementations"
+
+  A008:
+    title: "Add DEP_AUDIT to Prompt Registry"
+    status: ALREADY_COMPLETE
+    notes: "DEP_AUDIT already exists in config/prompt_registry.yaml"
+
+  A009:
+    title: "Add prompt_patterns to tool_activation.yaml"
+    status: PASS
+    notes: "prompt_patterns section added"
+
+  A010:
+    title: "Enhance Intent Classifier"
+    status: PASS
+    notes: "ExecutionContext dataclass defined, _select_adaptation implemented"
+
+  A011:
+    title: "Create adapter_mapping.yaml"
+    status: PASS
+    artifacts:
+      - src/gap_events/adapter_mapping.yaml
+    notes: "Full 20→4 GapEvent mapping created"
+
+path_corrections_applied:
+  - original: "src/chain_composer.py"
+    corrected: "src/orchestrator/chain_composer.py"
+  - original: "src/universal_router.py"
+    corrected: "src/orchestrator/universal_router.py"
+  - original: "src/state/context_graph.py"
+    corrected: "src/context/context_graph.py"
+  - original: "src/trust/trust_engine.py"
+    corrected: "src/context/trust_engine.py"
+  - original: "src/observability/scout_matrix.py"
+    corrected: "src/agents/scout_matrix.py"
+  - original: "config/config.yaml"
+    corrected: "config.yaml"
+
+test_suite_status: PASS
+test_count: 3117
+
+ready_for_plan_b: true
+
+notes: |
+  Plan A completed with corrections to original assumptions:
+  - src/classification/ and src/mode/ were NOT empty stubs
+  - adapters/ at root is a legitimate package (no src/adapters/ exists)
+  - All path corrections documented in .ai/path_corrections.yaml
+  - VERSION remains at 5.1.0 as the foundation checkpoint
