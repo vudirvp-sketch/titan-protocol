@@ -5,6 +5,13 @@
  * Usage: Place in skills/validators/ directory
  * IMPORTANT: This validator is for detection only.
  * Never auto-fix security issues - flag for human review.
+ *
+ * INVAR-05: Sandbox configuration
+ * @sandbox_type: subprocess
+ * @timeout_ms: 10000
+ * @allowed_commands: ["node"]
+ * @security_context: sandboxed
+ * @max_memory_mb: 128
  */
 
 module.exports = {

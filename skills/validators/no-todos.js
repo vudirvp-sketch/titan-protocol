@@ -4,6 +4,12 @@
  *
  * Usage: Place in skills/validators/ directory
  * The protocol will automatically load and run this validator
+ *
+ * INVAR-05: Sandbox configuration
+ * @sandbox_type: subprocess
+ * @timeout_ms: 5000
+ * @allowed_commands: ["node"]
+ * @max_memory_mb: 128
  */
 
 module.exports = {

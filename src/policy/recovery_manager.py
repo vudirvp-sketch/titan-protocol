@@ -5,6 +5,7 @@ Autonomous recovery loops for error handling.
 Implements automatic recovery strategies.
 
 TASK-003: Policy Engine & Autonomous Recovery Loops
+FIX 08: Chain control integration for cascading recovery
 """
 
 import json
@@ -14,6 +15,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 import time
+
+# FIX 08: Import chain control from policy_engine
+from .policy_engine import PolicyResult, chain_next, chain_break_on
 
 
 class RecoveryState(Enum):
@@ -215,6 +219,9 @@ class RecoveryManager:
 
         return None
 
+    # FIX 08: Chain control decorators
+    @chain_next(on_success="notify_stakeholders", on_failure="log_failure")
+    @chain_break_on(lambda result: result.success and result.action == RecoveryAction.ABORT)
     def recover(self, context: RecoveryContext) -> RecoveryResult:
         """
         Execute recovery process.

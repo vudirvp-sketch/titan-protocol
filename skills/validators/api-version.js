@@ -3,6 +3,12 @@
  * Enforces API version format in documentation
  *
  * Usage: Place in skills/validators/ directory
+ *
+ * INVAR-05: Sandbox configuration
+ * @sandbox_type: subprocess
+ * @timeout_ms: 5000
+ * @allowed_commands: ["node", "npm"]
+ * @max_memory_mb: 128
  */
 
 module.exports = {

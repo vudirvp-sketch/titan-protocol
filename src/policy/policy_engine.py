@@ -768,6 +768,48 @@ class PolicyEngine:
 
 
 # =============================================================================
+# FIX 08: Chain control decorators for method-level chaining
+# =============================================================================
+
+def chain_next(on_success: Optional[str] = None, on_failure: Optional[str] = None):
+    """
+    Decorator to chain to next policy/method on success or failure.
+    
+    Usage:
+        @chain_next(on_success="notify_stakeholders")
+        def recover_from_checkpoint(self, checkpoint_id: str) -> PolicyResult:
+            ...
+    
+    Args:
+        on_success: Name of next policy/method to call on success
+        on_failure: Name of next policy/method to call on failure
+    """
+    def decorator(func):
+        func._chain_next_on_success = on_success
+        func._chain_next_on_failure = on_failure
+        return func
+    return decorator
+
+
+def chain_break_on(condition_fn: Callable[[Any], bool]):
+    """
+    Decorator to break chain execution when condition is met.
+    
+    Usage:
+        @chain_break_on(lambda r: r.severity == "CRITICAL")
+        def recover_from_checkpoint(self, checkpoint_id: str) -> PolicyResult:
+            ...
+    
+    Args:
+        condition_fn: Function that takes result and returns True to break chain
+    """
+    def decorator(func):
+        func._chain_break_condition = condition_fn
+        return func
+    return decorator
+
+
+# =============================================================================
 # Global policy engine singleton
 # =============================================================================
 

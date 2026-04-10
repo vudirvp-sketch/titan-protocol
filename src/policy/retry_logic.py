@@ -5,6 +5,7 @@ Configurable retry strategies for transient failures.
 Implements exponential backoff, jitter, and circuit breaker patterns.
 
 TASK-003: Policy Engine & Autonomous Recovery Loops
+FIX 09: Chain control integration for retry policies
 """
 
 import random
@@ -14,6 +15,9 @@ from typing import Dict, Any, Optional, Callable, TypeVar, Union
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import wraps
+
+# FIX 09: Import chain control from policy_engine
+from .policy_engine import PolicyResult, chain_next, chain_break_on
 
 
 class RetryStrategy(Enum):
@@ -184,6 +188,9 @@ class RetryExecutor:
 
         return True
 
+    # FIX 09: Chain control decorators for retry execution
+    @chain_next(on_success="log_success", on_failure="handle_failure")
+    @chain_break_on(lambda result: result.state == RetryState.CIRCUIT_OPEN)
     def execute(self,
                 operation: Callable[[], Any],
                 on_retry: Optional[Callable[[int, Exception], None]] = None) -> RetryResult:
