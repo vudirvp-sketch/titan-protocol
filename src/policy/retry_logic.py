@@ -134,7 +134,7 @@ class RetryResult:
         result: Result of successful operation
         state: Final retry state
     """
-    success: bool
+    success: bool = False
     attempts: int = 0
     total_delay_ms: int = 0
     last_error: Optional[str] = None

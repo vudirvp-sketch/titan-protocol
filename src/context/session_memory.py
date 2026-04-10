@@ -306,6 +306,8 @@ class SessionMemory:
             config: Optional configuration
             event_bus: Optional EventBus for event emission
         """
+        if isinstance(config, dict):
+            config = SessionMemoryConfig.from_dict(config)
         self._config = config or SessionMemoryConfig()
         self._event_bus = event_bus
         self._logger = logging.getLogger(__name__)

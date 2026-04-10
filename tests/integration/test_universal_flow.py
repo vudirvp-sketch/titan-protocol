@@ -49,16 +49,16 @@ class TestUniversalFlow:
             }
         }
         
-        skill_library = SkillLibrary(event_bus=event_bus)
-        intent_router = IntentRouter(event_bus=event_bus)
+        skill_library = SkillLibrary(config={}, event_bus=event_bus)
+        intent_router = IntentRouter()
         retry_facade = RetryExecutorFacade(event_bus=event_bus)
         
         return UniversalRouter(
             config=config,
             event_bus=event_bus,
             skill_library=skill_library,
-            intent_router=intent_router,
-            retry_facade=retry_facade,
+            intent_enricher=None,
+            retry_executor=None,
         )
     
     def test_developer_refactor_flow(self, universal_router):
@@ -146,8 +146,8 @@ class TestCrossSessionContext:
         
         event_bus = EventBus()
         config = {
-            "backend": "memory",  # Use in-memory for tests
-            "ttl_seconds": 3600,
+            "storage_path": ".titan/test_sessions",
+            "default_ttl_seconds": 3600,
         }
         
         return SessionMemory(config=config, event_bus=event_bus)
@@ -159,18 +159,18 @@ class TestCrossSessionContext:
         # Create session
         session_memory.create_session(session_id)
         
-        # Update session
+        # Update session (use correct key names matching SessionMemory.update_session)
         session_memory.update_session(session_id, {
-            "user_profile": "developer",
-            "preferred_tools": ["grep", "ast_parse"],
+            "profile": "developer",
+            "tools": ["grep", "ast_parse"],
         })
         
         # Retrieve session
         session = session_memory.get_session(session_id)
         
         assert session is not None
-        assert session.user_profile == "developer"
-        assert "grep" in session.preferred_tools
+        assert session.profile == "developer"
+        assert "grep" in session.tools
     
     def test_history_patterns(self, session_memory):
         """Test that history patterns are tracked."""
@@ -178,15 +178,16 @@ class TestCrossSessionContext:
         
         session_memory.create_session(session_id)
         
-        # Add multiple requests
+        # Add multiple requests (need >= 3 of same intent for pattern detection)
         session_memory.add_request(session_id, "Refactor code", {"intent": "refactor"})
         session_memory.add_request(session_id, "Debug error", {"intent": "debug"})
         session_memory.add_request(session_id, "Refactor module", {"intent": "refactor"})
+        session_memory.add_request(session_id, "Refactor again", {"intent": "refactor"})
         
         patterns = session_memory.get_history_patterns(session_id)
         
         assert len(patterns) > 0
-        assert any("refactor" in p for p in patterns)
+        assert any("refactor" in p.pattern_value for p in patterns)
 
 
 class TestAllProfilesFlows:

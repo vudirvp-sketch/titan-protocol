@@ -117,23 +117,41 @@ class ContentPipeline:
             return None
     
     def _emit_gap_event(self, source: str, gate: str, reason: str, severity: str = "CRITICAL") -> None:
-        """Emit GapEvent via EventBus."""
+        """Emit GapEvent via EventBus.
+
+        Creates a GapEvent for internal tracking (tests) and a proper Event
+        for the EventBus (which requires event_type and EventSeverity attributes).
+        """
         try:
-            from src.events import GapEvent
-            event = GapEvent(
+            from src.events.gap_event import GapEvent
+            from src.events.event_bus import Event, EventSeverity
+
+            gap = GapEvent(
                 source=source,
                 gate=gate,
                 reason=reason,
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 severity=severity,
             )
-            self._emitted_events.append(event)
-            
+            self._emitted_events.append(gap)
+
             bus = self._get_event_bus()
-            if bus:
-                bus.emit(event) if hasattr(bus, 'emit') else None
+            if bus and hasattr(bus, 'emit'):
+                severity_map = {
+                    "CRITICAL": EventSeverity.CRITICAL,
+                    "WARN": EventSeverity.WARN,
+                    "INFO": EventSeverity.INFO,
+                    "DEBUG": EventSeverity.DEBUG,
+                }
+                event = Event(
+                    event_type="GAP_EVENT",
+                    data=gap.to_dict(),
+                    severity=severity_map.get(severity, EventSeverity.WARN),
+                    source=source,
+                )
+                bus.emit(event)
         except ImportError:
-            pass  # GapEvent not available
+            pass  # GapEvent or EventBus not available
     
     def _halt_with_gap(self, phase: str, gate: str, reason: str) -> None:
         """Halt pipeline and emit GapEvent before raising GateFailedError."""

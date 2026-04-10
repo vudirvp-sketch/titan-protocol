@@ -51,6 +51,7 @@ class TestCircuitBreakerIntegration:
             failure_threshold=2,
             timeout_ms=100,
             success_threshold=2,
+            half_open_max_calls=2,
         )
         breaker = CircuitBreaker("test_service", config=config, event_bus=event_bus)
         
@@ -239,13 +240,13 @@ class TestUnifiedRetryFacade:
                 raise ValueError("Temporary failure")
             return "success"
         
-        result = facade.execute_with_retry(
+        facade_result = facade.execute_with_retry(
             eventually_succeed,
             max_retries=5,
-            initial_delay_ms=10,
         )
         
-        assert result == "success"
+        assert facade_result.success
+        assert facade_result.result == "success"
         assert call_count[0] == 3
     
     def test_retry_exhaustion(self, event_bus):
@@ -257,12 +258,13 @@ class TestUnifiedRetryFacade:
         def always_fail():
             raise ValueError("Permanent failure")
         
-        with pytest.raises(ValueError):
-            facade.execute_with_retry(
-                always_fail,
-                max_retries=3,
-                initial_delay_ms=10,
-            )
+        facade_result = facade.execute_with_retry(
+            always_fail,
+            max_retries=3,
+        )
+        
+        assert not facade_result.success
+        assert facade_result.error is not None
     
     def test_circuit_breaker_integration(self, event_bus):
         """Test circuit breaker integration with retry facade."""
@@ -272,18 +274,16 @@ class TestUnifiedRetryFacade:
         
         # Multiple failures with circuit
         for _ in range(10):
-            try:
-                facade.execute_with_retry(
-                    lambda: int("invalid"),
-                    max_retries=1,
-                    circuit_id="test_circuit",
-                )
-            except ValueError:
-                pass
+            facade.execute_with_retry(
+                lambda: int("invalid"),
+                max_retries=1,
+                circuit_id="test_circuit",
+            )
         
         # Circuit should be tracked
-        stats = facade.get_retry_stats()
-        assert stats is not None
+        metrics = facade.get_metrics()
+        assert metrics is not None
+        assert metrics["total_failures"] > 0
 
 
 if __name__ == "__main__":
