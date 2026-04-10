@@ -1,0 +1,51 @@
+{# TITAN Protocol Skill Template (ITEM-B013) #}
+{# Extended with canonical_patterns, adaptation_matrix, and DEP_AUDIT support #}
+
+# Skill: {{ skill_id | default('unnamed') }}
+
+## Overview
+{{ description | default('No description provided') }}
+
+{% block canonical_patterns %}
+## Canonical Patterns
+{% for pattern in canonical_patterns %}
+### {{ pattern.pat_id }}: {{ pattern.name }}
+- Category: {{ pattern.category }}
+- Source: {{ pattern.source_prompt }}
+- Implementation: {{ pattern.implementation_file }}
+{% if pattern.fields %}
+- Fields:
+{% for f in pattern.fields %}
+  - {{ f.name }} ({{ f.type }}{% if f.required %}, required{% endif %})
+{% endfor %}
+{% endif %}
+{% if pattern.gap_tags %}
+- Gap Tags: {{ pattern.gap_tags | join(', ') }}
+{% endif %}
+{% endfor %}
+{% endblock %}
+
+{% block adaptation_matrix %}
+## Adaptation Matrix
+{% for entry in adaptation_matrix %}
+### {{ entry.pattern_type }}
+{% if entry.status == 'DEFERRED' %}
+> **DEFERRED** to {{ entry.deferred_to }}: {{ entry.reason }}
+{% else %}
+Rules:
+{% for rule in entry.adaptation_rules %}
+{{ rule.priority }}. **{{ rule.rule }}**: {{ rule.description }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endblock %}
+
+{% block dep_audit %}
+## Dependency Audit
+{% if dep_audit_enabled %}
+Audit Type: {{ dep_audit_type }}
+{% for rule in dep_audit_rules %}
+- {{ rule.rule }}: {{ rule.description }}
+{% endfor %}
+{% endif %}
+{% endblock %}

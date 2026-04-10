@@ -1,0 +1,68 @@
+preset_id: "dependency_audit"
+name: "Dependency Audit Preset"
+version: "1.0.0"
+source_prompt: "DEP_AUDIT"
+description: "Preset for dependency audit and compliance scanning"
+
+adaptation_matrix:
+  - pattern_type: "js_node"
+    source: "DEP_AUDIT"
+    adaptation_rules:
+      - rule: "parse_package_json"
+        description: "Extract dependencies from package.json"
+        priority: 1
+      - rule: "check_npm_audit"
+        description: "Run npm audit for vulnerabilities"
+        priority: 2
+      - rule: "version_pin_check"
+        description: "Check for pinned vs range versions"
+        priority: 3
+
+  - pattern_type: "ci_cd_auto_pr"
+    source: "DEP_AUDIT"
+    adaptation_rules:
+      - rule: "detect_ci_config"
+        description: "Identify CI/CD configuration files"
+        priority: 1
+      - rule: "auto_pr_compatibility"
+        description: "Check auto-PR dependency compatibility"
+        priority: 2
+      - rule: "workflow_integrity"
+        description: "Validate workflow step dependencies"
+        priority: 3
+
+  - pattern_type: "manual_sre"
+    source: "DEP_AUDIT"
+    adaptation_rules:
+      - rule: "identify_sre_touchpoints"
+        description: "Find manual SRE intervention points"
+        priority: 1
+      - rule: "runbook_coverage"
+        description: "Check runbook coverage for dependencies"
+        priority: 2
+      - rule: "alert_threshold_review"
+        description: "Review alert thresholds for dep changes"
+        priority: 3
+
+  - pattern_type: "compliance_policy"
+    source: "DEP_AUDIT"
+    adaptation_rules:
+      - rule: "license_scan"
+        description: "Scan dependency licenses"
+        priority: 1
+      - rule: "policy_compliance"
+        description: "Check against organizational policies"
+        priority: 2
+      - rule: "vulnerability_policy"
+        description: "Validate against vulnerability policy"
+        priority: 3
+
+workflow_phases:
+  - id: "scan"
+    description: "Scan for dependency manifests"
+  - id: "analyze"
+    description: "Apply adaptation rules per pattern type"
+  - id: "report"
+    description: "Generate audit report with gap events"
+  - id: "remediate"
+    description: "Suggest or apply remediations"

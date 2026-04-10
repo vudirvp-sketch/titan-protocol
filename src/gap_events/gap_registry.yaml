@@ -1,0 +1,121 @@
+schema_version: "1.0.0"
+description: "Registry of all recognized gap types in TITAN Protocol"
+
+categories:
+  - id: STRUCT
+    name: "Structural Gap"
+    description: "Missing or incomplete structural elements"
+  - id: BEHAV
+    name: "Behavioral Gap"
+    description: "Missing or incorrect runtime behavior"
+  - id: VAL
+    name: "Validation Gap"
+    description: "Missing validation logic or cases"
+  - id: ADAPT
+    name: "Adaptation Gap"
+    description: "Missing adaptation rules or matrix entries"
+  - id: INTEG
+    name: "Integration Gap"
+    description: "Missing integration between components"
+
+gap_types:
+  - gap_id: "GAP-STRUCT-001"
+    category: STRUCT
+    description: "Missing structural pattern definition"
+    severity: BLOCK
+    related_patterns: ["PAT-01"]
+  - gap_id: "GAP-STRUCT-002"
+    category: STRUCT
+    description: "Missing atomic item field"
+    severity: WARN
+    related_patterns: ["PAT-01"]
+  - gap_id: "GAP-STRUCT-003"
+    category: STRUCT
+    description: "Workspace isolation boundary violation"
+    severity: BLOCK
+    related_patterns: ["PAT-38"]
+  - gap_id: "GAP-STRUCT-004"
+    category: STRUCT
+    description: "Schema migration required"
+    severity: WARN
+    related_patterns: []
+  - gap_id: "GAP-STRUCT-005"
+    category: STRUCT
+    description: "Template rendering failed"
+    severity: BLOCK
+    related_patterns: []
+  - gap_id: "GAP-BEHAV-001"
+    category: BEHAV
+    description: "Retry logic exhausted without resolution"
+    severity: WARN
+    related_patterns: ["PAT-24"]
+  - gap_id: "GAP-BEHAV-002"
+    category: BEHAV
+    description: "Pipeline phase gate check failed"
+    severity: BLOCK
+    related_patterns: ["PAT-24"]
+  - gap_id: "GAP-BEHAV-003"
+    category: BEHAV
+    description: "Circuit breaker open"
+    severity: WARN
+    related_patterns: []
+  - gap_id: "GAP-BEHAV-004"
+    category: BEHAV
+    description: "Execution timeout exceeded"
+    severity: BLOCK
+    related_patterns: []
+  - gap_id: "GAP-VAL-001"
+    category: VAL
+    description: "Validation case condition unmet"
+    severity: WARN
+    related_patterns: ["PAT-42"]
+  - gap_id: "GAP-VAL-002"
+    category: VAL
+    description: "Validation case blocked execution"
+    severity: BLOCK
+    related_patterns: ["PAT-42"]
+  - gap_id: "GAP-VAL-003"
+    category: VAL
+    description: "Deprecation warning in schema"
+    severity: WARN
+    related_patterns: []
+  - gap_id: "GAP-VAL-004"
+    category: VAL
+    description: "Checksum mismatch detected"
+    severity: BLOCK
+    related_patterns: []
+  - gap_id: "GAP-ADAPT-001"
+    category: ADAPT
+    description: "Missing adaptation matrix entry"
+    severity: WARN
+    related_patterns: []
+  - gap_id: "GAP-ADAPT-002"
+    category: ADAPT
+    description: "Adaptation rule produced empty output"
+    severity: WARN
+    related_patterns: []
+  - gap_id: "GAP-ADAPT-003"
+    category: ADAPT
+    description: "Profile auto-detection inconclusive"
+    severity: WARN
+    related_patterns: []
+  - gap_id: "GAP-INTEG-001"
+    category: INTEG
+    description: "Model router fallback triggered"
+    severity: WARN
+    related_patterns: []
+  - gap_id: "GAP-INTEG-002"
+    category: INTEG
+    description: "Preset loading failed"
+    severity: BLOCK
+    related_patterns: []
+  - gap_id: "GAP-INTEG-003"
+    category: INTEG
+    description: "Skill library unavailable"
+    severity: WARN
+    related_patterns: []
+  - gap_id: "GAP-INTEG-004"
+    category: INTEG
+    description: "Session memory persistence failed"
+    severity: BLOCK
+    related_patterns: []

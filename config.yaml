@@ -1008,8 +1008,26 @@ abi_locked:
 context_adaptation:
   enabled: true
   auto_detect: true
-  default_profile: single_llm_executor
+  # MIGRATION NOTE (ITEM-B010): Profile entries with 'preset' field link to
+  # preset workflow.yaml files in presets/{preset_id}/workflow.yaml.
+  # Old inline adaptation rules are now in the preset adaptation_matrix.
+  # Default profile for Plan B preset resolution:
+  default_preset_profile: "large_file"
   profiles:
+    # ── Preset-linked profiles (ITEM-B010) ──
+    large_file:
+      preset: "large_file"
+      description: "Large file processing preset"
+      # MIGRATION: This replaces the old large_file profile
+      # which had inline adaptation rules. Those rules are now
+      # in presets/large_file/workflow.yaml adaptation_matrix.
+    validation:
+      preset: "validation"
+      description: "Validation and editorial preset"
+    dependency_audit:
+      preset: "dependency_audit"
+      description: "Dependency audit preset"
+    # ── Legacy profiles ──
     ci_cd_pipeline:
       retain: [validation, security, output]
       modify:

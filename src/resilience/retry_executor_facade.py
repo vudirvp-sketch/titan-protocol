@@ -127,6 +127,8 @@ class RetryFacadeConfig:
         half_open_success_threshold: Successes needed to close circuit (default: 2)
         max_nested_depth: Maximum nested retry depth to prevent multiplication (default: 2)
         enable_metrics: Enable metrics tracking (default: True)
+        max_validation_passes: PAT-24 max validation passes (default: 2)
+        emit_gap_event_on_exhaustion: PAT-24 emit GapEvent when passes exhausted (default: True)
     """
     default_max_retries: int = 3
     default_backoff_strategy: str = "exponential"
@@ -140,6 +142,9 @@ class RetryFacadeConfig:
     max_delay_ms: int = 30000
     multiplier: float = 2.0
     jitter: float = 0.1
+    # PAT-24: Retry with Validation Passes
+    max_validation_passes: int = 2
+    emit_gap_event_on_exhaustion: bool = True
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -156,6 +161,8 @@ class RetryFacadeConfig:
             "max_delay_ms": self.max_delay_ms,
             "multiplier": self.multiplier,
             "jitter": self.jitter,
+            "max_validation_passes": self.max_validation_passes,
+            "emit_gap_event_on_exhaustion": self.emit_gap_event_on_exhaustion,
         }
 
 
@@ -1057,6 +1064,21 @@ def create_retry_facade(
 # =============================================================================
 # Global Instance (Singleton Pattern)
 # =============================================================================
+
+def migrate_retry_config(config: dict) -> dict:
+    """Migrate retry config from max_retries to max_validation_passes (PAT-24).
+    
+    Args:
+        config: Configuration dictionary that may contain 'max_retries'.
+        
+    Returns:
+        Updated config with 'max_validation_passes' replacing 'max_retries'.
+    """
+    if "max_retries" in config and "max_validation_passes" not in config:
+        config["max_validation_passes"] = min(config["max_retries"], 2)
+        del config["max_retries"]
+    return config
+
 
 _global_facade: Optional[RetryExecutorFacade] = None
 

@@ -1,0 +1,62 @@
+preset_id: "large_file"
+name: "Large File Processing Preset"
+version: "1.0.0"
+source_prompt: "TITAN_FUSE_v3.1"
+description: "Preset for processing large single-file content"
+
+adaptation_matrix:
+  # ── ACTIVE entries (implemented) ──
+  - pattern_type: "single_file_code"
+    source: "TITAN_FUSE_v3.1"
+    adaptation_rules:
+      - rule: "chunk_at_boundary"
+        description: "Split at function/class boundaries"
+        priority: 1
+      - rule: "preserve_imports"
+        description: "Maintain import block integrity"
+        priority: 2
+
+  - pattern_type: "human_review"
+    source: "TITAN_FUSE_v3.1"
+    adaptation_rules:
+      - rule: "flag_ambiguous_sections"
+        description: "Mark sections requiring human judgment"
+        priority: 1
+      - rule: "suggest_alternatives"
+        description: "Provide alternative interpretations"
+        priority: 2
+
+  - pattern_type: "non_code_text"
+    source: "TITAN_FUSE_v3.1"
+    adaptation_rules:
+      - rule: "semantic_chunking"
+        description: "Chunk by semantic sections, not line count"
+        priority: 1
+      - rule: "preserve_structure"
+        description: "Maintain heading and paragraph structure"
+        priority: 2
+
+  # ── DEFERRED entries (v5.3.0) ──
+  - pattern_type: "multi_file_project"
+    source: "TITAN_FUSE_v3.1"
+    status: DEFERRED
+    deferred_to: "v5.3.0"
+    reason: "Multi-file adaptation requires cross-file dependency graph"
+    adaptation_rules: []
+
+  - pattern_type: "multi_file_refactor"
+    source: "TITAN_FUSE_v3.1"
+    status: DEFERRED
+    deferred_to: "v5.3.0"
+    reason: "Refactor-level adaptation requires project-wide analysis"
+    adaptation_rules: []
+
+workflow_phases:
+  - id: "ingest"
+    description: "Ingest and classify content type"
+  - id: "adapt"
+    description: "Apply adaptation matrix rules"
+  - id: "validate"
+    description: "Validate adapted output"
+  - id: "emit"
+    description: "Emit results and any gap events"

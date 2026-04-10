@@ -491,6 +491,106 @@ class WorkspaceIsolationManager:
         )
 
 
+# =============================================================================
+# PAT-38: Workspace Checkpoint with Diff Tracking (ITEM-B007)
+# =============================================================================
+
+import difflib
+
+
+@dataclass
+class WorkspaceCheckpoint:
+    """Checkpoint with source_diff tracking for PAT-38 pattern.
+    
+    Captures a snapshot of the workspace state and provides diff
+    computation between snapshots to track changes within isolated
+    workspaces. Addresses ISSUE-018 diff tracking requirement.
+    """
+    workspace_root: str
+    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    snapshot: Dict[str, str] = field(default_factory=dict)
+    source_diff: Optional[Dict[str, str]] = None
+
+    def capture_snapshot(self) -> Dict[str, str]:
+        """Capture current workspace file contents as a snapshot.
+        
+        Returns:
+            Dictionary mapping relative file paths to their contents.
+        """
+        root = Path(self.workspace_root)
+        snapshot = {}
+        if root.exists() and root.is_dir():
+            for file_path in root.rglob("*"):
+                if file_path.is_file():
+                    try:
+                        rel = str(file_path.relative_to(root))
+                        snapshot[rel] = file_path.read_text(errors="replace")
+                    except (OSError, PermissionError):
+                        continue
+        self.snapshot = snapshot
+        return snapshot
+
+    def compute_diff(self, before: str, after: str, file_path: str = "") -> str:
+        """Compute unified diff between before and after states.
+        
+        Args:
+            before: Content before change.
+            after: Content after change.
+            file_path: File path label for diff header.
+            
+        Returns:
+            Unified diff string.
+        """
+        before_lines = before.splitlines(keepends=True)
+        after_lines = after.splitlines(keepends=True)
+        diff = difflib.unified_diff(
+            before_lines, after_lines,
+            fromfile=f"a/{file_path}",
+            tofile=f"b/{file_path}",
+        )
+        return "".join(diff)
+
+    def capture_diff(self, before_snapshot: Dict[str, str]) -> Dict[str, str]:
+        """Capture diff between before_snapshot and current workspace state.
+        
+        Args:
+            before_snapshot: Previous snapshot to compare against.
+            
+        Returns:
+            Dictionary mapping file paths to their unified diffs.
+        """
+        root = Path(self.workspace_root)
+        diffs = {}
+        all_paths = set(before_snapshot.keys())
+
+        # Check current files
+        if root.exists() and root.is_dir():
+            for file_path in root.rglob("*"):
+                if file_path.is_file():
+                    try:
+                        rel = str(file_path.relative_to(root))
+                        all_paths.add(rel)
+                    except (OSError, ValueError):
+                        continue
+
+        for rel_path in all_paths:
+            current = root / rel_path
+            before_content = before_snapshot.get(rel_path)
+            if current.exists() and current.is_file():
+                try:
+                    after_content = current.read_text(errors="replace")
+                except (OSError, PermissionError):
+                    continue
+                if before_content is None:
+                    diffs[rel_path] = f"ADDED: {rel_path}"
+                elif after_content != before_content:
+                    diffs[rel_path] = self.compute_diff(before_content, after_content, rel_path)
+            elif before_content is not None:
+                diffs[rel_path] = f"DELETED: {rel_path}"
+        self.source_diff = diffs
+        return diffs
+
+
 def create_workspace_manager(config: Dict = None, event_bus: 'EventBus' = None) -> WorkspaceIsolationManager:
     """
     Factory function to create a WorkspaceIsolationManager.

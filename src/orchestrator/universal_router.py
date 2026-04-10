@@ -21,6 +21,7 @@ Version: 1.2.0
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
 import logging
 import time
@@ -1060,3 +1061,122 @@ def create_universal_router(
     )
     router.on_init()
     return router
+
+
+# =============================================================================
+# ITEM-B014: TaskType Enum, TASK_TIER_MAP, and ModelRouter
+# =============================================================================
+
+import os
+
+
+class TaskType(str, Enum):
+    """Task types for routing in TITAN Protocol.
+    
+    Each task type maps to a processing tier and model routing configuration.
+    ITEM-B014: Extended with DEP_AUDIT for dependency audit routing.
+    """
+    CODE_GEN = "code_gen"
+    CODE_REVIEW = "code_review"
+    DEBUG = "debug"
+    REFACTOR = "refactor"
+    ANALYZE = "analyze"
+    DOCUMENT = "document"
+    TEST = "test"
+    DEPLOY = "deploy"
+    RESEARCH = "research"
+    VISUALIZE = "visualize"
+    CONFIGURE = "configure"
+    DEP_AUDIT = "dep_audit"
+
+
+TASK_TIER_MAP: Dict[str, str] = {
+    "code_gen": "tier_1",
+    "code_review": "tier_2",
+    "debug": "tier_2",
+    "refactor": "tier_1",
+    "analyze": "tier_2",
+    "document": "tier_3",
+    "test": "tier_2",
+    "deploy": "tier_2",
+    "research": "tier_3",
+    "visualize": "tier_3",
+    "configure": "tier_3",
+    "dep_audit": "tier_2",
+}
+
+
+class ModelRouter:
+    """Route task types to appropriate LLM models.
+    
+    ITEM-B014: Includes fallback chain when model_routing values are empty.
+    Falls back through tier_1 -> tier_2 -> tier_3 -> env var -> default.
+    """
+    
+    DEFAULT_MODEL = "gpt-4o-mini"
+    
+    def __init__(self, model_routing: Optional[Dict[str, Any]] = None):
+        """Initialize ModelRouter with routing configuration.
+        
+        Args:
+            model_routing: Dictionary mapping tiers to model configurations.
+                           Example: {"tier_1": {"model": "gpt-4o"}, ...}
+        """
+        self.model_routing = model_routing or {}
+        self._logger = logging.getLogger(__name__)
+    
+    def route(self, task_type: TaskType) -> str:
+        """Route a task type to an appropriate model.
+        
+        Uses TASK_TIER_MAP to determine the tier, then looks up the model
+        in model_routing. Falls back through tier chain if primary is empty.
+        
+        Args:
+            task_type: The TaskType to route.
+            
+        Returns:
+            Model identifier string.
+        """
+        tier = TASK_TIER_MAP.get(task_type.value, "tier_3")
+        model = self._resolve_model(tier)
+        return model
+    
+    def _resolve_model(self, tier: str) -> str:
+        """Resolve model for a tier with fallback chain.
+        
+        Fallback order: requested_tier -> tier_1 -> tier_2 -> tier_3 -> env -> default
+        
+        Args:
+            tier: Target tier identifier.
+            
+        Returns:
+            Model identifier string.
+        """
+        # Try the requested tier first
+        model = self.model_routing.get(tier, {}).get("model", "")
+        if model:
+            return model
+        
+        # Fallback chain
+        fallback_tiers = ["tier_1", "tier_2", "tier_3"]
+        for fallback_tier in fallback_tiers:
+            model = self.model_routing.get(fallback_tier, {}).get("model", "")
+            if model:
+                self._logger.warning(
+                    f"Model routing empty for {tier}, falling back to {fallback_tier}: {model}"
+                )
+                return model
+        
+        # Environment variable fallback
+        env_model = os.environ.get("TITAN_DEFAULT_MODEL", "")
+        if env_model:
+            self._logger.warning(
+                f"Model routing empty for all tiers, using env TITAN_DEFAULT_MODEL: {env_model}"
+            )
+            return env_model
+        
+        # Ultimate fallback
+        self._logger.warning(
+            f"Model routing empty for {tier}, using default: {self.DEFAULT_MODEL}"
+        )
+        return self.DEFAULT_MODEL

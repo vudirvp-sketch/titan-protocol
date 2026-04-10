@@ -1,0 +1,125 @@
+schema_version: "1.0.0"
+description: "Canonical pattern definitions for TITAN Protocol v5.1.0"
+
+pattern_fields:
+  pat_id:
+    type: string
+    format: "PAT-{NN}"
+    required: true
+  name:
+    type: string
+    required: true
+  category:
+    type: string
+    enum: [structural, behavioral, validation, adaptation, orchestration]
+    required: true
+  source_prompt:
+    type: string
+    required: true
+    description: "Must reference a prompt ID in prompt_registry.yaml"
+  implementation_file:
+    type: string
+    required: true
+    description: "Relative path to implementation module"
+  fields:
+    type: "list[FieldDef]"
+    required: true
+  gap_tags:
+    type: "list[string]"
+    required: false
+  depends_on:
+    type: "list[string]"
+    required: false
+  version:
+    type: string
+    required: true
+
+patterns:
+  - pat_id: "PAT-01"
+    name: "Atomic Item"
+    category: structural
+    source_prompt: "TITAN_FUSE_v3.1"
+    implementation_file: "src/schema/item_atomic.yaml"
+    fields:
+      - name: "item_id"
+        type: "string"
+        required: true
+      - name: "title"
+        type: "string"
+        required: true
+      - name: "description"
+        type: "string"
+        required: true
+      - name: "validation_cases"
+        type: "list[ValidationCase]"
+        required: false
+      - name: "depends_on"
+        type: "list[string]"
+        required: false
+      - name: "gap_tags"
+        type: "list[string]"
+        required: false
+    gap_tags: ["GAP-STRUCT-001"]
+    depends_on: []
+    version: "1.0.0"
+
+  - pat_id: "PAT-24"
+    name: "Retry with Validation Passes"
+    category: behavioral
+    source_prompt: "TITAN_FUSE_v3.1"
+    implementation_file: "src/resilience/retry_executor_facade.py"
+    fields:
+      - name: "max_validation_passes"
+        type: "integer"
+        required: true
+        default: 2
+      - name: "validation_fn"
+        type: "callable"
+        required: true
+      - name: "gap_event_on_fail"
+        type: "string"
+        required: false
+    gap_tags: ["GAP-BEHAV-001", "GAP-BEHAV-002"]
+    depends_on: ["PAT-01"]
+    version: "1.0.0"
+
+  - pat_id: "PAT-38"
+    name: "Workspace Isolation"
+    category: structural
+    source_prompt: "GUARDIAN_v1.1"
+    implementation_file: "src/security/workspace_isolation.py"
+    fields:
+      - name: "workspace_root"
+        type: "path"
+        required: true
+      - name: "source_diff"
+        type: "dict"
+        required: false
+      - name: "snapshot_on_entry"
+        type: "boolean"
+        default: true
+    gap_tags: ["GAP-STRUCT-003"]
+    depends_on: []
+    version: "1.0.0"
+
+  - pat_id: "PAT-42"
+    name: "Validation Case"
+    category: validation
+    source_prompt: "GUARDIAN_v1.1"
+    implementation_file: "src/planning/planning_engine.py"
+    fields:
+      - name: "case_id"
+        type: "string"
+        required: true
+      - name: "condition"
+        type: "string"
+        required: true
+      - name: "severity"
+        type: "enum[BLOCK, WARN, GAP_TAG]"
+        required: true
+      - name: "gap_tag"
+        type: "string"
+        required: false
+    gap_tags: ["GAP-VAL-001", "GAP-VAL-002"]
+    depends_on: ["PAT-01"]
+    version: "1.0.0"

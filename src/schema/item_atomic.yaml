@@ -1,0 +1,68 @@
+schema_version: "1.0.0"
+pat_ref: "PAT-01"
+description: "Atomic item schema — the fundamental work unit in TITAN Protocol"
+
+fields:
+  item_id:
+    type: string
+    format: "ITEM_{NNN}"
+    required: true
+    validation: "regex: ^ITEM_\\d{3}$"
+  title:
+    type: string
+    required: true
+    validation: "min_length: 3, max_length: 120"
+  description:
+    type: string
+    required: true
+    validation: "min_length: 10"
+  phase:
+    type: string
+    required: true
+    validation: "regex: ^PHASE_\\d+$"
+  status:
+    type: enum
+    required: true
+    values: [PENDING, IN_PROGRESS, COMPLETED, DEFERRED, BLOCKED]
+    default: PENDING
+  effort:
+    type: string
+    required: true
+    validation: "regex: ^\\d+(min|h|days?)$"
+  depends_on:
+    type: "list[string]"
+    required: false
+    default: []
+  gap_tags:
+    type: "list[string]"
+    required: false
+    default: []
+  validation_cases:
+    type: "list[ValidationCase]"
+    required: false
+    default: []
+  rollback_steps:
+    type: "list[string]"
+    required: false
+    default: []
+  artifacts:
+    type: "list[string]"
+    required: false
+    default: []
+
+validation_cases:
+  - case_id: "VC-ATOMIC-001"
+    condition: "item_id matches format ITEM_NNN"
+    severity: BLOCK
+  - case_id: "VC-ATOMIC-002"
+    condition: "title length between 3 and 120 characters"
+    severity: BLOCK
+  - case_id: "VC-ATOMIC-003"
+    condition: "description length >= 10 characters"
+    severity: BLOCK
+  - case_id: "VC-ATOMIC-004"
+    condition: "all depends_on references exist in the plan"
+    severity: WARN
+  - case_id: "VC-ATOMIC-005"
+    condition: "effort string matches expected format"
+    severity: WARN

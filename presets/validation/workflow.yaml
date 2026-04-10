@@ -1,0 +1,50 @@
+preset_id: "validation"
+name: "Validation Preset"
+version: "1.0.0"
+source_prompt: "GUARDIAN_v1.1"
+description: "Preset for content validation and editorial review"
+
+adaptation_matrix:
+  - pattern_type: "code_validation"
+    source: "GUARDIAN_v1.1"
+    adaptation_rules:
+      - rule: "syntax_check"
+        description: "Validate syntax correctness"
+        priority: 1
+      - rule: "type_check"
+        description: "Verify type annotations"
+        priority: 2
+
+  - pattern_type: "human_editorial"
+    source: "GUARDIAN_v1.1"
+    adaptation_rules:
+      - rule: "style_consistency"
+        description: "Check style guide compliance"
+        priority: 1
+      - rule: "tone_alignment"
+        description: "Verify tone matches target audience"
+        priority: 2
+      - rule: "accessibility_check"
+        description: "Flag accessibility concerns"
+        priority: 3
+
+  - pattern_type: "json_schema"
+    source: "GUARDIAN_v1.1"
+    adaptation_rules:
+      - rule: "schema_validation"
+        description: "Validate against JSON Schema"
+        priority: 1
+      - rule: "required_fields"
+        description: "Check all required fields present"
+        priority: 2
+      - rule: "type_coercion_safety"
+        description: "Prevent unsafe type coercion"
+        priority: 3
+
+workflow_phases:
+  - id: "parse"
+    description: "Parse and normalize input"
+  - id: "validate"
+    description: "Apply validation adaptation rules"
+  - id: "report"
+    description: "Generate validation report with gap events"

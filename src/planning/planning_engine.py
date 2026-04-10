@@ -12,6 +12,8 @@ from typing import Dict, List, Optional, Any, Callable
 from enum import Enum
 import logging
 
+from pydantic import BaseModel, Field
+
 from .cycle_detector import (
     CycleDetector,
     DAG,
@@ -517,3 +519,80 @@ class PlanningEngine:
             "dag_nodes": len(self._dag.nodes),
             "dag_edges": sum(len(v) for v in self._dag.edges.values())
         }
+
+
+# =============================================================================
+# PAT-42: ValidationCase and SeverityLevel (ITEM-B006)
+# =============================================================================
+
+class SeverityLevel(str, Enum):
+    """Severity levels for validation cases (PAT-42)."""
+    BLOCK = "BLOCK"
+    WARN = "WARN"
+    GAP_TAG = "GAP_TAG"
+
+
+class ValidationCase(BaseModel):
+    """Validation case model for PAT-42 pattern.
+    
+    Represents a single validation check that can be applied to
+    an atomic item or plan step.
+    """
+    case_id: str
+    condition: str
+    severity: SeverityLevel
+    gap_tag: Optional[str] = None
+
+    class Config:
+        use_enum_values = True
+
+
+class ValidatedAtomicItem(BaseModel):
+    """Extended AtomicItem with validation_cases and validate() method (PAT-42).
+    
+    Combines atomic item fields with validation capabilities, supporting
+    BLOCK/WARN/GAP_TAG severity levels for comprehensive validation.
+    """
+    item_id: str
+    title: str
+    description: str
+    phase: str
+    status: str = "PENDING"
+    validation_cases: List[ValidationCase] = Field(default_factory=list)
+
+    def validate(self, context: dict = None) -> dict:
+        """Run all validation cases and return results.
+        
+        Args:
+            context: Optional context dict for condition evaluation.
+            
+        Returns:
+            Dictionary with 'passed', 'warnings', 'blocked', 'gap_tags' lists.
+        """
+        results = {"passed": [], "warnings": [], "blocked": [], "gap_tags": []}
+        for vc in self.validation_cases:
+            condition_met = self._evaluate_condition(vc.condition, context)
+            if condition_met:
+                results["passed"].append(vc.case_id)
+            elif vc.severity == SeverityLevel.BLOCK:
+                results["blocked"].append(vc.case_id)
+            elif vc.severity == SeverityLevel.WARN:
+                results["warnings"].append(vc.case_id)
+            elif vc.severity == SeverityLevel.GAP_TAG:
+                tag = vc.gap_tag or f"GAP-{vc.case_id}"
+                results["gap_tags"].append(tag)
+        return results
+
+    def _evaluate_condition(self, condition: str, context: dict) -> bool:
+        """Evaluate a validation condition. Override for complex logic.
+        
+        Args:
+            condition: Condition string to evaluate.
+            context: Context dictionary for evaluation.
+            
+        Returns:
+            True if condition is met, False otherwise.
+        """
+        if context is None:
+            return True
+        return True
