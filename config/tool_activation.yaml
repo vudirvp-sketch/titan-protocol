@@ -391,3 +391,92 @@ fallback:
     action: queue
     max_queue_size: 100
     timeout_seconds: 60
+
+# ========================================
+# PROMPT PATTERNS MAPPING (PLAN A ITEM_A009)
+# ========================================
+# Maps prompt patterns from prompt_registry.yaml to tool activation profiles
+prompt_patterns:
+  TITAN_FUSE_v3.1:
+    description: "Deep content fusion and synthesis"
+    required_tools:
+      - llm_query
+      - read_file
+      - write_file
+      - grep_search
+    optional_tools:
+      - ast_parse
+      - web_search
+    profile_override: null
+    default_intent: fuse
+  
+  GUARDIAN_v1.1:
+    description: "Quality validation and gate enforcement"
+    required_tools:
+      - llm_query
+      - grep_search
+      - ast_parse
+    optional_tools:
+      - schema_validator
+      - crossref_validator
+    profile_override: analyst
+    default_intent: validate
+  
+  AGENT_GEN_SPEC_v4.1:
+    description: "Agent specification generation"
+    required_tools:
+      - llm_query
+      - write_file
+      - template_engine
+    optional_tools:
+      - ast_parse
+      - doc_generator
+    profile_override: developer
+    default_intent: generate
+  
+  DEP_AUDIT:
+    description: "Dependency structure analysis and audit"
+    required_tools:
+      - llm_query
+      - grep_search
+      - ast_parse
+      - exec_command
+    optional_tools:
+      - security_scanner
+      - crossref_validator
+    profile_override: devops
+    default_intent: audit
+
+# Pattern activation triggers
+pattern_triggers:
+  - pattern: TITAN_FUSE_v3.1
+    keywords:
+      - "fuse"
+      - "synthesize"
+      - "merge"
+      - "combine"
+      - "integrate"
+  
+  - pattern: GUARDIAN_v1.1
+    keywords:
+      - "validate"
+      - "check"
+      - "guard"
+      - "verify"
+      - "ensure"
+  
+  - pattern: AGENT_GEN_SPEC_v4.1
+    keywords:
+      - "generate"
+      - "spec"
+      - "define"
+      - "create agent"
+      - "agent specification"
+  
+  - pattern: DEP_AUDIT
+    keywords:
+      - "audit"
+      - "analyze deps"
+      - "dependency"
+      - "dependencies"
+      - "dep audit"

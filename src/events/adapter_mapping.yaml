@@ -1,0 +1,195 @@
+# TITAN Protocol - Gap Event Adapter Mapping
+# Version: 5.1.0
+# Generated: 2026-04-11
+# PLAN A ITEM_A011: Full 20→4 mapping for GapEvent adapter
+
+# Purpose: Maps 20 source GapEvent types to 4 canonical adapter patterns
+# This enables consistent handling of gap events across the system
+
+schema_version: "1.0.0"
+generated: "2026-04-11T00:00:00Z"
+
+# Canonical adapter patterns (4 patterns)
+canonical_adapters:
+  MISSING_DATA:
+    description: "Adapter for missing or absent data scenarios"
+    default_action: request_input
+    severity_base: SEV-2
+    
+  INVALID_FORMAT:
+    description: "Adapter for format validation failures"
+    default_action: suggest_fix
+    severity_base: SEV-3
+    
+  CONSTRAINT_VIOLATION:
+    description: "Adapter for constraint or rule violations"
+    default_action: block_and_report
+    severity_base: SEV-1
+    
+  PROCESSING_ERROR:
+    description: "Adapter for runtime processing failures"
+    default_action: retry_with_fallback
+    severity_base: SEV-2
+
+# Full 20→4 mapping
+gap_event_mapping:
+  # MISSING_DATA pattern (5 types)
+  GAP_001_FILE_NOT_FOUND:
+    canonical: MISSING_DATA
+    description: "Required file does not exist"
+    severity_override: null
+    suggested_resolution: "Check file path and permissions"
+    
+  GAP_002_EMPTY_CONTENT:
+    canonical: MISSING_DATA
+    description: "File exists but contains no processable content"
+    severity_override: SEV-3
+    suggested_resolution: "Verify file content and encoding"
+    
+  GAP_003_MISSING_REFERENCE:
+    canonical: MISSING_DATA
+    description: "Referenced resource not found"
+    severity_override: null
+    suggested_resolution: "Update reference or create missing resource"
+    
+  GAP_004_INCOMPLETE_DATA:
+    canonical: MISSING_DATA
+    description: "Data structure is missing required fields"
+    severity_override: null
+    suggested_resolution: "Fill in missing required fields"
+    
+  GAP_005_UNRESOLVED_SYMBOL:
+    canonical: MISSING_DATA
+    description: "Symbol reference cannot be resolved"
+    severity_override: SEV-3
+    suggested_resolution: "Define symbol or fix reference"
+
+  # INVALID_FORMAT pattern (5 types)
+  GAP_006_SYNTAX_ERROR:
+    canonical: INVALID_FORMAT
+    description: "Syntax error in source content"
+    severity_override: null
+    suggested_resolution: "Fix syntax error in source"
+    
+  GAP_007_ENCODING_ERROR:
+    canonical: INVALID_FORMAT
+    description: "Content has invalid or unsupported encoding"
+    severity_override: SEV-4
+    suggested_resolution: "Convert to UTF-8 or specify encoding"
+    
+  GAP_008_SCHEMA_VIOLATION:
+    canonical: INVALID_FORMAT
+    description: "Content does not match expected schema"
+    severity_override: null
+    suggested_resolution: "Update content to match schema"
+    
+  GAP_009_INVALID_STRUCTURE:
+    canonical: INVALID_FORMAT
+    description: "Structural integrity check failed"
+    severity_override: null
+    suggested_resolution: "Repair structural issues"
+    
+  GAP_010_PARSE_FAILURE:
+    canonical: INVALID_FORMAT
+    description: "Content cannot be parsed by any available parser"
+    severity_override: null
+    suggested_resolution: "Check format and try alternative parser"
+
+  # CONSTRAINT_VIOLATION pattern (5 types)
+  GAP_011_TYPE_MISMATCH:
+    canonical: CONSTRAINT_VIOLATION
+    description: "Value does not match expected type"
+    severity_override: SEV-2
+    suggested_resolution: "Convert value to correct type"
+    
+  GAP_012_RANGE_EXCEEDED:
+    canonical: CONSTRAINT_VIOLATION
+    description: "Value exceeds allowed range"
+    severity_override: null
+    suggested_resolution: "Adjust value to within allowed range"
+    
+  GAP_013_DEPENDENCY_CYCLE:
+    canonical: CONSTRAINT_VIOLATION
+    description: "Circular dependency detected"
+    severity_override: SEV-1
+    suggested_resolution: "Break dependency cycle"
+    
+  GAP_014_INVARIANT_VIOLATION:
+    canonical: CONSTRAINT_VIOLATION
+    description: "System invariant violated"
+    severity_override: SEV-1
+    suggested_resolution: "Restore invariant state"
+    
+  GAP_015_POLICY_BREACH:
+    canonical: CONSTRAINT_VIOLATION
+    description: "Operation violates policy rules"
+    severity_override: null
+    suggested_resolution: "Modify operation to comply with policy"
+
+  # PROCESSING_ERROR pattern (5 types)
+  GAP_016_TIMEOUT_EXCEEDED:
+    canonical: PROCESSING_ERROR
+    description: "Operation timed out"
+    severity_override: SEV-3
+    suggested_resolution: "Increase timeout or optimize operation"
+    
+  GAP_017_RESOURCE_EXHAUSTED:
+    canonical: PROCESSING_ERROR
+    description: "System resource limit reached"
+    severity_override: null
+    suggested_resolution: "Free resources or increase limits"
+    
+  GAP_018_EXTERNAL_FAILURE:
+    canonical: PROCESSING_ERROR
+    description: "External service or dependency failed"
+    severity_override: null
+    suggested_resolution: "Retry or use fallback"
+    
+  GAP_019_INTEGRATION_ERROR:
+    canonical: PROCESSING_ERROR
+    description: "Integration between components failed"
+    severity_override: null
+    suggested_resolution: "Check integration configuration"
+    
+  GAP_020_STATE_CORRUPTION:
+    canonical: PROCESSING_ERROR
+    description: "Internal state is inconsistent"
+    severity_override: SEV-1
+    suggested_resolution: "Restore from checkpoint or reset state"
+
+# Adapter implementation templates
+adapter_templates:
+  MISSING_DATA:
+    handler_class: "src.events.gap_event.MissingDataAdapter"
+    default_config:
+      max_retries: 3
+      retry_delay_ms: 1000
+      request_user_input: true
+      
+  INVALID_FORMAT:
+    handler_class: "src.events.gap_event.InvalidFormatAdapter"
+    default_config:
+      max_retries: 2
+      auto_suggest: true
+      fallback_parser: null
+      
+  CONSTRAINT_VIOLATION:
+    handler_class: "src.events.gap_event.ConstraintViolationAdapter"
+    default_config:
+      block_on_sev1: true
+      log_level: ERROR
+      notify_admin: true
+      
+  PROCESSING_ERROR:
+    handler_class: "src.events.gap_event.ProcessingErrorAdapter"
+    default_config:
+      max_retries: 3
+      exponential_backoff: true
+      fallback_strategy: abort
+
+# Metrics configuration
+metrics:
+  enabled: true
+  track_by_pattern: true
+  track_by_source: true
+  report_interval_seconds: 60

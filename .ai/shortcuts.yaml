@@ -1,74 +1,85 @@
-# TITAN FUSE Navigation Shortcuts
+# TITAN Protocol - Navigation Shortcuts
+# Version: 5.1.0
+# Generated: 2026-04-11
 
 shortcuts:
-  # Navigation shortcuts
-  "start":
-    description: "Begin protocol - read entry point"
-    action: "read"
-    files: ["AGENTS.md"]
-
-  "config":
-    description: "Read agent configuration"
-    action: "read"
-    files: ["SKILL.md", "config.yaml"]
-
-  "protocol":
-    description: "Read full protocol specification"
-    action: "read"
-    files: ["PROTOCOL.md"]
-
-  # Processing shortcuts
-  "process":
-    description: "Process files in inputs/"
-    action: "process"
-    files: ["inputs/"]
-
-  "resume":
-    description: "Resume from checkpoint"
-    action: "resume"
-    files: ["checkpoints/checkpoint.json"]
-
-  # Status shortcuts
-  "status":
-    description: "Check current session status"
-    action: "query"
-    returns: "STATE_SNAPSHOT"
-
-  "gates":
-    description: "Check gate status"
-    action: "query"
-    returns: "gates_passed"
-
-  "budget":
-    description: "Check token budget"
-    action: "query"
-    returns: "budget_used / budget_max"
-
-  # Output shortcuts
-  "output":
-    description: "Navigate to outputs"
-    action: "navigate"
-    target: "outputs/"
-
-  "artifacts":
-    description: "List generated artifacts"
-    action: "list"
-    target: "outputs/"
-
-  # Help shortcuts
-  "help":
-    description: "Show available shortcuts"
-    action: "help"
-
-  "version":
-    description: "Show protocol version"
-    action: "read"
-    files: ["VERSION"]
-
-# Command aliases
-aliases:
-  "go": "start"
-  "init": "start"
-  "run": "process"
-  "check": "status"
-  "metrics": "artifacts"
+  # Orchestrator
+  chain_composer: src/orchestrator/chain_composer.py
+  universal_router: src/orchestrator/universal_router.py
+  intent_handler: src/orchestrator/intent_handler.py
+  
+  # Security
+  execution_gate: src/security/execution_gate.py
+  sandbox_verifier: src/security/sandbox_verifier.py
+  secret_scanner: src/security/secret_scanner.py
+  workspace_isolation: src/security/workspace_isolation.py
+  
+  # State
+  context_graph: src/context/context_graph.py
+  event_sourcing: src/state/event_sourcing.py
+  checkpoint_manager: src/state/checkpoint_manager.py
+  state_manager: src/state/state_manager.py
+  gap: src/state/gap.py
+  
+  # Trust
+  trust_engine: src/context/trust_engine.py
+  
+  # Observability
+  scout_matrix: src/agents/scout_matrix.py
+  prometheus_exporter: src/observability/prometheus_exporter.py
+  distributed_tracing: src/observability/distributed_tracing.py
+  token_attribution: src/observability/token_attribution.py
+  
+  # Intent
+  classifier: src/classification/__init__.py
+  
+  # Events
+  event_bus: src/events/event_bus.py
+  gap_event: src/events/gap_event.py
+  audit_signer: src/events/audit_signer.py
+  dead_letter_queue: src/events/dead_letter_queue.py
+  
+  # Models
+  models_adaptation: src/models/adaptation.py
+  models_pattern: src/models/pattern.py
+  
+  # Validation
+  tiered_validator: src/validation/tiered_validator.py
+  invariant_enforcer: src/validation/invariant_enforcer.py
+  guardian: src/validation/guardian.py
+  
+  # Policy
+  policy_engine: src/policy/policy_engine.py
+  gate_manager: src/policy/gate_manager.py
+  gate_behavior: src/policy/gate_behavior.py
+  
+  # LLM
+  llm_router: src/llm/router.py
+  llm_client: src/llm/llm_client.py
+  provider_registry: src/llm/provider_registry.py
+  
+  # Planning
+  planning_engine: src/planning/planning_engine.py
+  cycle_detector: src/planning/cycle_detector.py
+  
+  # Skills
+  skill_library: src/skills/skill_library.py
+  skill: src/skills/skill.py
+  
+  # Configuration
+  config: config.yaml
+  tool_activation: config/tool_activation.yaml
+  prompt_registry: config/prompt_registry.yaml
+  
+  # Version
+  version: VERSION
+  
+  # Protocol
+  protocol: PROTOCOL.md
+  protocol_base: PROTOCOL.base.md
+  
+  # Navigation
+  nav_map: .ai/nav_map.json
+  shortcuts: .ai/shortcuts.yaml
+  path_corrections: .ai/path_corrections.yaml
+  preflight_report: .ai/preflight_report.yaml

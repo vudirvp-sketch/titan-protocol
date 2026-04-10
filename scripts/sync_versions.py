@@ -92,6 +92,7 @@ class VersionSynchronizer:
     """
     
     # Files to check for version references
+    # PLAN A ITEM_A002: Added PROTOCOL.md, PROTOCOL.base.md, fixed paths
     VERSION_FILES = [
         ("VERSION", "file", None),  # Canonical source
         (".ai/nav_map.json", "json", "version"),
@@ -100,12 +101,19 @@ class VersionSynchronizer:
         ("pyproject.toml", "toml", "project.version"),
         ("src/__init__.py", "py", "__version__"),
         ("schemas/config.schema.json", "json", "properties.version.default"),
+        # PLAN A additions:
+        ("src/orchestrator/chain_composer.py", "py", "__version__"),
+        ("src/orchestrator/universal_router.py", "py", "__version__"),
+        ("PROTOCOL.md", "markdown_version", None),  # Version in comment
+        ("PROTOCOL.base.md", "markdown_frontmatter", "protocol_version"),
     ]
     
     # Patterns for extracting versions from different file types
     VERSION_PATTERNS = {
         "py": r'__version__\s*=\s*["\']([^"\']+)["\']',
         "toml": r'version\s*=\s*["\']([^"\']+)["\']',
+        "markdown_version": r'<!--\s*Version:\s*([0-9]+\.[0-9]+\.[0-9]+)',
+        "markdown_frontmatter": r'protocol_version:\s*["\']?([0-9]+\.[0-9]+\.[0-9]+)["\']?',
     }
     
     def __init__(self, project_root: str = "."):
@@ -174,7 +182,7 @@ class VersionSynchronizer:
                     current_value=str(value)
                 )
         
-        elif file_type == "py" or file_type == "toml":
+        elif file_type == "py" or file_type == "toml" or file_type == "markdown_version" or file_type == "markdown_frontmatter":
             content = file_path.read_text()
             pattern = self.VERSION_PATTERNS.get(file_type)
             

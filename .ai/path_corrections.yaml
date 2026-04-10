@@ -1,0 +1,47 @@
+# TITAN Protocol - Path Corrections
+# Version: 5.1.0
+# Generated: 2026-04-11
+# Purpose: Document all corrected paths from original plan
+
+path_corrections:
+  - original: "src/chain_composer.py"
+    corrected: "src/orchestrator/chain_composer.py"
+    reason: "Module was moved to orchestrator subpackage"
+    item_ref: "COR-001"
+  
+  - original: "src/universal_router.py"
+    corrected: "src/orchestrator/universal_router.py"
+    reason: "Module was moved to orchestrator subpackage"
+    item_ref: "COR-001"
+  
+  - original: "src/events/ (for event_sourcing)"
+    corrected: "src/state/event_sourcing.py"
+    reason: "Event sourcing is under state package, not events; events/ is for event bus"
+    item_ref: "PLAN_NOTES"
+  
+  - original: "src/budget/"
+    corrected: "budget/"
+    reason: "Budget is a root-level package, not under src/"
+    item_ref: "PLAN_NOTES"
+  
+  - original: "src/state/context_graph.py"
+    corrected: "src/context/context_graph.py"
+    reason: "context_graph.py is in src/context/, not src/state/"
+    item_ref: "PREFLIGHT"
+  
+  - original: "src/trust/trust_engine.py"
+    corrected: "src/context/trust_engine.py"
+    reason: "trust_engine.py is in src/context/, not src/trust/"
+    item_ref: "PREFLIGHT"
+  
+  - original: "config/config.yaml"
+    corrected: "config.yaml"
+    reason: "config.yaml is at root level, not in config/ subdirectory"
+    item_ref: "PREFLIGHT"
+
+# Notes for future reference
+notes:
+  - "src/classification/ and src/mode/ are NOT empty stubs - they contain implementations"
+  - "adapters/ at root level is NOT a duplicate - src/adapters/ does not exist"
+  - "utils/ at root level IS a duplicate of src/utils/ - src/utils/ is canonical"
+  - "DEP_AUDIT already exists in prompt_registry.yaml - no addition needed"
