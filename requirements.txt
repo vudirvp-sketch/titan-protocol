@@ -3,6 +3,7 @@
 
 # Core dependencies
 pyyaml>=6.0
+pydantic>=2.0
 
 # ITEM-SEC-01: WASM sandbox support (optional)
 # wasmtime>=8.0.0  # Uncomment for WASM sandbox

@@ -267,7 +267,7 @@ class TestEventOrdering:
         event_bus.emit(Event(
             event_type="ERROR_EVENT",
             data={"msg": "error"},
-            severity=EventSeverity.ERROR,
+            severity=EventSeverity.CRITICAL,  # Fixed: ERROR level doesn't exist, use CRITICAL
             source="test",
         ))
         
