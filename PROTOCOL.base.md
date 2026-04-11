@@ -1,5 +1,5 @@
 ---
-title: TITAN FUSE Large-File Agent Protocol v5.2.0
+title: TITAN FUSE Large-File Agent Protocol v5.3.0
 mode: fuse
 domain: large_file_processing; agent_orchestration
 domain_profile: technical
@@ -16,6 +16,13 @@ stable_sections: ["TIER 0 — INVARIANTS", "PRINCIPLE-05", "GATE-04 THRESHOLD RU
 emotional_tone: "technical, precise, authoritative"
 ideal_reader_state: "implementing or debugging protocol behavior"
 changelog: |
+  v5.3 — additions over v5.2:
+    Documentation sync: Phase names aligned with PipelinePhase enum (INIT→DELIVER)
+    SCOUT Architecture documentation expanded
+    Observability Stack fully documented (7 modules)
+    Security Modules → INVAR mapping added
+    State Management, Event System, Planning DAG documentation added
+    LLM Integration, Context Management, Storage, Workflow, CLI documentation added
   v3.2 — additions over v3.1:
     INVAR-05: LLM code execution gate (sandbox/human-gate mandate)
     PRINCIPLE-04: secondary chunk limits (max_chars_per_chunk, max_tokens_per_chunk)
@@ -29,7 +36,7 @@ changelog: |
           workspace isolation, environment offload
 ---
 
-# LARGE-FILE AGENT PROTOCOL — PRODUCTION-GRADE v5.2.0
+# LARGE-FILE AGENT PROTOCOL — PRODUCTION-GRADE v5.3.0
 
 > **Version Note**: This document specifies TIER 0-6 behavior. 
 > For TIER 7+ features (multi-agent, observability, planning), see PROTOCOL.ext.md and AGENTS.md.

@@ -11,7 +11,7 @@ ideal_reader_state: "learning about the protocol"
 <!-- version-header -->
 # TITAN FUSE Protocol
 
-**Production-Grade Large-File Agent Protocol v5.2.0**
+**Production-Grade Large-File Agent Protocol v5.3.0**
 
 A deterministic LLM agent protocol for processing large files (5k–50k+ lines) with verification gates, rollback safety, and session persistence.
 
@@ -29,7 +29,7 @@ python_version: ">=3.10"
 <!-- AGENT_METADATA:end -->
 
 <!-- badges -->
-![Version](https://img.shields.io/badge/version-5.2.0-blue)
+![Version](https://img.shields.io/badge/version-5.3.0-blue)
 ![Tier](https://img.shields.io/badge/tier-TIER_7_STABLE-green)
 ![Tests](https://img.shields.io/badge/tests-3117+-brightgreen)
 ![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)
@@ -229,6 +229,21 @@ flowchart TD
     E2 -->|ROLLBACK| A4
 ```
 
+### Phase Mapping (Legacy → Current)
+
+The pipeline phases have been renamed to align with `src/pipeline/phases.py`:
+
+| Legacy Name | Current Name | Description |
+|-------------|--------------|-------------|
+| Phase 0: Bootstrap | INIT | Initialization, workspace setup |
+| Phase 1: Intent Classification | DISCOVER | Pattern detection, search |
+| Phase 2: Analysis & Skill Selection | ANALYZE | Issue classification, SEV rating |
+| Phase 3: Synthesis & Tool Resolution | PLAN | Execution plan, budget allocation |
+| Phase 4: Validation & Gating | EXEC | Surgical patches, validation loop |
+| Phase 5: Output & Audit | DELIVER | Hygiene, artifact generation |
+
+> **Source of Truth**: `src/pipeline/phases.py` defines `PipelinePhase` enum.
+
 ### State Machine
 
 ```mermaid
@@ -303,13 +318,28 @@ flowchart LR
 | INVAR-04 | Patch Idempotency | Same result on re-application |
 | INVAR-05 | Code Execution Gate | sandbox/human_gate required |
 
-### Security Modules
+### Security Modules → Invariants Mapping
 
-- `src/security/secret_scanner.py` — AWS/GitHub/API key detection
-- `src/security/workspace_isolation.py` — Sandboxed file operations
-- `src/security/sandbox_verifier.py` — Runtime sandbox health check
-- `src/security/execution_gate.py` — LLM code execution control
-- `src/state/checkpoint_serialization.py` — JSON+zstd default, pickle requires `--unsafe`
+| Module | Purpose | INVAR Enforcement |
+|--------|---------|-------------------|
+| `src/security/secret_scanner.py` | AWS/GitHub/API key detection | INVAR-05 (Code Execution Gate) |
+| `src/security/workspace_isolation.py` | Sandboxed file operations | INVAR-02 (S-5 Veto), INVAR-05 |
+| `src/security/sandbox_verifier.py` | Runtime sandbox health check | INVAR-05 |
+| `src/security/execution_gate.py` | LLM code execution control | INVAR-05 |
+| `src/security/input_sanitizer.py` | Input validation | INVAR-01 (Anti-Fabrication) |
+| `src/security/session_security.py` | Session protection | — |
+| `src/state/checkpoint_serialization.py` | JSON+zstd default, pickle requires `--unsafe` | INVAR-05 |
+
+### Execution Gate Configuration
+
+```yaml
+# config.yaml
+execution:
+  mode: sandbox | human_gate | disabled
+  sandbox_type: docker | venv | restricted_subprocess | none
+  timeout_ms: 10000
+  max_memory_mb: 128
+```
 
 ---
 
@@ -317,12 +347,39 @@ flowchart LR
 
 ### SCOUT Roles Matrix
 
-| Role | Function | Trigger |
-|------|----------|---------|
-| RADAR | Signal detection | All tasks |
-| DEVIL | Adversarial review | EVALUATE, COMPARE, AUDIT |
-| EVAL | Quality veto | EXPERIMENTAL, VAPORWARE detection |
-| STRAT | Strategic synthesis | Final recommendation |
+The SCOUT pipeline provides multi-perspective quality assurance:
+
+| Role | Function | Trigger | Output |
+|------|----------|---------|--------|
+| RADAR | Signal detection | All tasks | Issue candidates |
+| DEVIL | Adversarial review | EVALUATE, COMPARE, AUDIT | Risk assessment |
+| EVAL | Quality veto | EXPERIMENTAL, VAPORWARE detection | Pass/Fail decision |
+| STRAT | Strategic synthesis | Final recommendation | Action plan |
+
+### SCOUT Pipeline Flow
+
+```
+RADAR → DEVIL → EVAL → STRAT
+  │        │       │       │
+  │        │       └─── VETO (blocks STRAT if quality threshold not met)
+  │        └─────────── Challenge findings, identify edge cases
+  └──────────────────── Detect signals, patterns, anomalies
+```
+
+### Veto Mechanism
+
+EVAL has veto power:
+- If EVAL returns `veto=True`, STRAT is blocked
+- Veto conditions: low confidence, experimental code, security risk
+- Veto audit trail logged for review
+
+### Integration with Verification Gates
+
+SCOUT integrates with GATE-04:
+- RADAR runs during DISCOVER phase
+- DEVIL challenges during ANALYZE phase
+- EVAL validates before EXEC phase
+- STRAT synthesizes for DELIVER phase
 
 ### Modules
 
@@ -337,22 +394,332 @@ flowchart LR
 
 ### Modules
 
-- `src/observability/distributed_tracing.py` — OpenTelemetry, W3C Trace Context
-- `src/observability/structured_logging.py` — JSON output, component-level levels
-- `src/observability/realtime_metrics.py` — p50/p95 latency export
-- `src/observability/token_attribution.py` — Per-gate token tracking
-- `src/observability/budget_forecast.py` — Proactive warnings
+| Module | Purpose | Key Features |
+|--------|---------|--------------|
+| `src/observability/distributed_tracing.py` | OpenTelemetry integration | W3C TraceContext, span hierarchy |
+| `src/observability/structured_logging.py` | JSON logging | Component-level levels, correlated IDs |
+| `src/observability/realtime_metrics.py` | Latency metrics | p50/p95/p99 percentiles |
+| `src/observability/token_attribution.py` | Token tracking | Per-gate attribution, budget monitoring |
+| `src/observability/budget_forecast.py` | Predictive warnings | Token velocity, proactive alerts |
+| `src/observability/agent_metrics_collector.py` | Agent metrics | Task counts, success rates |
+| `src/observability/span_tracker.py` | Span management | Lifecycle tracking, parent-child relations |
 
 ### Configuration
 
 ```yaml
-tracing:
-  enabled: true
-  provider: opentelemetry
-  sampling_rate: 1.0
-structured_logging:
-  enabled: true
-  format: json
+observability:
+  tracing:
+    enabled: true
+    provider: opentelemetry
+    sampling_rate: 1.0
+  structured_logging:
+    enabled: true
+    format: json
+    level: INFO
+  metrics:
+    export_interval_seconds: 60
+    percentiles: [0.5, 0.95, 0.99]
+```
+
+### Prometheus Integration
+
+Metrics are exposed at `/metrics` endpoint when `prometheus_enabled: true`:
+
+```
+# HELP titan_tokens_total Total tokens consumed per gate
+# TYPE titan_tokens_total counter
+titan_tokens_total{gate="GATE-00"} 1234
+titan_tokens_total{gate="GATE-04"} 5678
+
+# HELP titan_latency_seconds Request latency percentiles
+# TYPE titan_latency_seconds summary
+titan_latency_seconds{quantile="0.5"} 0.129
+titan_latency_seconds{quantile="0.95"} 0.258
+```
+
+---
+
+## State Management
+
+### Components
+
+| Module | Purpose |
+|---------|---------|
+| `src/state/state_manager.py` | Central state coordination |
+| `src/state/checkpoint_manager.py` | Checkpoint lifecycle (create, validate, restore) |
+| `src/state/checkpoint_compression.py` | zstd/gzip compression for checkpoints |
+| `src/state/checkpoint_serialization.py` | JSON+zstd default, pickle requires `--unsafe` |
+| `src/state/event_sourcing.py` | Event sourcing for state reconstruction |
+| `src/state/event_journal.py` | WAL for crash recovery |
+| `src/state/recovery.py` | Recovery procedures and policies |
+| `src/state/drift_policy.py` | External state drift handling (FAIL/CLOBBER/MERGE/BRANCH) |
+| `src/state/cursor.py` | Position tracking for chunk processing |
+
+### Checkpoint Format
+
+```json
+{
+  "session_id": "<uuid>",
+  "protocol_version": "5.3.0",
+  "source_checksum": "<sha256>",
+  "gates_passed": ["GATE-00", "GATE-01"],
+  "completed_batches": ["BATCH_001"],
+  "chunk_cursor": "C3",
+  "recursion_depth": 0,
+  "max_recursion_depth": 1,
+  "cursor_state": {
+    "current_file": "<path>",
+    "current_line": 1234,
+    "offset_delta": 0
+  }
+}
+```
+
+### Recovery Modes
+
+- **FULL**: Complete session resumption (checksum match required)
+- **PARTIAL**: Some chunks recoverable (source changed)
+- **FRESH**: Start new session (checkpoint invalid)
+
+---
+
+## Event System
+
+### Components
+
+| Module | Purpose |
+|---------|---------|
+| `src/events/event_bus.py` | Central event dispatch and routing |
+| `src/events/dead_letter_queue.py` | Failed event recovery with retry |
+| `src/events/audit_trail.py` | Audit logging for compliance |
+| `src/events/audit_signer.py` | HMAC/RSA/Ed25519/KMS signing |
+| `src/events/causal_ordering.py` | Lamport/Vector clocks for ordering |
+| `src/events/gap_event.py` | Gap event handling and serialization |
+| `src/events/context_events.py` | Context lifecycle events |
+
+### Event Types
+
+```python
+# From schemas/event_types.schema.json
+EVENT_TYPES = [
+    "SESSION_START", "SESSION_END",
+    "PHASE_ENTER", "PHASE_EXIT",
+    "GATE_PASS", "GATE_FAIL", "GATE_WARN",
+    "CHUNK_START", "CHUNK_END",
+    "PATCH_APPLY", "PATCH_SKIP",
+    "GAP_DETECTED", "GAP_RESOLVED",
+    "CHECKPOINT_CREATE", "CHECKPOINT_RESTORE",
+    "PATTERN_REUSED",  # Synergy tracking
+]
+```
+
+### Audit Signing Options
+
+| Method | Use Case | Performance |
+|--------|----------|-------------|
+| HMAC | Development, local | Fastest |
+| RSA | Production, external verification | Medium |
+| Ed25519 | High-security production | Fast |
+| KMS | Enterprise, key rotation | Depends on provider |
+
+---
+
+## Planning & DAG
+
+### Components
+
+| Module | Purpose |
+|---------|---------|
+| `src/planning/planning_engine.py` | Core planning logic, batch creation |
+| `src/planning/cycle_detector.py` | DAG infinite loop prevention |
+| `src/planning/amendment_control.py` | GATE-PLAN and GATE-AMENDMENT enforcement |
+| `src/planning/dag_checkpoint.py` | DAG state persistence for recovery |
+| `src/planning/state_snapshot.py` | Pre/post execution state snapshots |
+
+### Cycle Detection
+
+The `CycleDetector` prevents infinite loops in execution plans:
+
+```python
+# From src/planning/cycle_detector.py
+class CycleDetector:
+    def detect_cycle(self, dag: Dict[str, List[str]]) -> Optional[List[str]]:
+        """Returns cycle path if detected, None otherwise."""
+        # Uses DFS with coloring (WHITE/GRAY/BLACK)
+```
+
+### Amendment Control
+
+GATE-PLAN: Validates execution plan before execution
+GATE-AMENDMENT: Validates plan changes during execution
+
+```yaml
+amendment_control:
+  require_approval: true
+  audit_changes: true
+  max_amendments_per_session: 5
+```
+
+---
+
+## LLM Integration
+
+### Provider Adapters
+
+| Adapter | Provider | Features |
+|---------|----------|----------|
+| `src/llm/adapters/openai.py` | OpenAI GPT | Streaming, function calling |
+| `src/llm/adapters/anthropic.py` | Claude | Streaming, extended context |
+| `src/llm/adapters/mock.py` | Testing | Deterministic responses |
+
+### Model Routing
+
+```yaml
+# config.yaml
+model_routing:
+  root_model: gpt-4  # For orchestration, planning
+  leaf_model: gpt-3.5-turbo  # For chunk analysis
+```
+
+### Streaming Support
+
+- Chunk callbacks for progress tracking
+- Early termination on validation failure
+- Token counting per chunk
+
+### Fallback Policy
+
+```python
+# 4-attempt progressive fallback
+FALLBACK_CHAIN = [
+    "primary_model",
+    "alternative_1", 
+    "alternative_2",
+    "fallback_model"
+]
+```
+
+### Modules
+
+- `src/llm/adapters/base.py` — Abstract adapter interface
+- `src/llm/router.py` — Root/Leaf model routing
+- `src/llm/streaming.py` — Chunk callbacks, early termination
+- `src/llm/fallback_policy.py` — Fallback chain
+- `src/llm/provider_registry.py` — Plugin-based provider registry
+- `src/llm/seed_injection.py` — Deterministic seed injection
+
+---
+
+## Context Management
+
+### Context Zones
+
+Content is classified into zones with different retention priorities:
+
+| Zone | Priority | Retention |
+|------|----------|-----------|
+| CRITICAL | Highest | Always retained |
+| OPERATIONAL | High | Retained during session |
+| REFERENCE | Medium | Compressed, key info retained |
+| ARCHIVE | Low | Summarized or discarded |
+
+### Profile Router
+
+9 context adaptation profiles for different task types:
+
+| Profile | Use Case | Optimization |
+|---------|----------|--------------|
+| TECHNICAL | Code analysis | Symbol preservation |
+| CREATIVE | Content generation | Breadth over depth |
+| ANALYTICAL | Data processing | Precision focus |
+| AUDIT | Review tasks | Comprehensive coverage |
+| DEBUG | Troubleshooting | Error context focus |
+| REFACTOR | Code restructuring | Dependency tracking |
+| DOCUMENTATION | Doc generation | Clarity priority |
+| SECURITY | Security audit | Vulnerability focus |
+| PERFORMANCE | Optimization | Metric tracking |
+
+---
+
+## Storage Architecture
+
+### Backend Abstraction
+
+| Backend | Use Case | Configuration |
+|---------|----------|---------------|
+| `src/storage/local_backend.py` | Development, single-node | `storage.type: local` |
+| `src/storage/s3_backend.py` | AWS deployment | `storage.type: s3` |
+| `src/storage/gcs_backend.py` | GCP deployment | `storage.type: gcs` |
+
+### Configuration
+
+```yaml
+storage:
+  type: local  # local | s3 | gcs
+  encryption:
+    enabled: true
+    algorithm: aes-256-gcm
+  log_rotation:
+    max_size_mb: 100
+    keep_count: 10
+```
+
+---
+
+## Workflow Presets
+
+Pre-configured workflows for common tasks:
+
+| Preset | Purpose | Location |
+|--------|---------|----------|
+| validation | Validation workflows | `presets/validation/` |
+| code_review | Code review workflows | `presets/code_review/` |
+| dependency_audit | Dependency analysis | `presets/dependency_audit/` |
+| documentation | Doc generation | `presets/documentation/` |
+| debugging | Debug workflows | `presets/debugging/` |
+| large_file | Large file processing | `presets/large_file/` |
+
+### Usage
+
+```bash
+# Use a preset
+titan run --preset code_review inputs/myfile.py
+
+# List available presets
+titan presets list
+```
+
+---
+
+## CLI Reference
+
+### Main Commands
+
+```bash
+# Process a file
+titan process inputs/myfile.md
+
+# Resume from checkpoint
+titan resume checkpoints/checkpoint.json
+
+# Validate checkpoint
+titan validate-checkpoint checkpoints/checkpoint.json
+
+# Run diagnostics
+titan doctor
+
+# Generate metrics
+titan metrics --output outputs/metrics.json
+```
+
+### Migration Commands
+
+```bash
+# Migrate checkpoints between versions
+titan migrate-checkpoints --from 3.2.2 --to 5.3.0 --dry-run
+
+# Sync versions across files
+titan sync-versions
 ```
 
 ---
@@ -388,7 +755,7 @@ For LLM agents, the repository now includes navigation aids:
 
 ---
 
-## Migration v3.2.x → v4.1.0
+## Migration v3.2.x → v5.3.0
 
 1. Add to `config.yaml`:
    ```yaml
@@ -398,7 +765,7 @@ For LLM agents, the repository now includes navigation aids:
    ```
 2. Run migration preview:
    ```bash
-   python scripts/migrate_checkpoints.py --from 3.2.2 --to 4.1.0 --dry-run
+   python scripts/migrate_checkpoints.py --from 3.2.2 --to 5.3.0 --dry-run
    ```
 3. GATE-PLAN and GATE-AMENDMENT are now enforced
 4. Enable observability:
@@ -428,7 +795,7 @@ Override protocol defaults in `SKILL.md`:
 ```yaml
 ---
 skill_version: 2.1.0
-protocol_version: 4.1.0
+protocol_version: 5.3.0
 constraints:
   max_files_per_session: 3
   max_tokens_per_session: 100000
@@ -616,6 +983,7 @@ MIT License - See LICENSE file for details.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 5.3.0 | 2026-04-11 | Documentation sync: Phase mapping, SCOUT expanded, Observability 7 modules, Security→INVAR mapping, State/Event/Planning docs, LLM/Context/Storage/Workflow/CLI docs |
 | 5.2.0 | 2026-04-11 | TIER_7_STABLE: Canonical patterns schema, ContentPipeline 6-phase, GapEvent serializer, Gap registry, SkillGenerator, Preset workflows |
 | 5.1.0 | 2026-04-10 | TIER_7 exit criteria 20/20 passed, 3117+ tests |
 | 4.1.0 | 2026-04-08 | TIER_7_IN_PROGRESS: Planning DAG, Amendment Control, CycleDetector, 1100+ tests |
@@ -648,4 +1016,3 @@ MIT License - See LICENSE file for details.
 **Documentation**: Full protocol specification in `PROTOCOL.md`
 
 **Agent Entry Point**: `AGENTS.md`
-

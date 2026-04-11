@@ -1,7 +1,7 @@
 # TITAN FUSE PROTOCOL - ASSEMBLED
 
-<!-- Generated: 2026-04-08T02:49:47Z -->
-<!-- Version: 4.1.0#TITANProtocolVersion#TIER_7_PRODUCTION(INPROGRESS)##Completedversions:#PHASE_1(SECURITY_CRITICAL):#-ITEM-SEC-01:VM2SandboxReplacement(WASM/gVisor)#-ITEM-SEC-02:SerializationSafetyFix(JSON+zstd)#-ITEM-SEC-03:SecretStoreImplementation#-ITEM-SEC-04:SecretScanningIntegration(GATE-00)#-ITEM-SEC-05:Tamper-EvidentLogging(Ed25519)##PHASE_2(ARCHITECTURE_CRITICAL):#-ITEM-ARCH-02:EventBusWALforCrashRecovery#-ITEM-ARCH-03:DistributedLockingwithTTL#-ITEM-ARCH-04:Gate-04SEV-1OverrideFix#-ITEM-ARCH-07:Release-on-WaitPattern##PHASE_3(GATES_ENHANCEMENT):#-ITEM-GATE-01:Gate-04EarlyExitFix#-ITEM-GATE-02:Mode-BasedGateSensitivity#-ITEM-GATE-03:Pre-IntentTokenBudget#-ITEM-GATE-04:SplitPre/PostExecGates#-ITEM-GATE-05:ModelDowngradeDeterminism##PHASE_4(STORAGE_ENHANCEMENT):#-ITEM-STOR-01:StorageBackendAbstraction#-ITEM-STOR-02:CheckpointSessionIsolation#-ITEM-STOR-03:CheckpointEncryption#-ITEM-STOR-05:CursorHashforDriftDetection##PHASE_5(TIER_3_MEDIUM):#-ITEM-ARCH-09:CausalEventOrdering(Lamport/VectorClocks)#-ITEM-ARCH-15:ModelVersionFingerprint#-ITEM-ARCH-19:SemanticTainting#-ITEM-CFG-04:RuntimeConfigOverlay#-ITEM-CFG-05:ManifestCacheInvalidation##PHASE_6(DEFERRED_ITEMS):#-ITEM-STOR-04:LogRotation#-ITEM-OBS-01:PrometheusMetricsEndpoint#-ITEM-OBS-03:MetricsSchemaVersioning##PHASE_7(OPEN_CONFLICTS_RESOLUTION):#-ITEM-CONFLICT-C:ChunkSizeBidirectionalOptimization#-ITEM-CONFLICT-F:ModelFallbackTriggerConditions#-ITEM-CONFLICT-J:EventBusWildcardPerformance#-ITEM-CONFLICT-K:ChecksumPrefixCollision#-ITEM-CONFLICT-L:GraphVizOptionalDependency##PHASE_8(FEATURE_ENHANCEMENTS):#-ITEM-FEAT-55:IntentRouterPluginRegistry#-ITEM-FEAT-63:ValidatorDependencyDAGEnhancement#-ITEM-FEAT-101:DiagnosticsModuleasEventBusListener#-ITEM-FEAT-111:DAGCheckpointingwithRollback##PHASE_10(V3.4_CLEANUP):#-ITEM-ARCH-15:ModelVersionFingerprint(ENHANCED)#-ITEM-OBS-03:MetricsSchemaVersioning(COMPLETE)#-ITEM-CONFLICT-J:EventBusWildcardPerformance(COMPLETE)##PHASE_14(CATALOG_MECHANICS_COMPLETION):#-ITEM-CAT-01:AdaptiveWeightProfilesEngine(TF/RS/DS/ACscoring)#-ITEM-CAT-02:SCOUTRolesMatrixAgentFramework(RADAR/DEVIL/EVAL/STRAT)#-ITEM-CAT-03:Type-AwareFusionEngine(ContentType/Densityfiltering)#-ITEM-CAT-04:ConflictResolutionFormulaEngine(weightedformula)#-ITEM-VAL-GUARDIAN:GuardianValidationLoop(integrationmodule)#-ITEM-ORCH-INTENT:IntentHandlerforSCOUTintegration##PHASE_15(EVENTBUS_RESILIENCE):#-ITEM-RESILIENCE-01:DeadLetterQueue(DLQ)withpersistenceandretry#-ITEM-RESILIENCE-02:EventBusSyncOperations(emit_syncforinlineops)##PHASE_16(POLICY-SKILL_RESOLUTION):#-ITEM-POLICY-01:PolicyResolverforEQUIPStage(tool/role/budgetvalidation)##PHASE_17(FEEDBACK_AND_ADAPTATION):#-ITEM-FEEDBACK-01:FeedbackLoopModule(thresholdadaptation,versioning)#-ITEM-FEEDBACK-02:SelfEvolutionEngine(patternextraction,skilldrafts)##PHASE_18(SKILL_LIBRARY):#-ITEM-SKILL-01:SkillLibrarywithCatalog(YAMLcatalog,synergytracking)##PHASE_19(TIER_4_ARCHITECTURE):#-ITEM-ARCH-10:PolicyStagingZone(tentativepolicydecisionswithconfidencethreshold)#-ITEM-ARCH-16:ExternalStateDriftPolicy(FAIL/CLOBBER/MERGE/BRANCHconflictresolution)#-ITEM-ARCH-18:ConfigPrecedencePyramid(ENV>CLI>USER>LOCAL>DEFAULT)##PHASE_20(OBSERVABILITY_ENHANCEMENT):#-ITEM-OBS-04:SYMBOL_MAPOOMProtection(LRUeviction,memorylimits,namespacequalification)#-ITEM-OBS-05:BudgetForecast(tokenvelocity,proactivewarnings,recommendations)##PHASE_21(ADVANCED_FEATURES):#-ITEM-FEAT-72:CheckpointCompressionwithDeduplication(patterndetection,zstd/gzip)#-ITEM-FEAT-91:Auto-splitonSecondaryChunkLimit(semanticboundaries,recursivesplit)##PHASE_22(ADVANCED_OBSERVABILITY)-TIER_6:#-ITEM-OBS-06:DistributedTracingIntegration(OpenTelemetry,W3CTraceContext)#-ITEM-OBS-07:StructuredLoggingFormat(JSONoutput,component-levelloglevels)##PHASE_23(MULTI_AGENT_COORDINATION)-TIER_6:#-ITEM-AGENT-01:Multi-AgentOrchestrator(TaskQueue,AgentRegistry,conflictresolution)#-ITEM-AGENT-02:AgentCommunicationProtocol(messagerouting,EventBusintegration)##PHASE_24(ADVANCED_FEATURES)-TIER_6:#-ITEM-FEAT-74:ChunkDependencyGraph(partialrecovery,parallelprocessing)#-ITEM-FEAT-103:titan-doctorDiagnosticRulesEngine(YAMLrules,auto-fix)##PHASE_25(PRODUCTION_READINESS)-TIER_6:#-ITEM-PROD-01:SARIFOutputFormat(GitHubCodeScanningcompatible)#-ITEM-PROD-02:InteractiveMode(REPLdebugging,breakpoints,rollback)##PHASE_26(STREAMING_PERFORMANCE)-TIER_6:#-ITEM-PERF-01:StreamingResponseSupport(chunkcallbacks,earlytermination)##PHASE_30(PLANNING_DAG_ENHANCEMENT)-TIER_7:#-ITEM-DAG-112:CycleDetectorinPlanningEngine(DAGcycledetection,amendmentvalidation)#-ITEM-DAG-114:RootModelPlanAmendmentControl(GATE-02approval,auditlogging)##CatalogCompliance:#-Tier1MechanicsCoverage:100%#-Tier2MechanicsCoverage:100%#-Tier3MechanicsCoverage:100%#-Tier4MechanicsCoverage:100%#-Tier5MechanicsCoverage:100%#-Tier6MechanicsCoverage:100%#-CatalogComplianceScore:100/100##ProductionReadyStatus:#-[x]DeadLetterQueueforeventrecovery#-[x]Syncoperationsforinlinevalidation#-[x]Policy-skillconflictresolution#-[x]Feedback-driventhresholdadaptation#-[x]Self-evolutionengineforskillimprovement#-[x]Skilllibrarywithcatalogmanagement#-[x]Policystagingwithconfidencethreshold#-[x]Externalstatedriftpolicy#-[x]Configprecedencepyramid#-[x]SymbolmapOOMprotection#-[x]Budgetforecastingwithproactivewarnings#-[x]Checkpointcompressionwithdeduplication#-[x]Auto-splitonsecondarychunklimit#-[x]DistributedtracingwithOpenTelemetry#-[x]StructuredJSONlogging#-[x]Multi-agentorchestration#-[x]Agentcommunicationprotocol#-[x]Chunkdependencygraphforrecovery#-[x]titan-doctordiagnosticrules#-[x]SARIFoutputformat#-[x]Interactivedebuggingmode#-[x]StreamingLLMresponses##TotalTests:1100+testsacrossallmodules -->
+<!-- Generated: 2026-04-11T08:20:55Z -->
+<!-- Version: 5.3.0 -->
 <!-- Components: PROTOCOL.ext.md + PROTOCOL.base.md -->
 
 ---
@@ -388,7 +388,7 @@ Architecture extension: bootstrap-safe, repo-aware, backward-compatible with v3.
 ---
 
 ---
-title: TITAN FUSE Large-File Agent Protocol v3.2
+title: TITAN FUSE Large-File Agent Protocol v5.3.0
 mode: fuse
 domain: large_file_processing; agent_orchestration
 domain_profile: technical
@@ -405,6 +405,13 @@ stable_sections: ["TIER 0 — INVARIANTS", "PRINCIPLE-05", "GATE-04 THRESHOLD RU
 emotional_tone: "technical, precise, authoritative"
 ideal_reader_state: "implementing or debugging protocol behavior"
 changelog: |
+  v5.3 — additions over v5.2:
+    Documentation sync: Phase names aligned with PipelinePhase enum (INIT→DELIVER)
+    SCOUT Architecture documentation expanded
+    Observability Stack fully documented (7 modules)
+    Security Modules → INVAR mapping added
+    State Management, Event System, Planning DAG documentation added
+    LLM Integration, Context Management, Storage, Workflow, CLI documentation added
   v3.2 — additions over v3.1:
     INVAR-05: LLM code execution gate (sandbox/human-gate mandate)
     PRINCIPLE-04: secondary chunk limits (max_chars_per_chunk, max_tokens_per_chunk)
@@ -418,7 +425,11 @@ changelog: |
           workspace isolation, environment offload
 ---
 
-# LARGE-FILE AGENT PROTOCOL — PRODUCTION-GRADE v3.2
+# LARGE-FILE AGENT PROTOCOL — PRODUCTION-GRADE v5.3.0
+
+> **Version Note**: This document specifies TIER 0-6 behavior. 
+> For TIER 7+ features (multi-agent, observability, planning), see PROTOCOL.ext.md and AGENTS.md.
+> Version source: VERSION file at repository root.
 
 ## DIRECTIVE
 
@@ -1533,11 +1544,21 @@ cost-aware, recursion-bounded, execution-gated, production-grade.
 
 ---
 
-**PROTOCOL STATUS**: Production-Ready
-**VERSION**: 3.2.0
+**PROTOCOL STATUS**: Production-Ready (TIER_7_STABLE)
+**VERSION**: 5.2.0
 **COMPATIBILITY**: All LLM agents with tool-access capabilities
-**SUPERSEDES**: v3.1 (PROTOCOL.base.md), v3.0 (ULTIMATE_LARGE_FILE_AGENT_PROTOCOL.md)
+**SUPERSEDES**: v5.1.0, v3.2 (PROTOCOL.base.md)
+
+---
+
+## VERSION COMPATIBILITY
+
+| Version | Status | Key Features |
+|---------|--------|-------------|
+| 5.2.0 | TIER_7_STABLE | Canonical patterns, ContentPipeline 6-phase, Gap registry, SkillGenerator |
+| 5.1.0 | TIER_7_STABLE | 3117+ tests, all exit criteria passed |
+| 3.2 | Production | Chunk limits, recursion control, execution gate |
 
 ---
 <!-- END OF ASSEMBLED PROTOCOL -->
-<!-- Assembly timestamp: 2026-04-08T02:49:47Z -->
+<!-- Assembly timestamp: 2026-04-11T08:20:55Z -->
