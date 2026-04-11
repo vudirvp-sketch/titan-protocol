@@ -177,10 +177,10 @@ class TestRetryPolicy:
         result = facade.execute_with_retry(
             flaky_operation,
             max_retries=5,
-            initial_delay_ms=10,
         )
         
-        assert result == "success"
+        assert result.success is True
+        assert result.result == "success"
         assert call_count[0] == 3
     
     def test_retry_exhaustion(self, event_bus):
@@ -192,12 +192,15 @@ class TestRetryPolicy:
         def always_fail():
             raise ValueError("Permanent error")
         
-        with pytest.raises(ValueError):
-            facade.execute_with_retry(
-                always_fail,
-                max_retries=3,
-                initial_delay_ms=10,
-            )
+        result = facade.execute_with_retry(
+            always_fail,
+            max_retries=3,
+        )
+        
+        # execute_with_retry returns FacadeResult instead of raising
+        assert result.success is False
+        assert "Permanent error" in result.error
+        assert result.attempts > 0
     
     def test_circuit_breaker_integration(self, event_bus):
         """Test circuit breaker integration with retry facade."""
