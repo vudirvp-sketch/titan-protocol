@@ -33,3 +33,35 @@ __pycache__/
 # Environment
 .env
 .env.local
+# Generated outputs (keep .gitkeep for directory structure)
+outputs/*.md
+outputs/*.json
+outputs/*.yaml
+# Runtime secrets (NEVER commit)
+.titan/hmac_secret
+.titan/hmac_fallback_secret
+.titan/audit_trail.json
+
+# Session state
+sessions/current.json
+
+# Checkpoints (runtime)
+checkpoints/checkpoint.json
+checkpoints/checkpoint.context.md
+
+# Generated outputs (keep .gitkeep for directory structure)
+outputs/*.md
+outputs/*.json
+outputs/*.yaml
+
+# Runtime secrets (NEVER commit)
+.titan/hmac_secret
+.titan/hmac_fallback_secret
+.titan/audit_trail.json
+
+# Session state
+sessions/current.json
+
+# Checkpoints (runtime)
+checkpoints/checkpoint.json
+checkpoints/checkpoint.context.md
